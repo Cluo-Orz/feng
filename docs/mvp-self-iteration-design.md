@@ -220,6 +220,19 @@ skills/repair-candidate.md
 
 这些 skill 不是 feng 专用能力；它们也适用于任何“维护自身文档和代码”的 agent。
 
+MVP skill 文件只需要表达最小能力契约：
+
+```text
+when
+goal
+context
+tools
+output
+checks
+```
+
+skill 可以提供 prompt 文本，但 message compiler 才决定本轮放入哪些内容。
+
 ### hooks.yaml
 
 MVP hook 只需要事件到 skill 的映射：
@@ -591,6 +604,10 @@ feng grow "..."
 feng check
 feng hatch --name feng --portable
 ```
+
+这是因为本 MVP hatch 出来的命名命令仍然叫 `feng`，所以它的 execute interface 仍然是 grow/check/hatch。普通目标 agent 的 hatch 产物则执行 `interface.yaml` 暴露的业务命令，例如 `xiaogui`、`coder`、`newsbrief`。
+
+execute mode 默认读取 frozen self、本机 config 和本次 args，不修改 packaged self。若使用者要让它继续成长，应在一个 feng workspace 中再次进入 grow mode。
 
 如果缺少 provider profile 或 API key：
 

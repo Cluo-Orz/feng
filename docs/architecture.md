@@ -74,6 +74,18 @@ xiaogui --input ./Downloads
 
 `skills`、`evals`、`permissions`、Git 版本、candidate、promote 都是内部结构。创造者可以打开精修，但默认流程不要求先理解它们。
 
+这对应两个运行形态：
+
+```text
+grow mode
+  在 feng workspace 内运行，目标是修改 self repo 并形成 validated commit。
+
+execute mode
+  运行 hatch 出来的命名命令，目标是按 interface.yaml 完成用户任务。默认不修改 packaged frozen self。
+```
+
+两种形态共享 Runtime Kernel、LLM adapter、tool dispatcher、permissions 和 message compiler；差异只在可写边界、interface 和 Git 语义。
+
 ## 4. Self Repo
 
 self repo 是少量约定文件，不是复杂工程。
@@ -184,6 +196,19 @@ hook 调度 skill
 skill 提供能力
 kernel 组装上下文
 ```
+
+skill 的最小结构是能力契约，不是插件系统：
+
+```text
+when        适用事件或触发条件
+goal        这个能力要完成什么
+context     需要哪些 world、artifact 或文件引用
+tools       允许暴露哪些 tool schema
+output      期望输出形态
+checks      哪些 eval 或规则能验证它
+```
+
+hook 可以在未来支持脚本，但脚本仍然必须作为 tool 受 permissions 和 check 管理。
 
 上下文工程只有一个优先级：token efficiency。
 

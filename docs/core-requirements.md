@@ -28,6 +28,16 @@ xiaogui --input ./Downloads
 
 feng 是孵化器，`xiaogui` 是产品。
 
+因此 feng 有两个语义明确、但共享同一套内核的运行形态：
+
+```text
+grow mode
+  创造者使用。允许修改 self repo，使用 Git 表达 candidate 和 validated self。
+
+execute mode
+  使用者使用。运行 hatch 出来的命名命令，默认读取 frozen self、本机 config 和本次 args，不要求使用者理解 feng。
+```
+
 作为面向创造者的主路径，符合 feng 的语言应该围绕成长和孵化：
 
 ```text
@@ -141,6 +151,18 @@ agent 的成长主要体现为：
 ```
 
 hook 仍然存在，但 hook 是事件点，不是能力本身。
+
+一个 skill 的最小含义应该是：
+
+```text
+什么时候适用
+要解决什么问题
+需要哪些 world/context
+允许使用哪些 tools
+输出和验证标准是什么
+```
+
+skill 可以包含 prompt 文本，但它不是散乱 prompt block；它是能力文件。未来 hook 可以触发脚本，但脚本也必须落到 tool/permission/check 这条线上，不能绕过 self repo。
 
 ## 8. World 是世界说明书
 
