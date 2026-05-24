@@ -47,7 +47,7 @@ MVP 不做：
 MVP 也不做 feng 专用逻辑：
 
 ```text
-不写 if project == 当前项目名
+不写按项目名分支的特殊逻辑
 不写专用自举命令
 不写自举专用 runtime
 不写自举专用 prompt 通道
@@ -362,7 +362,7 @@ bootstrap tools 可用。
 每次 tool call 仍经过 permissions。
 ```
 
-自迭代场景下，默认 active tool pack：
+自迭代 seed loop 的初始可选工具：
 
 ```text
 read_file
@@ -493,11 +493,11 @@ evals 能运行
 candidate 声明的项目业务 eval 能运行；如果还没有业务 eval，不因此失败
 ```
 
-自迭代 check 还要验证：
+作为通用自修改安全检查，check 还要验证：
 
 ```text
 没有专用自举命令
-没有 project == 当前项目名 的 runtime 分支
+没有按当前项目名分支的 runtime 逻辑
 没有真实 API key
 没有默认 push / reset / delete history
 ```
