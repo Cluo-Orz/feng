@@ -60,7 +60,7 @@ MVP 也不做 feng 专用逻辑：
 MVP 成功标准：
 
 ```text
-1. 能创建或识别一个 feng workspace。
+1. 第一次 grow 能在普通目录 bootstrap 一个 feng workspace，或识别已有 workspace。
 2. 能读取当前 feng 文档、源码、review 轮次和 Git 状态。
 3. 能用 LLM 生成修改计划。
 4. 能通过 tool call 读取、写入文件、列目录、运行受限命令。
@@ -71,7 +71,7 @@ MVP 成功标准：
 9. 能从 validated commit 启动并修复 candidate。
 10. 能在 check 通过后提交 validated commit。
 11. 能 hatch --name feng --portable，产出下一版 feng 命令。
-12. 产出的 feng 可以在另一个目录继续执行 new/grow/check/hatch。
+12. 产出的 feng 可以在另一个目录继续执行 grow/check/hatch。
 ```
 
 ## 4. 顶层结构
@@ -128,7 +128,6 @@ MVP workspace：
 MVP CLI 只做：
 
 ```text
-feng init-self
 feng grow "..."
 feng check
 feng hatch --name feng --portable
@@ -140,11 +139,9 @@ feng artifacts
 说明：
 
 ```text
-init-self
-  在当前仓库初始化 self repo、.feng 和 Git 语义。对已有 feng 仓库也走同一逻辑。
-
 grow
-  长任务入口。用户给目标，kernel 持续推进 candidate。
+  第一个语义入口。用户给目标，kernel 持续推进 candidate。
+  如果当前目录还不是 workspace，先执行通用 bootstrap。
 
 check
   验证 candidate 是否可成为 validated self。
@@ -156,19 +153,23 @@ status/watch/artifacts
   可观测性入口。
 ```
 
-`new` 可以保留，但 MVP 自迭代场景优先使用 `init-self`，避免把“当前 feng 仓库”当成新项目复制。
-
-`init-self` 是通用命令，不是 feng 自举专用命令。它的语义是：
+第一次 `grow` 的通用 bootstrap：
 
 ```text
-把任意已有目录初始化为 feng workspace。
+创建最小 self repo
+创建 .feng/
+如果没有 Git，则初始化 Git
+写入初始 state
+如果缺少 provider 配置，则进入 missing_config
 ```
 
-feng 自举只是这个通用能力的一个使用场景。
+bootstrap 不覆盖已有文件。已有 docs、src、tests、脚本和配置先作为当前 world 的一部分被感知，只有缺失的 self 文件和 `.feng/` 状态会被补齐。
+
+bootstrap 不是单独产品命令。它只是 `grow` 在非 workspace 目录中的前置阶段。
 
 ## 7. Self Repo 初始内容
 
-MVP 自迭代 self repo 的初始内容可以由 builtin template 生成。
+MVP 自迭代 self repo 的初始内容可以由 builtin template 生成。对于已有 feng 仓库，template 的作用是补齐缺失的 self 文件，不是复制或覆盖整个项目。
 
 ### identity.md
 
@@ -297,7 +298,8 @@ id: deepseek
 protocol: openai_chat
 base_url: https://api.deepseek.com
 api_key_env: DEEPSEEK_API_KEY
-default_model: deepseek-v4-pro
+model_env: FENG_LLM_MODEL
+example_model: deepseek-chat
 ```
 
 API key 不进入 self repo、Git、artifact 或 hatch package。
@@ -544,8 +546,6 @@ required_env:
 permissions_summary: "..."
 interface:
   commands:
-    - new
-    - init-self
     - grow
     - check
     - hatch
@@ -587,7 +587,6 @@ capabilities
 产物 `feng` 在另一台机器上运行：
 
 ```text
-feng init-self
 feng grow "..."
 feng check
 feng hatch --name feng --portable
@@ -630,9 +629,9 @@ GUI 不提供额外能力，不绕过 CLI 和 permissions。
 
 ```text
 1. 开发者安装 feng runner。
-2. 在 feng 仓库执行 feng init-self。
-3. 配置 provider profile 和 DEEPSEEK_API_KEY。
-4. 执行 feng grow "根据核心诉求改进 MVP 自迭代设计"。
+2. 配置 provider profile 和 DEEPSEEK_API_KEY。
+3. 在 feng 仓库执行 feng grow "根据核心诉求改进 MVP 自迭代设计"。
+4. 如果当前目录不是 workspace，grow 先执行通用 bootstrap。
 5. kernel 读取 self repo、docs、Git、.feng state。
 6. message compiler 生成 token-efficient messages。
 7. LLM 通过 tool call 读取/写入文件、运行检查。
@@ -642,8 +641,8 @@ GUI 不提供额外能力，不绕过 CLI 和 permissions。
 11. 失败则保留 artifacts，继续 grow 修复。
 12. 成功则更新 validated commit。
 13. 执行 feng hatch --name feng --portable。
-14. 在新目录运行 dist/feng/feng init-self。
-15. 新 feng 可以继续 grow/check/hatch。
+14. 在新目录运行 dist/feng/feng grow "..."。
+15. 新 feng 先 bootstrap 当前目录，再继续 grow/check/hatch。
 ```
 
 ## 19. MVP 风险

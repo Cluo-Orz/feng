@@ -40,8 +40,8 @@ docs/architecture-review/round-XXX/review.md
 每个 case 至少覆盖这些阶段：
 
 ```text
-new
-  初始 self repo、world、interface、permissions、evals 如何形成。
+first grow / bootstrap
+  第一次 grow 如何在普通目录中形成最小 self repo、world、interface、permissions、evals 和 Git 成长语义；这个阶段是否仍然只是 grow 的前置阶段，而不是独立产品命令。
 
 grow
   长任务如何运行，agent 如何读取文件、调用 LLM、调用工具、修改 self。

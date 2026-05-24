@@ -40,7 +40,7 @@ G01 通用性
   是否有 feng 专用 runtime、特殊命令、特殊 prompt 通道、if project == feng。
 
 G02 自迭代闭环
-  init-self/grow/check/hatch/execute 是否能形成闭环。
+  第一次 grow 的 bootstrap、grow、check、hatch、execute 是否能形成闭环。
 
 G03 文件即自我
   self repo 是否表达 identity、goal、skills、hooks、tools、world、evals、interface、permissions。

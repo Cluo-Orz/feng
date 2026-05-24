@@ -11,7 +11,8 @@ idea -> grow -> check -> hatch -> named command
 创造者使用 feng：
 
 ```text
-feng new xiaogui
+mkdir xiaogui
+cd xiaogui
 feng grow "帮我整理下载目录"
 feng check
 feng hatch --name xiaogui --portable
@@ -58,8 +59,7 @@ feng 要易用，必须隐藏内部结构。
 创造者界面：
 
 ```text
-new      创建起始 self
-grow     推动 self 成长，吸收规则、示例、反馈
+grow     推动 self 成长；如果当前目录还不是 workspace，先创建最小 self
 check    检查 candidate 是否可以成为下一版 self
 hatch    把 validated self 破壳成命名命令
 ```
@@ -253,7 +253,20 @@ tool response 短结果可以直接进入 tool message；长结果写入 `.feng/
 
 ## 8. Grow、Check、Tool Growth
 
-`grow` 是用户侧的成长入口。它可能是长任务，但不是用户需要 resume 的 session。
+`grow` 是用户侧的第一个语义入口。它可能是长任务，但不是用户需要 resume 的 session。
+
+如果当前目录还不是 feng workspace，`grow` 先执行通用 bootstrap：
+
+```text
+创建最小 self repo
+创建 .feng/
+建立 Git 成长语义
+写入初始 state
+```
+
+bootstrap 只补齐缺失的 feng 自我文件和运行状态，不覆盖用户已有文件。已有源码、文档、配置和目录结构会先被当作 world 或可感知目标，而不是被复制成另一个项目。
+
+然后再进入成长 loop。这个 bootstrap 是 `grow` 的前置阶段，不是单独的产品命令。
 
 grow 可能修改：
 
@@ -313,6 +326,8 @@ candidate 验证失败时，不自动丢弃。当前 agent 继续从上一版 va
 
 candidate 验证通过后，promote 成新的 validated commit。达到目标后，可以 tag 并 hatch。
 
+agent 感知 Git 的方式是文件和工具：kernel 把 status、diff、check report、validated commit 写入 state/artifacts；agent 也可以在 permissions 允许范围内通过 `run_command` 调用安全 git 命令。强制回滚不是默认策略，默认策略是用上一版 validated self 启动，再继续修复 candidate。
+
 ## 10. Hatch / Release
 
 `hatch` 把 validated self 变成命名命令。release 是 hatch 产出的技术包。
@@ -345,7 +360,7 @@ permissions 不只是展示文本，也是 runner 的执行边界。每次 tool 
 
 ## 11. 模板
 
-模板只是起始 self repo，不是插件市场。
+模板只是起始 self 形状，不是插件市场，也不是隐藏 runtime。
 
 第一版只支持：
 
@@ -358,12 +373,14 @@ local template
 
 ```text
 feng templates
-feng new xiaogui
-feng new xiaogui --template file-agent
-feng new xiaogui --template ./my-template
+feng grow "帮我整理下载目录"
+feng grow --template file-agent "帮我整理下载目录"
+feng grow --template ./my-template "帮我整理下载目录"
 ```
 
-默认模板应该足够好，让 `feng new xiaogui` 不需要额外参数。
+默认模板应该足够好，让第一次 `feng grow "..."` 不需要额外参数。
+
+模板可以带少量 skills、tools、evals 和 world 示例，但它们仍然只是 self repo 文件，必须经过正常 check 才能成为 validated self。
 
 ## 12. LLM 和缓存
 
@@ -454,7 +471,7 @@ permissions
 8. skill-first context assembly。
 9. 简单 validate：load、schema、tool、eval。
 10. builtin/local template。
-11. CLI：new、grow、check、hatch、status、watch、artifacts。
+11. CLI：grow、check、hatch、status、watch、artifacts。
 12. named portable release。
 13. 首次运行配置引导。
 14. 权限摘要确认和 tool call permission check。

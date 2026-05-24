@@ -10,10 +10,11 @@ feng 的核心诉求是：
 把一个想法孵化成一个可以直接运行、可以传播的命令。
 ```
 
-创造者使用 feng。这里的命令名称不是最终定稿，但产品语义应该接近：
+创造者使用 feng。主路径应该只暴露一个开始动作：
 
 ```text
-feng new xiaogui
+mkdir xiaogui
+cd xiaogui
 feng grow "帮我整理下载目录"
 feng check
 feng hatch --name xiaogui --portable
@@ -27,13 +28,15 @@ xiaogui --input ./Downloads
 
 feng 是孵化器，`xiaogui` 是产品。
 
-`teach / try / release` 可以作为内部语义或兼容别名，但作为面向创造者的主路径，它们略显机械。更符合 feng 的语言应该围绕成长和孵化：
+作为面向创造者的主路径，符合 feng 的语言应该围绕成长和孵化：
 
 ```text
 grow   推动 self 成长，吸收规则、示例、反馈
 check  检查 candidate 是否可以成为下一版 self
 hatch  把 validated self 破壳成命名命令
 ```
+
+`grow` 是第一个语义命令。如果当前目录还不是 feng workspace，`grow` 先用默认模板创建最小 self repo、`.feng/` 和 Git 成长语义，然后进入成长 loop。不要把“创建蛋”和“初始化 self”拆成两个用户必须理解的命令。
 
 ## 2. 白板式起点
 
@@ -94,11 +97,13 @@ tag               = 被命名、固定、可 hatch 的 self
 
 candidate 失败时不自动丢弃。失败现场是成长材料，agent 应该能查看 diff、失败报告和验证结果，继续修复 candidate。
 
+Git 由 kernel 维护为成长账本，并通过 `.feng/state.yaml`、artifact、diff、check report 和受权限约束的 git 命令让 agent 感知。修复 candidate 的默认方式是继续编辑 working tree，而不是强制回滚。
+
 ## 6. Grow 是成长入口
 
 `grow` 是产品层最重要的命令。
 
-它不是一次普通问答，而是推动当前 workspace 孵化的一次长任务。早期文档里用 `teach` 描述这个动作，本质上指的是同一件事：用户给 feng 输入规则、示例、反馈，让 self repo 发生稳定成长。
+它不是一次普通问答，而是推动当前 workspace 孵化的一次长任务。用户给 feng 输入目标、规则、示例和反馈，让 self repo 发生稳定成长。
 
 但对用户来说，不应该暴露复杂长任务概念：
 
@@ -306,7 +311,7 @@ feng 的架构必须简单。
 模板、测试、权限、配置、分享都不能各自膨胀成复杂系统。它们应该统一回到少量文件约定：
 
 ```text
-template     = 起始 self repo
+template     = 最小 self 形状，不是隐藏能力包
 grow         = 修改 skill，并沉淀 eval
 check        = validate + 少量 eval
 permissions = release manifest 的信任边界
