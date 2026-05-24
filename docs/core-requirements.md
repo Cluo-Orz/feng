@@ -211,7 +211,7 @@ token efficiency
 
 ```text
 cache prefix
-  kernel contract、active tool schema、self summary、稳定 skill/world index。
+  kernel contract、active tool schema、self summary、稳定 skill/world index。skills/world 还没长出来时，对应 index 为空，不伪造能力。
 
 hot suffix
   最新用户输入、hook 事件、最近 tool result、candidate 状态、失败原因。

@@ -253,6 +253,15 @@ MVP eval：
 evals/load-self.yaml
   self repo 必须能加载。
 
+evals/schema.yaml
+  self repo 的 YAML/Markdown 结构必须能解析。
+
+evals/permission-boundary.yaml
+  permissions.yaml 必须能被解析并阻止危险操作。
+
+evals/no-secret.yaml
+  self repo、artifact 和 hatch package 不得包含真实 API key。
+
 evals/llm-provider-boundary.yaml
   LLM provider 必须是配置 profile，不写真实 key。
 ```
@@ -481,7 +490,7 @@ message compiler 能编译
 provider profile 能解析，但不要求真实调用
 evals 能运行
 禁止特殊 runtime 检查通过
-项目业务 eval 能运行
+candidate 声明的项目业务 eval 能运行；如果还没有业务 eval，不因此失败
 ```
 
 自迭代 check 还要验证：

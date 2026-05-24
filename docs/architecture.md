@@ -249,7 +249,7 @@ message list 的设计目标不是“把信息放全”，而是：
 
 ```text
 provider tools
-  当前 active tool pack 的 schema。bootstrap tools 常驻；领域工具由当前 hook/skill 选择。工具多时只暴露本轮需要的工具组，工具说明全文留在 tools/ 文件中。
+  当前 active tool pack 的 schema。初始工具可用，但不要求每轮全部暴露；领域工具由当前 hook/skill 或 seed loop 选择。工具多时只暴露本轮需要的工具组，工具说明全文留在 tools/ 文件中。
 
 system: kernel contract
   极小、稳定的运行规则，例如当前模式、工具调用协议、权限边界、稳定输出约束。
@@ -318,7 +318,7 @@ run_command
 
 领域工具属于 self repo。grow 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
 
-工具变多后，不代表每轮全部暴露给 LLM。每轮只暴露 bootstrap tools 和当前 hook/skill 需要的领域工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。
+工具变多后，不代表每轮全部暴露给 LLM。每轮只暴露当前 hook/skill 或 seed loop 需要的工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。
 
 `check` 是验证入口，只回答三个问题：
 
@@ -334,10 +334,11 @@ check 至少验证：
 self 能加载
 schema 能解析
 tool 能加载并受权限约束
-核心 eval 能通过
+baseline eval 能通过
+candidate 声明的项目 eval 能通过
 ```
 
-eval 可以是示例、fixture、mock 或受限命令。eval 产物写入 `.feng/artifacts/`，不会直接污染 self repo。
+baseline eval 验证 self 健康、schema、permissions、provider/config、secret 边界。项目 eval 可以是示例、fixture、mock 或受限命令，由 grow 生成并沉淀。eval 产物写入 `.feng/artifacts/`，不会直接污染 self repo。
 
 ## 9. 成长版本
 
