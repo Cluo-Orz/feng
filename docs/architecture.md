@@ -95,6 +95,22 @@ feng.yaml           self 元信息
 
 运行产物可以被读取，但默认不提交。只有 agent 明确沉淀下来的经验，才写回 self repo。
 
+### World
+
+`world/` 是 agent 面对的外部环境说明书，不是运行日志，也不是长期记忆垃圾桶。
+
+```text
+world   = 外部环境有哪些对象、规则和稳定约束
+tools   = 读取或改变外部世界的接口
+skills  = 处理外部世界的能力
+permissions = 允许接触外部世界的边界
+artifacts = 运行过程中留下的证据
+```
+
+稳定环境事实进入 `world/`。运行过程进入 `.feng/artifacts/`。只有对未来执行有稳定价值的经验，才由 agent 明确沉淀回 self repo。
+
+context assembly 只选择和当前事件相关的 world 片段，不把整个 world 塞进每轮 context。
+
 ## 5. Workspace State
 
 feng 不使用用户可见的 session/resume 模型。运行状态属于 workspace，放在 `.feng/` 里。
@@ -260,6 +276,40 @@ skill 提供能力
 kernel 组装上下文
 ```
 
+### Tool Growth
+
+初始四个工具是 bootstrap tools：
+
+```text
+read_file
+write_file
+list_files
+run_command
+```
+
+领域工具属于 self repo。teach 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
+
+```text
+tools/
+  fetch_http/
+    tool.yaml
+    handler.*
+  read_sensor/
+    tool.yaml
+    handler.*
+```
+
+try 必须验证领域工具：
+
+```text
+tool schema 能解析
+handler 能加载
+permissions.yaml 覆盖该工具需要的能力
+至少一个相关 eval 能通过
+```
+
+release 只打包 validated tools。runner 在每次 tool call 前检查 permissions；没有权限就进入 waiting，要求用户确认或修改本地配置。
+
 ## 9. Teach、Try、Release
 
 `teach` 是用户侧的成长入口。
@@ -299,6 +349,24 @@ candidate 进入 repair
 ```
 
 用户在 teach 里给出的示例，应该能沉淀成 `evals/`。这样 eval 不是额外负担，而是教学过程的一部分。
+
+`evals/` 第一版只需要支持少量最小形态：
+
+```text
+example
+  输入和期望输出。
+
+fixture
+  示例文件、目录、API spec、传感器帧等固定材料。
+
+mock
+  模拟 HTTP 响应、传感器输入或命令输出。
+
+command
+  运行一个受限命令并检查结果。
+```
+
+eval 产物写入 `.feng/artifacts/`，不会直接污染 self repo。
 
 `release` 把 validated self 变成命名命令。
 
@@ -405,6 +473,19 @@ xiaogui 不会删除原文件。
 xiaogui 需要 LLM API key。
 ```
 
+permissions 不只是展示文本，也是 runner 的执行边界。每次 tool call 都必须经过 permission check。
+
+```text
+allowed
+  执行 tool call。
+
+missing_permission
+  进入 waiting，要求用户确认或修改本地配置。
+
+denied
+  拒绝 tool call，并把原因写入 events 和 artifacts。
+```
+
 `config.schema.yaml` 驱动首次运行配置。密钥和机器路径不打进 release 包，第一次运行时引导用户配置，并保存到使用者本机。
 
 参数分两层：
@@ -472,16 +553,16 @@ release     = 命名可执行产物
 2. 文件化 self repo。
 3. `.feng/state.yaml`、`.feng/lock`、`.feng/events.jsonl`、`.feng/artifacts/`。
 4. 一个基础 loop。
-5. 四个初始工具：read_file、write_file、list_files、run_command。
+5. 四个 bootstrap tools：read_file、write_file、list_files、run_command。
 6. 一个 LLM adapter，另一个保留接口。
 7. Git 管理 candidate、validated commit、tag。
 8. skill-first context assembly。
-9. 简单 validate：load、schema、eval。
+9. 简单 validate：load、schema、tool、eval。
 10. builtin/local template。
 11. CLI：new、teach、try、release、status、watch、artifacts。
 12. named portable release。
 13. 首次运行配置引导。
-14. 权限摘要确认。
+14. 权限摘要确认和 tool call permission check。
 15. 只读观察型 GUI。
 
 暂时不做多 agent、复杂插件市场、复杂长期记忆、复杂 hook 执行器。
