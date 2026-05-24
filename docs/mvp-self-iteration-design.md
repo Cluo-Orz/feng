@@ -65,7 +65,7 @@ MVP 成功标准：
 3. 能用 LLM 生成修改计划。
 4. 能通过 tool call 读取、写入文件、列目录、运行受限命令。
 5. 能把长输出写入 .feng/artifacts/，message 中只保留 artifact refs。
-6. 能修改 self repo 中的 docs/specs/skills/evals 或未来源码。
+6. 能修改 self repo 中的 docs/specs/skills/evals 或源码。
 7. 能保留 candidate working tree。
 8. 能运行 check，失败时保留失败现场，不强制回滚。
 9. 能从 validated commit 启动并修复 candidate。
@@ -317,6 +317,8 @@ example_model: deepseek-chat
 
 API key 不进入 self repo、Git、artifact 或 hatch package。
 
+provider profile 可以来自用户级配置、显式配置路径或 `.feng/` 下的本机未跟踪配置。MVP 不做 provider router，也不把 provider profile 当成 self repo 的一部分。
+
 ## 9. Message Compiler
 
 MVP message compiler 只做一件事：
@@ -418,6 +420,8 @@ MVP 不需要复杂沙箱，但每次 tool call 必须经过 permission check。
 
 危险操作必须失败，并写入 artifact。
 
+LLM 可以通过允许的 git 命令读取事实，例如 status、diff、log。更新 validated commit、创建 checkpoint commit、创建 hatch tag 是 kernel 在 check/hatch 通过后的动作，不是 LLM 任意 `run_command` 的结果。
+
 ## 12. Grow Loop
 
 MVP grow loop：
@@ -480,6 +484,8 @@ validated commit 仍是运行基线。
 ```
 
 只有 check 通过才可以更新 validated commit。
+
+LLM 修复 self 的方式是读取 Git 报告、diff 和失败 artifact，然后继续编辑 working tree。Git commit/tag 由 kernel 在验证通过后执行，避免把版本推进权交给一次普通 tool call。
 
 ## 14. Check
 
