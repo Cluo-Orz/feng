@@ -33,6 +33,10 @@ docs/architecture-review/round-XXX/review.md
 
 ## 3. 推演结构
 
+推演报告必须以 case 为一级结构。
+
+不允许只先写一个整体生命周期，再简单说“所有 case 都适用”。整体结论只能放在所有 case 推演之后。
+
 每个 case 至少覆盖这些阶段：
 
 ```text
@@ -69,9 +73,9 @@ observability
 
 ## 4. 需求覆盖
 
-推演报告必须显式引用 `docs/core-requirements.md` 中的 `R01-R20`。
+推演报告必须在每个 case 内显式引用 `docs/core-requirements.md` 中的 `R01-R20`。
 
-每个要求给出状态：
+每个 case 的每个要求给出状态：
 
 ```text
 满足
@@ -88,6 +92,8 @@ observability
 是否只是实现规格问题
 是否有过拟合风险
 ```
+
+允许在 case 内用紧凑矩阵表达，但不能只给全局矩阵。全局矩阵只能作为最后的汇总。
 
 ## 5. 退出条件
 
