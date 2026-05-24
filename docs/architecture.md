@@ -185,47 +185,71 @@ skill 提供能力
 kernel 组装上下文
 ```
 
-上下文必须可控。每轮上下文分层：
+上下文工程只有一个优先级：token efficiency。
+
+每轮上下文先分成稳定前缀和动态后缀：
 
 ```text
-core      identity、目标、模式、当前事件
-selected  相关 skill、tool、world 片段
-working   当前任务状态、最近工具结果、candidate diff、失败原因
-history   旧事件、长日志、历史对话
+cache prefix
+  kernel contract、active tool schema、self summary、稳定 skill/world index。
+
+hot suffix
+  最新用户输入、hook 事件、最近 tool result、candidate 状态、失败原因。
+
+artifact refs
+  大文件、长日志、长 diff、网页正文、测试输出，只放路径、hash、摘要、必要片段。
+
+summary
+  历史对话和旧事件压缩后的短摘要。
 ```
 
-超长时，原始证据进入 artifacts，短摘要进入 context，稳定经验才沉淀回 self repo。
+超长时，原始证据进入 artifacts，prompt 只保留路径、hash、摘要和必要片段。稳定经验才沉淀回 self repo。
 
 ### Message List
 
 kernel 最终发送给 LLM 的是稳定顺序的 message list。message list 是运行时产物，不是用户维护的 prompt 文件。
 
+message list 的设计目标不是“把信息放全”，而是：
+
+```text
+缓存前缀稳定
+动态内容靠后
+大内容文件化
+工具结果可追溯但不刷屏
+```
+
 每轮按这个顺序组装：
 
 ```text
-kernel message
-  极小运行规则、当前模式、工具调用协议、输出边界。
+provider tools
+  当前 active tool pack 的 schema。工具多时只暴露本轮需要的工具组。
 
-self message
-  identity、goal、boot self、candidate 状态。
+system: kernel contract
+  极小、稳定的运行规则，例如当前模式、工具调用协议、权限边界、稳定输出约束。
 
-event message
-  本轮用户输入、hook 事件或 tool result。
+system: self contract
+  identity、goal、self commit、active skill/world/tool index、权限摘要。
 
-selected context messages
-  相关 skills、tools、world 片段、permissions 摘要。
+optional cached context pack
+  反复使用、足够稳定、值得缓存的 skill/world/example 片段。
 
-working state message
-  当前任务状态、最近结果、失败原因、必要 summary。
+user: state manifest
+  当前任务状态、文件路径、artifact 路径、hash、短摘要、必要片段。
 
-history summary message
-  旧事件压缩后的摘要，只在需要时进入。
+conversation suffix
+  最近 user / assistant / tool call / tool response，保持 provider 协议顺序。
 
-output contract message
-  本轮期望输出形态。
+user: latest event
+  最新用户输入、hook 事件或需要 LLM 处理的 tool result 摘要。
 ```
 
-每个 message 都应带来源、层级、优先级、预算和 hash，方便缓存、压缩、追踪来源和跨 OpenAI / Anthropic adapter 转换。
+稳定输出约束放在 kernel contract；任务特定输出要求放在 latest event，避免每轮改写稳定前缀。
+
+assistant message 只用于稳定 few-shot 示例，或最近必要行动历史，尤其是 tool call 配对。它不长期保存推理过程。
+
+tool response 短结果可以直接进入 tool message；长结果写入 `.feng/artifacts/`，tool message 只返回路径、hash、摘要和关键片段。
+
+每个 message 都应带来源、层级、优先级、预算和 hash，方便缓存、压缩、追踪来源、统计 token 花费和跨 OpenAI / Anthropic adapter 转换。
 
 ## 8. Grow、Check、Tool Growth
 
@@ -351,15 +375,34 @@ Tool
 ToolCall
 ```
 
-缓存必须感知 self 版本：
+缓存策略遵循一个原则：
+
+```text
+稳定前缀尽量不变，动态后缀尽量短。
+```
+
+缓存 key 必须感知：
 
 ```text
 model
-messages
-tools
+stable prefix hash
+active tool pack hash
 self commit/tag
+context pack hash
 mode: execute | grow
 ```
+
+运行时至少记录：
+
+```text
+prompt tokens
+cached tokens
+tool schema tokens
+artifact-ref tokens
+dynamic suffix tokens
+```
+
+这些指标写入 `.feng/events.jsonl` 或 `.feng/artifacts/`，用于观察 token efficiency。
 
 ## 13. 易用性约束
 

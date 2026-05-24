@@ -159,25 +159,46 @@ agent 对外部环境的可读说明书。
 
 稳定环境知识进入 `world/`。运行过程进入 `.feng/runs/` 和 `.feng/artifacts/`。稳定经验需要被明确沉淀后，才写回 self repo。
 
-## 9. Context 必须可控
+## 9. Context 必须 token efficient
 
-feng 是长任务系统，context 不能无限增长。
+feng 是长任务系统，context 不能无限增长，也不能每轮把大量内容重新塞给 LLM。
 
-context 控制必须是 kernel 基础能力。
+context 控制必须是 kernel 基础能力，核心目标只有一个：
+
+```text
+token efficiency
+```
+
+这意味着：
+
+```text
+稳定内容尽量形成可缓存前缀
+动态内容尽量放在后缀
+大内容默认放文件，只在 prompt 里放路径、hash、短摘要
+非必要不把文件全文、长日志、完整 diff、完整 tool output 放进 messages
+```
 
 每轮上下文分层：
 
 ```text
-core      identity、目标、模式、当前事件
-selected  相关 skill、tool、world 片段
-working   当前任务状态、最近工具结果、candidate diff、失败原因
-history   旧事件、长日志、历史对话
+cache prefix
+  kernel contract、active tool schema、self summary、稳定 skill/world index。
+
+hot suffix
+  最新用户输入、hook 事件、最近 tool result、candidate 状态、失败原因。
+
+artifact refs
+  大文件、长日志、长 diff、网页正文、测试输出，只放路径、hash、摘要、必要片段。
+
+summary
+  历史对话和旧事件压缩后的短摘要。
 ```
 
 超长时：
 
 ```text
-artifact 留路径和摘要
+大内容先落 artifact
+prompt 留路径、hash、摘要
 历史合并成 summary
 低相关 skill 不进入本轮
 world 只取相关片段
@@ -190,6 +211,7 @@ world 只取相关片段
 原始证据进 artifacts
 短摘要进 context
 稳定经验才进 self repo
+稳定前缀不要被每轮动态内容污染
 ```
 
 ## 10. 可观测性必须文件化
@@ -320,41 +342,70 @@ hatch 是破壳成品
 
 这就是 feng 的产品核心。
 
-## 15. LLM Message List 必须有设计
+## 15. LLM Message List 必须围绕缓存编排
 
 feng 不能只说“组装上下文”，还需要定义每轮 LLM message list 的稳定编排方式。
 
 message list 应该是 kernel 根据 self repo 和运行状态临时生成的结果，不是用户长期维护的一堆 prompt 文件。
 
-每轮 message list 至少有这些层：
+编排原则是：
 
 ```text
-kernel
-  极小的运行规则，例如当前模式、工具调用协议、输出约束。
-
-self
-  identity、goal、当前 boot self、candidate 状态。
-
-event
-  本轮用户输入、hook 事件或 tool 结果。
-
-selected context
-  相关 skills、tools、world 片段、permissions 摘要。
-
-working state
-  当前任务状态、最近结果、失败原因、必要的 summary。
-
-history summary
-  旧事件压缩后的摘要，只在需要时进入。
+能缓存的放前面
+每轮变化的放后面
+大内容不进 message，先变成文件引用
+assistant / tool response 只保留协议必须和决策必须的短历史
 ```
 
-这些层按稳定顺序进入 messages，并带有来源、优先级和预算。这样才能同时满足：
+逻辑顺序是：
+
+```text
+provider tools
+  当前 active tool pack 的 schema。工具多时只暴露本轮需要的工具组，不把所有工具都塞进去。
+
+system: kernel contract
+  极小、稳定的运行规则，例如当前模式、工具调用协议、权限边界、稳定输出约束。
+
+system: self contract
+  identity、goal、self commit、active skill/world/tool index、权限摘要。
+
+optional cached context pack
+  反复使用、足够稳定、值得缓存的 skill/world/example 片段。
+
+user: state manifest
+  当前任务状态、文件路径、artifact 路径、hash、短摘要、必要片段。
+
+conversation suffix
+  最近 user / assistant / tool call / tool response，保持 provider 协议顺序。
+
+user: latest event
+  最新用户输入、hook 事件或需要 LLM 处理的 tool result 摘要。
+```
+
+assistant message 只能承担两类用途：
+
+```text
+稳定 few-shot 示例
+最近必要行动历史，尤其是 tool call 配对
+```
+
+它不应该用来长期保存推理过程。
+
+tool response 的规则是：
+
+```text
+短结果可以直接进 tool message
+长结果写入 artifact，tool message 只返回路径、hash、摘要、关键片段
+```
+
+这些层按稳定顺序进入 messages，并带有来源、优先级、预算和 hash。这样才能同时满足：
 
 ```text
 可缓存
 可压缩
 可追踪来源
 可跨 OpenAI / Anthropic adapter 转换
+可观测 token 花费和缓存命中
 ```
 
 ## 16. Feng 自举是关键 case
