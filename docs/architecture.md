@@ -31,7 +31,7 @@ feng 只有四个核心对象：
 
 ```text
 Runtime Kernel
-  稳定小内核，负责 loop、LLM adapter、工具调度、验证、版本、release、状态记录。
+  稳定小内核，负责 loop、LLM adapter、工具调度、验证、版本、hatch/release package、状态记录。
 
 Self Repo
   agent 的自我，由文件组成，受 Git 管理，可以成长。
@@ -86,7 +86,7 @@ hooks.yaml          哪些事件点启用哪些 skill
 tools/              工具声明和实现
 world/              对外部世界的稳定描述
 evals/              怎么判断 agent 有效
-interface.yaml      release 后暴露哪些参数
+interface.yaml      hatch 后暴露哪些参数
 permissions.yaml    需要哪些文件、命令、网络权限
 config.schema.yaml  首次运行需要哪些配置
 feng.yaml           self 元信息
@@ -110,7 +110,7 @@ feng.yaml           self 元信息
 `world/` 是 agent 面对外部环境的说明书。
 
 ```text
-world       可随 release 传播的稳定环境模型
+world       可随 hatch package 传播的稳定环境模型
 config      使用者本地事实，例如密钥、路径、设备地址、偏好
 args        单次运行输入
 permissions 允许接触外部世界的边界
@@ -139,7 +139,7 @@ feng 不使用用户可见的 session/resume 模型。运行状态属于 workspa
 .feng/state.yaml      当前状态快照
 .feng/lock            单写锁和心跳
 .feng/events.jsonl    append-only 事件流
-.feng/artifacts/      diff、eval 结果、失败报告、release 预览
+.feng/artifacts/      diff、eval 结果、失败报告、hatch 预览
 ```
 
 中断后不需要 `resume`。下一次 `feng grow`、`feng check` 或 `feng status` 都先读取 self repo、Git 和 `.feng/state.yaml`，自然从当前 workspace 状态继续。
@@ -307,7 +307,7 @@ working tree      = 正在孵化的 candidate self
 tag               = 被命名和固定的一版 self
 ```
 
-candidate 验证失败时，不自动丢弃。当前 agent 继续从上一版 validated commit 运行，同时修复 working tree 里的 candidate。
+candidate 验证失败时，不自动丢弃。当前 agent 继续从上一版 validated commit 运行，同时修复 working tree 里的 candidate。失败报告、diff 和验证结果写入 `.feng/artifacts/`，下一轮通过 artifact refs 进入上下文。
 
 candidate 验证通过后，promote 成新的 validated commit。达到目标后，可以 tag 并 hatch。
 
@@ -469,6 +469,6 @@ feng 要爆火，不能让使用者理解 feng。
 使用者使用 xiaogui。
 ```
 
-架构上保持小内核，产品上隐藏内部结构。所有关键能力落到 self repo 的文件约定里：skill 是成长单位，hook 是介入时机，eval 是成长标准，permissions 是信任边界，interface 是命令参数，release 是命名可执行产物。
+架构上保持小内核，产品上隐藏内部结构。所有关键能力落到 self repo 的文件约定里：skill 是成长单位，hook 是介入时机，eval 是成长标准，permissions 是信任边界，interface 是命令参数，hatch 是命名可执行产物。
 
 这样 feng 才能把一个想法孵化成一个可以传播的命令。
