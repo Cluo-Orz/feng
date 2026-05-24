@@ -434,3 +434,69 @@ workspace 是生命体
 被 hatch 出来的命令仍然叫 `feng`。它面对的 world 是 feng 自己的仓库、文档、测试和 Git 历史。
 
 如果 feng 自举需要特殊待遇，说明 feng 的通用架构还不够自洽。
+
+## 17. 原始诉求验收面
+
+后续架构推演不能只看关键路径，必须按这些面检查是否满足原始诉求：
+
+```text
+R01 LLM 对接
+  kernel 能通过 adapter 调用 LLM，不把 OpenAI / Anthropic 差异泄漏到 self repo。
+
+R02 Function Call
+  LLM 能通过统一 Tool / ToolCall 协议调用工具，tool response 能进入下一轮。
+
+R03 自造工具
+  grow 能修改 tools/，新增领域工具声明和实现，并通过 check 验证。
+
+R04 Token Efficiency
+  message list 围绕缓存命中设计：稳定前缀、动态后缀、大内容文件化、active tool pack。
+
+R05 协议兼容
+  同一套内部 Message / Tool / ToolCall 可以编译到 OpenAI 和 Anthropic 协议。
+
+R06 Message 编排
+  system、user、assistant、tool response 的角色边界清楚，不靠散乱 prompt block。
+
+R07 Prompt / Skill 模块化
+  成长单位是 skill，hook 只是介入时机，message 是运行时编译结果。
+
+R08 GUI 和 CLI
+  CLI 是主路径，GUI 只读展示 status、progress、artifact。
+
+R09 初始工具
+  bootstrap tools 只有 read_file、write_file、list_files、run_command。
+
+R10 白板孵化
+  feng 安装后是空白起点，用户给目标、工具和 world 后开始成长。
+
+R11 文件即自我
+  self repo 用文件表达 identity、goal、skills、hooks、tools、world、evals、interface、permissions。
+
+R12 Git 成长
+  Git 表达 candidate、validated commit、tag，不把失败 candidate 直接吞掉。
+
+R13 Reload / Repair
+  candidate 失败后从 validated commit 启动，保留失败现场，让 agent 修复；无法修复才由用户决定是否丢弃。
+
+R14 World
+  world/ 是外部环境说明书，不是日志和长期记忆垃圾桶。
+
+R15 长任务
+  grow 是长任务，但用户不需要理解 session/resume；workspace state 负责延续。
+
+R16 可观测性
+  running、progress、artifact 都能通过 .feng 文件和简单命令观察。
+
+R17 打包传播
+  hatch 输出命名命令，使用者运行 xiaogui，而不是理解 feng。
+
+R18 配置和权限
+  本机密钥、路径、设备地址进入 config；permissions 是 tool call 边界。
+
+R19 自举
+  feng 能用同一套机制 hatch 下一版 feng 自己，不引入特殊 runtime。
+
+R20 简单和不过拟合
+  所有设计回到 Runtime Kernel + Self Repo + .feng State + Git，不为单个 case 增加专用系统。
+```
