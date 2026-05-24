@@ -93,7 +93,7 @@ self repo 是少量约定文件，不是复杂工程。
 ```text
 identity.md         agent 是谁，基础边界是什么
 goal.md             当前成长目标
-skills/             agent 学会的能力
+skills/             agent 学会的能力；bootstrap 时可以为空
 hooks.yaml          哪些事件点启用哪些 skill
 tools/              工具声明和实现
 world/              对外部世界的稳定描述
@@ -209,6 +209,8 @@ checks      哪些 eval 或规则能验证它
 ```
 
 hook 可以在未来支持脚本，但脚本仍然必须作为 tool 受 permissions 和 check 管理。
+
+bootstrap self 不需要预置任何领域 skill。若当前 hook 没有匹配 skill，kernel 进入通用 seed loop：只用 kernel contract、latest event、self index、目录索引、初始工具和 artifact refs 让 LLM 生成第一批 candidate self 文件。这条 fallback 对所有 workspace 相同，不是某个项目的特殊逻辑。
 
 上下文工程只有一个优先级：token efficiency。
 
@@ -403,9 +405,9 @@ feng grow --template file-agent "帮我整理下载目录"
 feng grow --template ./my-template "帮我整理下载目录"
 ```
 
-默认模板应该足够好，让第一次 `feng grow "..."` 不需要额外参数。
+默认模板应该足够好，让第一次 `feng grow "..."` 不需要额外参数。这里的“足够好”指结构完整，而不是预置能力。
 
-模板可以带少量 skills、tools、evals 和 world 示例，但它们仍然只是 self repo 文件，必须经过正常 check 才能成为 validated self。
+默认模板不预置领域 skill。local template 可以带少量 skills、tools、evals 和 world 示例，但它们是创造者显式选择的起点，仍然只是 self repo 文件，必须经过正常 check 才能成为 validated self。
 
 ## 12. LLM 和缓存
 
@@ -493,7 +495,7 @@ permissions
 5. 四个 bootstrap tools。
 6. 一个 LLM adapter，另一个保留接口。
 7. Git 管理 candidate、validated commit、tag。
-8. skill-first context assembly。
+8. skill-ready context assembly：有 skill 时按 skill 选择上下文；没有 skill 时走通用 seed loop。
 9. 简单 validate：load、schema、tool、eval。
 10. builtin/local template。
 11. CLI：grow、check、hatch、status、watch、artifacts。

@@ -152,6 +152,8 @@ agent 的成长主要体现为：
 
 hook 仍然存在，但 hook 是事件点，不是能力本身。
 
+白板起点不应该预置项目能力。默认 bootstrap 只能创建 self repo 的最小形状和初始工具入口；`skills/` 可以是空的。第一个 `grow` 根据用户目标、当前目录和工具感知，生成 candidate skill、world、eval 和 interface。
+
 一个 skill 的最小含义应该是：
 
 ```text
@@ -333,7 +335,7 @@ feng 的架构必须简单。
 模板、测试、权限、配置、分享都不能各自膨胀成复杂系统。它们应该统一回到少量文件约定：
 
 ```text
-template     = 最小 self 形状，不是隐藏能力包
+template     = 最小 self 形状，不是隐藏能力包；默认模板不预置领域 skill
 grow         = 修改 skill，并沉淀 eval
 check        = validate + 少量 eval
 permissions = release manifest 的信任边界
