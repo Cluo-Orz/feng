@@ -222,7 +222,7 @@ message list 的设计目标不是“把信息放全”，而是：
 
 ```text
 provider tools
-  当前 active tool pack 的 schema。工具多时只暴露本轮需要的工具组。
+  当前 active tool pack 的 schema。bootstrap tools 常驻；领域工具由当前 hook/skill 选择。工具多时只暴露本轮需要的工具组，工具说明全文留在 tools/ 文件中。
 
 system: kernel contract
   极小、稳定的运行规则，例如当前模式、工具调用协议、权限边界、稳定输出约束。
@@ -277,6 +277,8 @@ run_command
 ```
 
 领域工具属于 self repo。grow 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
+
+工具变多后，不代表每轮全部暴露给 LLM。每轮只暴露 bootstrap tools 和当前 hook/skill 需要的领域工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。
 
 `check` 是验证入口，只回答三个问题：
 
