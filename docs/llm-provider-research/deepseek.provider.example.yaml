@@ -1,0 +1,46 @@
+# Example only. Do not put real API keys in this file.
+
+id: deepseek
+protocol: openai_chat
+base_url: https://api.deepseek.com
+api_key_env: DEEPSEEK_API_KEY
+default_model: deepseek-v4-pro
+
+models:
+  deepseek-v4-pro:
+    supports:
+      streaming: true
+      tool_calling: true
+      json_object: true
+      prompt_cache: automatic_disk
+      explicit_cache_control: false
+      reasoning: true
+      images: false
+      documents: false
+    reasoning:
+      default_enabled: true
+      effort_values:
+        - high
+        - max
+
+  deepseek-v4-flash:
+    supports:
+      streaming: true
+      tool_calling: true
+      json_object: true
+      prompt_cache: automatic_disk
+      explicit_cache_control: false
+      reasoning: true
+      images: false
+      documents: false
+
+cache:
+  strategy: stable_prefix
+  usage_mapping:
+    cached_input_tokens: prompt_cache_hit_tokens
+    cache_miss_tokens: prompt_cache_miss_tokens
+
+security:
+  store_api_key: false
+  api_key_source: env
+  never_commit_real_key: true
