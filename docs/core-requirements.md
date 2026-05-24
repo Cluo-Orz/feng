@@ -174,7 +174,7 @@ token efficiency
 ```text
 稳定内容尽量形成可缓存前缀
 动态内容尽量放在后缀
-大内容默认放文件，只在 prompt 里放路径、hash、短摘要
+大内容默认放文件，只在 prompt 里放类型、来源、路径、hash、短摘要和为什么相关
 非必要不把文件全文、长日志、完整 diff、完整 tool output 放进 messages
 ```
 
@@ -188,7 +188,7 @@ hot suffix
   最新用户输入、hook 事件、最近 tool result、candidate 状态、失败原因。
 
 artifact refs
-  大文件、长日志、长 diff、网页正文、测试输出，只放路径、hash、摘要、必要片段。
+  大文件、长日志、长 diff、网页正文、测试输出，只放类型、来源、路径、hash、摘要、为什么相关、必要片段。
 
 summary
   历史对话和旧事件压缩后的短摘要。
@@ -198,7 +198,7 @@ summary
 
 ```text
 大内容先落 artifact
-prompt 留路径、hash、摘要
+prompt 留类型、来源、路径、hash、摘要、为什么相关
 历史合并成 summary
 低相关 skill 不进入本轮
 world 只取相关片段
@@ -373,7 +373,7 @@ optional cached context pack
   反复使用、足够稳定、值得缓存的 skill/world/example 片段。
 
 user: state manifest
-  当前任务状态、文件路径、artifact 路径、hash、短摘要、必要片段。
+  当前任务状态、文件路径、artifact 的类型、来源、路径、hash、短摘要、为什么相关、必要片段。
 
 conversation suffix
   最近 user / assistant / tool call / tool response，保持 provider 协议顺序。
@@ -395,7 +395,7 @@ tool response 的规则是：
 
 ```text
 短结果可以直接进 tool message
-长结果写入 artifact，tool message 只返回路径、hash、摘要、关键片段
+长结果写入 artifact，tool message 只返回类型、来源、路径、hash、摘要、为什么相关、关键片段
 ```
 
 这些层按稳定顺序进入 messages，并带有来源、优先级、预算和 hash。这样才能同时满足：

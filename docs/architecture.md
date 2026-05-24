@@ -197,7 +197,7 @@ hot suffix
   最新用户输入、hook 事件、最近 tool result、candidate 状态、失败原因。
 
 artifact refs
-  大文件、长日志、长 diff、网页正文、测试输出，只放路径、hash、摘要、必要片段。
+  大文件、长日志、长 diff、网页正文、测试输出，只放类型、来源、路径、hash、摘要、为什么相关、必要片段。
 
 summary
   历史对话和旧事件压缩后的短摘要。
@@ -234,7 +234,7 @@ optional cached context pack
   反复使用、足够稳定、值得缓存的 skill/world/example 片段。
 
 user: state manifest
-  当前任务状态、文件路径、artifact 路径、hash、短摘要、必要片段。
+  当前任务状态、文件路径、artifact 的类型、来源、路径、hash、短摘要、为什么相关、必要片段。
 
 conversation suffix
   最近 user / assistant / tool call / tool response，保持 provider 协议顺序。
@@ -247,7 +247,7 @@ user: latest event
 
 assistant message 只用于稳定 few-shot 示例，或最近必要行动历史，尤其是 tool call 配对。它不长期保存推理过程。
 
-tool response 短结果可以直接进入 tool message；长结果写入 `.feng/artifacts/`，tool message 只返回路径、hash、摘要和关键片段。
+tool response 短结果可以直接进入 tool message；长结果写入 `.feng/artifacts/`，tool message 只返回类型、来源、路径、hash、摘要、为什么相关和关键片段。
 
 每个 message 都应带来源、层级、优先级、预算和 hash，方便缓存、压缩、追踪来源、统计 token 花费和跨 OpenAI / Anthropic adapter 转换。
 
