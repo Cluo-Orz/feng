@@ -41,6 +41,32 @@ workspace = self repo + .feng runtime state + Git history
 
 同一个 workspace 同一时间只允许一个 feng kernel 修改 self。
 
+### Creator Workspace 和 User Runtime
+
+feng 的孵化发生在创造者 workspace，release 后运行在使用者机器。两者不能混在一起。
+
+```text
+creator workspace
+  用来 new、teach、try、release，包含 self repo、.feng 状态和 Git 历史。
+
+release package
+  frozen self、runner、manifest、checksums。
+
+user runtime
+  使用者机器上的本地配置、运行状态和 artifacts。
+```
+
+边界规则：
+
+```text
+self      固化 agent 的规则、能力、工具和世界模型。
+config    保存使用者本地事实，例如密钥、路径、设备地址、偏好。
+args      表示单次运行输入。
+artifacts 保存运行证据。
+```
+
+创造者机器上的本地路径、密钥、设备地址、API endpoint 不应该被无意打进 release self。
+
 ## 3. 两个界面
 
 feng 要易用，必须把内部结构藏起来。
@@ -110,6 +136,19 @@ artifacts = 运行过程中留下的证据
 稳定环境事实进入 `world/`。运行过程进入 `.feng/artifacts/`。只有对未来执行有稳定价值的经验，才由 agent 明确沉淀回 self repo。
 
 context assembly 只选择和当前事件相关的 world 片段，不把整个 world 塞进每轮 context。
+
+world 和 config 的边界：
+
+```text
+world
+  可随 release 传播的稳定环境模型，例如 API schema、传感器含义、文件分类规则。
+
+config
+  使用者本地事实，例如 token、Downloads 路径、设备地址、校准参数。
+
+args
+  本次运行输入，例如 --input、--base-url、--speed。
+```
 
 ## 5. Workspace State
 
@@ -373,6 +412,23 @@ eval 产物写入 `.feng/artifacts/`，不会直接污染 self repo。
 ```text
 release = validated self + runner + manifest + checksums
 ```
+
+manifest 至少描述：
+
+```text
+name
+version/tag
+self commit
+runner version
+target platform
+required tools
+required permissions
+config schema
+interface
+checksums
+```
+
+这样 release 包复制到另一台机器后，runner 可以判断平台是否匹配、缺什么配置、需要哪些权限。
 
 输出：
 
