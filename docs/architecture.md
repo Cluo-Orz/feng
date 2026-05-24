@@ -5,16 +5,16 @@
 feng 的目标是把一个想法孵化成一个可以直接运行、可以传播的命令。
 
 ```text
-idea -> teach -> try -> release -> named command
+idea -> grow -> check -> hatch -> named command
 ```
 
 创造者使用 feng：
 
 ```text
 feng new xiaogui
-feng teach "帮我整理下载目录"
-feng try
-feng release --name xiaogui --portable
+feng grow "帮我整理下载目录"
+feng check
+feng hatch --name xiaogui --portable
 ```
 
 使用者只使用孵化出来的命令：
@@ -59,9 +59,9 @@ feng 要易用，必须隐藏内部结构。
 
 ```text
 new      创建起始 self
-teach    教规则、示例、能力
-try      试运行并验证
-release 生成命名命令
+grow     推动 self 成长，吸收规则、示例、反馈
+check    检查 candidate 是否可以成为下一版 self
+hatch    把 validated self 破壳成命名命令
 ```
 
 使用者界面：
@@ -142,7 +142,7 @@ feng 不使用用户可见的 session/resume 模型。运行状态属于 workspa
 .feng/artifacts/      diff、eval 结果、失败报告、release 预览
 ```
 
-中断后不需要 `resume`。下一次 `feng teach`、`feng try` 或 `feng status` 都先读取 self repo、Git 和 `.feng/state.yaml`，自然从当前 workspace 状态继续。
+中断后不需要 `resume`。下一次 `feng grow`、`feng check` 或 `feng status` 都先读取 self repo、Git 和 `.feng/state.yaml`，自然从当前 workspace 状态继续。
 
 可观测性也只靠文件和简单命令：
 
@@ -196,11 +196,42 @@ history   旧事件、长日志、历史对话
 
 超长时，原始证据进入 artifacts，短摘要进入 context，稳定经验才沉淀回 self repo。
 
-## 8. Teach、Try、Tool Growth
+### Message List
 
-`teach` 是用户侧的成长入口。它可能是长任务，但不是用户需要 resume 的 session。
+kernel 最终发送给 LLM 的是稳定顺序的 message list。message list 是运行时产物，不是用户维护的 prompt 文件。
 
-teach 可能修改：
+每轮按这个顺序组装：
+
+```text
+kernel message
+  极小运行规则、当前模式、工具调用协议、输出边界。
+
+self message
+  identity、goal、boot self、candidate 状态。
+
+event message
+  本轮用户输入、hook 事件或 tool result。
+
+selected context messages
+  相关 skills、tools、world 片段、permissions 摘要。
+
+working state message
+  当前任务状态、最近结果、失败原因、必要 summary。
+
+history summary message
+  旧事件压缩后的摘要，只在需要时进入。
+
+output contract message
+  本轮期望输出形态。
+```
+
+每个 message 都应带来源、层级、优先级、预算和 hash，方便缓存、压缩、追踪来源和跨 OpenAI / Anthropic adapter 转换。
+
+## 8. Grow、Check、Tool Growth
+
+`grow` 是用户侧的成长入口。它可能是长任务，但不是用户需要 resume 的 session。
+
+grow 可能修改：
 
 ```text
 skills/
@@ -221,9 +252,9 @@ list_files
 run_command
 ```
 
-领域工具属于 self repo。teach 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
+领域工具属于 self repo。grow 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
 
-`try` 是验证入口，只回答三个问题：
+`check` 是验证入口，只回答三个问题：
 
 ```text
 能不能启动
@@ -231,7 +262,7 @@ run_command
 还缺什么权限或配置
 ```
 
-try 至少验证：
+check 至少验证：
 
 ```text
 self 能加载
@@ -254,14 +285,14 @@ tag               = 被命名和固定的一版 self
 
 candidate 验证失败时，不自动丢弃。当前 agent 继续从上一版 validated commit 运行，同时修复 working tree 里的 candidate。
 
-candidate 验证通过后，promote 成新的 validated commit。达到目标后，可以 tag 并 release。
+candidate 验证通过后，promote 成新的 validated commit。达到目标后，可以 tag 并 hatch。
 
-## 10. Release
+## 10. Hatch / Release
 
-release 把 validated self 变成命名命令。
+`hatch` 把 validated self 变成命名命令。release 是 hatch 产出的技术包。
 
 ```text
-release = frozen self + runner + manifest + checksums
+hatch output = frozen self + runner + manifest + checksums
 ```
 
 release package 至少包含：
@@ -342,7 +373,29 @@ mode: execute | grow
 
 不要为了模板、测试、权限、配置、分享分别做复杂系统。
 
-## 14. MVP
+## 14. 自举验证
+
+`feng hatch --name feng --portable` 是架构的自举验证 case。
+
+它的目标不是创造另一个 agent，而是让当前 feng workspace 用同一套机制孵化下一版 feng 自己。被 hatch 出来的命令仍然叫 `feng`，面对的 world 是 feng 自己的仓库、核心诉求、架构文档、评审轮次、源码、测试和 Git 历史。
+
+自举不应该拥有特殊 runtime。它仍然通过：
+
+```text
+self repo
+.feng state
+Git
+skills
+tools
+evals
+permissions
+```
+
+来审查、修改、验证和提交 feng 自己。
+
+如果自举需要特殊通道，说明 feng 的通用架构还不够自洽。
+
+## 15. MVP
 
 第一版只做：
 
@@ -356,7 +409,7 @@ mode: execute | grow
 8. skill-first context assembly。
 9. 简单 validate：load、schema、tool、eval。
 10. builtin/local template。
-11. CLI：new、teach、try、release、status、watch、artifacts。
+11. CLI：new、grow、check、hatch、status、watch、artifacts。
 12. named portable release。
 13. 首次运行配置引导。
 14. 权限摘要确认和 tool call permission check。
@@ -364,7 +417,7 @@ mode: execute | grow
 
 暂时不做多 agent、复杂插件市场、复杂长期记忆、复杂 hook 执行器。
 
-## 15. 核心判断
+## 16. 核心判断
 
 feng 要爆火，不能让使用者理解 feng。
 

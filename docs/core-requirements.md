@@ -10,13 +10,13 @@ feng 的核心诉求是：
 把一个想法孵化成一个可以直接运行、可以传播的命令。
 ```
 
-创造者使用 feng：
+创造者使用 feng。这里的命令名称不是最终定稿，但产品语义应该接近：
 
 ```text
 feng new xiaogui
-feng teach "帮我整理下载目录"
-feng try
-feng release --name xiaogui --portable
+feng grow "帮我整理下载目录"
+feng check
+feng hatch --name xiaogui --portable
 ```
 
 使用者只使用孵化出来的命令：
@@ -26,6 +26,14 @@ xiaogui --input ./Downloads
 ```
 
 feng 是孵化器，`xiaogui` 是产品。
+
+`teach / try / release` 可以作为内部语义或兼容别名，但作为面向创造者的主路径，它们略显机械。更符合 feng 的语言应该围绕成长和孵化：
+
+```text
+grow   推动 self 成长，吸收规则、示例、反馈
+check  检查 candidate 是否可以成为下一版 self
+hatch  把 validated self 破壳成命名命令
+```
 
 ## 2. 白板式起点
 
@@ -55,7 +63,7 @@ self repo 表达：
 它有哪些工具
 它在哪些 hook 点启用哪些能力
 它如何被验证
-它如何被 release 成命令
+它如何被 hatch 成命令
 ```
 
 agent 必须能通过初始工具读取、理解、修改这些文件。
@@ -81,21 +89,21 @@ Git 在 feng 中表示 self 的代际成长：
 ```text
 validated commit = 可以启动的一版 self
 working tree      = 正在孵化的 candidate self
-tag               = 被命名、固定、可 release 的 self
+tag               = 被命名、固定、可 hatch 的 self
 ```
 
 candidate 失败时不自动丢弃。失败现场是成长材料，agent 应该能查看 diff、失败报告和验证结果，继续修复 candidate。
 
-## 6. Teach 是成长入口
+## 6. Grow 是成长入口
 
-`teach` 是产品层最重要的命令。
+`grow` 是产品层最重要的命令。
 
-它不是一次普通问答，而是推动当前 workspace 孵化的一次长任务。
+它不是一次普通问答，而是推动当前 workspace 孵化的一次长任务。早期文档里用 `teach` 描述这个动作，本质上指的是同一件事：用户给 feng 输入规则、示例、反馈，让 self repo 发生稳定成长。
 
 但对用户来说，不应该暴露复杂长任务概念：
 
 ```text
-用户教它规则
+用户给它规则
 用户给它示例
 feng 修改 skills / evals / interface / permissions
 feng 试运行
@@ -124,7 +132,7 @@ agent 的成长主要体现为：
 修改 skill
 组合 skill
 验证 skill
-release skill 组成的 self
+把 skill 组成的 self hatch 成命名命令
 ```
 
 hook 仍然存在，但 hook 是事件点，不是能力本身。
@@ -196,7 +204,7 @@ feng 的运行状态、进度、产物都必须可观察。
 .feng/state.yaml      当前状态快照
 .feng/lock            单写锁和心跳
 .feng/events.jsonl    append-only 事件流
-.feng/artifacts/      diff、eval、失败报告、release 预览
+.feng/artifacts/      diff、eval、失败报告、hatch 预览
 ```
 
 对应命令：
@@ -234,12 +242,12 @@ xiaogui --input ./Downloads
 
 内部结构属于创造者和 feng，不属于最终使用者。
 
-## 12. Release 是命名命令
+## 12. Hatch 是命名命令
 
-release 的目标不是导出一个给开发者看的包，而是生成一个普通用户可以运行的命令。
+hatch 的目标不是导出一个给开发者看的包，而是生成一个普通用户可以运行的命令。release package 是 hatch 产生的技术产物。
 
 ```text
-release = validated self + runner + manifest + checksums
+hatch = validated self + runner + manifest + checksums
 ```
 
 输出应该类似：
@@ -277,11 +285,11 @@ feng 的架构必须简单。
 
 ```text
 template     = 起始 self repo
-teach        = 修改 skill，并沉淀 eval
-try          = validate + 少量 eval
+grow         = 修改 skill，并沉淀 eval
+check        = validate + 少量 eval
 permissions = release manifest 的信任边界
 config       = 首次运行引导
-release      = 命名可执行产物
+hatch        = 命名可执行产物
 ```
 
 架构保持：
@@ -306,8 +314,72 @@ workspace 是身体
 self repo 是自我
 Git 是成长历史
 .feng 是生命体征
-teach 是孵化动作
-release 是破壳成品
+grow 是成长动作
+hatch 是破壳成品
 ```
 
 这就是 feng 的产品核心。
+
+## 15. LLM Message List 必须有设计
+
+feng 不能只说“组装上下文”，还需要定义每轮 LLM message list 的稳定编排方式。
+
+message list 应该是 kernel 根据 self repo 和运行状态临时生成的结果，不是用户长期维护的一堆 prompt 文件。
+
+每轮 message list 至少有这些层：
+
+```text
+kernel
+  极小的运行规则，例如当前模式、工具调用协议、输出约束。
+
+self
+  identity、goal、当前 boot self、candidate 状态。
+
+event
+  本轮用户输入、hook 事件或 tool 结果。
+
+selected context
+  相关 skills、tools、world 片段、permissions 摘要。
+
+working state
+  当前任务状态、最近结果、失败原因、必要的 summary。
+
+history summary
+  旧事件压缩后的摘要，只在需要时进入。
+```
+
+这些层按稳定顺序进入 messages，并带有来源、优先级和预算。这样才能同时满足：
+
+```text
+可缓存
+可压缩
+可追踪来源
+可跨 OpenAI / Anthropic adapter 转换
+```
+
+## 16. Feng 自举是关键 case
+
+feng 必须能用同一套机制孵化下一版 feng 自己。
+
+这不是创造一个新的命令或新的 agent，而是让当前 feng workspace 可以走完同样的路径：
+
+```text
+feng grow "让 feng 更好地校准自己的架构、代码和验证方式"
+feng check
+feng hatch --name feng --portable
+```
+
+这个 case 很重要，因为它会反过来检验 feng 的原始诉求：
+
+```text
+文件即自我
+Git 是成长介质
+workspace 是生命体
+长任务可观测
+不过拟合
+架构能被自己推演和修正
+```
+
+被 hatch 出来的命令仍然叫 `feng`。它面对的 world 是 feng 自己的仓库、文档、测试和 Git 历史。
+
+如果 feng 自举需要特殊待遇，说明 feng 的通用架构还不够自洽。
