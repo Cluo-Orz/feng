@@ -449,10 +449,15 @@ MVP grow loop：
 
 ```text
 .feng/state.yaml
-  mode: growing | checking | blocked | ready
+  mode: growing | checking | blocked | ready | missing_config
   current_goal
   validated_commit
   candidate_status
+  active_tool_pack_hash
+  stable_prefix_hash
+  context_budget
+  last_recovery
+  recovery_count
   last_event_id
   last_artifacts
 
