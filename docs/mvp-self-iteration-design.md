@@ -219,6 +219,18 @@ checks
 
 skill 可以提供 prompt 文本，但 message compiler 才决定本轮放入哪些内容。
 
+MVP skill 加载采用两级模型：
+
+```text
+skill catalog
+  从 skills/ 扫描 name、description、when、tools、checks 摘要，进入稳定 self contract。
+
+skill body
+  完整 skill 内容只在当前 hook/event 相关时进入 cached context pack 或动态后缀。
+```
+
+`skills/` 为空时，catalog 为空。第一个 grow 依靠通用 seed loop，而不是依靠隐藏 skill。
+
 ### hooks.yaml
 
 MVP hook 可以为空或只声明事件名：
@@ -355,11 +367,13 @@ snippets: []
 MVP active tool pack 规则：
 
 ```text
-bootstrap tools 可用。
+tool registry 保存 bootstrap tools 和 self repo tools 的全集。
+bootstrap tools 可用，但不等于每轮全量暴露。
 领域工具由当前 hook/skill 选择；没有 skill 时由通用 seed loop 选择最小必要工具。
 每轮只暴露需要的 tool schema。
 工具说明全文留在 tools/ 文件中，必要时 read_file。
 每次 tool call 仍经过 permissions。
+active_tool_pack_hash 写入 LLM cache key 和 .feng/events.jsonl。
 ```
 
 自迭代 seed loop 的初始可选工具：
@@ -372,6 +386,8 @@ run_command
 ```
 
 如果后续 grow 出 git helper 或 doc checker，也仍然按 hook/skill 选择，不自动全量暴露。
+
+tool growth 后，下一轮必须重新计算 active tool pack。不能因为旧 cache 命中而让 LLM 看不到新工具，也不能把所有工具 schema 塞进稳定前缀。
 
 ## 11. Permissions
 
@@ -446,6 +462,27 @@ MVP grow loop：
 .feng/artifacts/
   diff、tool output、check report、review report、hatch preview
 ```
+
+MVP grow loop 的恢复规则：
+
+```text
+max_tokens
+  首次提高输出预算或请求 continuation；记录 recovery event。
+
+prompt_too_long
+  先 artifact 化大内容，再 reactive compact，重试一次；仍失败则 mode: blocked。
+
+429 / 500 / 503
+  退避重试；超过上限写 provider-error artifact。
+
+401 / 402 / missing_config
+  不重试，mode: missing_config 或 blocked。
+
+400 / 422
+  视为 adapter/request 构造错误，写 artifact，下一轮 grow 可修复。
+```
+
+恢复动作只改变 runtime state 和 artifacts，不把 provider 错误硬写进 self repo。
 
 ## 13. Git 成长模型
 
@@ -718,7 +755,29 @@ review 必须证明同一机制可用于普通 agent。
 不能让 GUI 拥有 CLI 没有的能力。
 ```
 
-## 21. 下一步实现顺序
+## 21. 模块详细设计
+
+MVP 的实现规格拆成少量模块文档，放在：
+
+```text
+docs/mvp-modules/
+```
+
+这些模块只服务一个目标：用通用逻辑跑通 feng 自迭代。模块之间不能引入 feng 项目名判断，也不能预置项目 skill。
+
+模块清单：
+
+```text
+kernel-and-loop.md
+self-repo-and-bootstrap.md
+message-context.md
+llm-provider.md
+tools-permissions.md
+state-artifacts-git.md
+check-hatch-cli.md
+```
+
+## 22. 下一步实现顺序
 
 ```text
 1. Self repo loader。

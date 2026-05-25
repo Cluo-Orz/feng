@@ -340,6 +340,58 @@ provider usage
 
 Feng 不需要在 MVP 中做到每家 tokenizer 精确一致，但必须记录 provider usage。
 
+### 2.12 Message 编排和恢复边界
+
+Feng 的 message compiler 必须先生成 provider-neutral message layers，再交给 OpenAI-compatible 或 Anthropic adapter。
+
+稳定顺序：
+
+```text
+provider tools
+system: kernel contract
+system: self contract
+optional cached context pack
+user: state manifest
+conversation suffix
+user: latest event
+```
+
+缓存 key 至少包含：
+
+```text
+provider
+model
+mode
+stable_prefix_hash
+active_tool_pack_hash
+self_commit_or_tag
+context_pack_hash
+provider_capability_hash
+```
+
+当 tool growth、permission、provider capability 或 skill/world cached pack 改变时，active prefix 必须重新计算。不能用旧缓存隐藏新工具，也不能为了缓存命中把所有工具永久塞进 prompt。
+
+Provider 错误恢复由 Feng LLM 调用层统一处理：
+
+```text
+max_tokens / output truncated
+  adapter 返回 stop reason，kernel 决定提高输出预算或 continuation。
+
+prompt_too_long
+  adapter 归一化为 prompt_too_long，kernel 触发 reactive compact。
+
+429 / 500 / 503
+  adapter 标记 transient，kernel 退避重试。
+
+401 / 402 / missing_config
+  adapter 标记 config/account 错误，kernel 不重试。
+
+400 / 422
+  adapter 标记 request_error，写 artifact 供 grow 修复 message/tool/schema。
+```
+
+恢复状态不进入 self repo。它写入 `.feng/events.jsonl` 和 `.feng/artifacts/`，下一轮通过 artifact refs 进入 context。
+
 ## 3. 协议层：OpenAI-compatible
 
 ### 3.1 推荐定位

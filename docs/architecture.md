@@ -208,6 +208,18 @@ output      期望输出形态
 checks      哪些 eval 或规则能验证它
 ```
 
+skill 加载采用两级模型：
+
+```text
+skill index
+  name、description、when、tools、checks 摘要。进入稳定前缀，可缓存。
+
+skill body
+  完整能力说明、示例、约束。只有当前 hook/event 相关时才按需进入 context。
+```
+
+`skills/` 为空时，index 就是空的。kernel 不能把不存在的能力伪造成默认能力。
+
 hook 可以在未来支持脚本，但脚本仍然必须作为 tool 受 permissions 和 check 管理。
 
 bootstrap self 不需要预置任何领域 skill。若当前 hook 没有匹配 skill，kernel 进入通用 seed loop：只用 kernel contract、latest event、self index、目录索引、初始工具和 artifact refs 让 LLM 生成第一批 candidate self 文件。这条 fallback 对所有 workspace 相同，不是某个项目的特殊逻辑。
@@ -231,6 +243,19 @@ summary
 ```
 
 超长时，原始证据进入 artifacts，prompt 只保留路径、hash、摘要和必要片段。稳定经验才沉淀回 self repo。
+
+context pressure 的处理顺序必须固定：
+
+```text
+1. 长 tool result / 长日志 / 长 diff 先写 artifact。
+2. 旧 tool result 在 conversation suffix 中变成短占位。
+3. 历史事件合并成 summary。
+4. 低相关 skill/world 片段退出本轮 context。
+5. prompt_too_long 时执行 reactive compact 后重试一次。
+6. 仍然超长时，状态进入 blocked，要求缩小任务或增加预算。
+```
+
+这样做的目标不是“尽量塞满”，而是保证长任务能继续、证据不丢、稳定前缀不被动态内容污染。
 
 ### Message List
 
@@ -318,7 +343,17 @@ run_command
 
 领域工具属于 self repo。grow 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
 
-工具变多后，不代表每轮全部暴露给 LLM。每轮只暴露当前 hook/skill 或 seed loop 需要的工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。
+工具变多后，不代表每轮全部暴露给 LLM。
+
+```text
+tool registry
+  当前 workspace 可用工具全集，来自 bootstrap tools 和 self repo tools。
+
+active tool pack
+  本轮暴露给 LLM 的工具子集，由 hook/skill/latest event/seed loop 选择。
+```
+
+每轮只暴露当前 hook/skill 或 seed loop 需要的工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。active tool pack 的 hash 是 prompt cache key 的一部分。tool growth、provider capability 变化或 permission 变化都会让 hash 改变，不能复用旧工具前缀。
 
 `check` 是验证入口，只回答三个问题：
 
@@ -450,6 +485,29 @@ dynamic suffix tokens
 ```
 
 这些指标写入 `.feng/events.jsonl` 或 `.feng/artifacts/`，用于观察 token efficiency。
+
+LLM 错误恢复属于 Runtime Kernel，不属于 self repo 的特殊能力。
+
+MVP 至少区分：
+
+```text
+max_tokens / output truncated
+  首次提高输出预算或请求 continuation；截断内容不直接污染稳定前缀。
+
+prompt_too_long
+  执行 reactive compact 后重试；仍失败则 blocked。
+
+429 / 500 / 503
+  指数退避重试；超过上限写 artifact 并 blocked。
+
+401 / 402 / missing_config
+  不重试，进入 missing_config 或 blocked。
+
+400 / 422
+  视为请求构造错误，写 artifact 供下一轮修复。
+```
+
+所有恢复动作都写入 `.feng/events.jsonl`；长错误响应写入 `.feng/artifacts/`。agent 下一轮通过 artifact refs 感知错误，而不是把完整错误栈反复塞进 messages。
 
 ## 13. 易用性约束
 
