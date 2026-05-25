@@ -204,7 +204,7 @@ skills/README.md
   说明 skill 是通过 grow 长出来的能力契约。
 ```
 
-第一个 grow 可以创建读取需求、审查文档、编辑 self、修复 candidate 等 skill，但这些必须是本轮 candidate 的产物，而不是模板预先准备好的能力。
+第一个 grow 可以创建适合当前目标的 candidate skill，但这些必须是本轮 candidate 的产物，而不是模板预先准备好的能力。
 
 MVP skill 文件只需要表达最小能力契约：
 
@@ -278,7 +278,7 @@ evals/llm-provider-boundary.yaml
   LLM provider 必须是配置 profile，不写真实 key。
 ```
 
-MVP 默认 eval 只验证 self 健康、schema、权限、provider 边界和 secret 边界。针对当前项目的业务 eval，例如架构 review 是否 case-first，必须由 grow 生成 candidate eval。
+MVP 默认 eval 只验证 self 健康、schema、权限、provider 边界和 secret 边界。针对当前项目的业务 eval，必须由 grow 根据目标生成 candidate eval。
 
 ## 8. LLM Provider
 
@@ -385,7 +385,7 @@ list_files
 run_command
 ```
 
-如果后续 grow 出 git helper 或 doc checker，也仍然按 hook/skill 选择，不自动全量暴露。
+如果后续 grow 出领域工具或辅助检查工具，也仍然按 hook/skill 选择，不自动全量暴露。
 
 tool growth 后，下一轮必须重新计算 active tool pack。不能因为旧 cache 命中而让 LLM 看不到新工具，也不能把所有工具 schema 塞进稳定前缀。
 
