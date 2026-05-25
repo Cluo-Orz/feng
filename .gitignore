@@ -5,6 +5,9 @@ __pycache__/
 .ruff_cache/
 .venv/
 dist/
+bin/
+*.test
+feng.exe
 .feng/state.yaml
 .feng/events.jsonl
 .feng/artifacts/

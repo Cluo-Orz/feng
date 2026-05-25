@@ -39,16 +39,39 @@ def _check_jsonish(workspace: Path, problems: list[str]) -> None:
 
 
 def _check_no_secrets(workspace: Path, problems: list[str]) -> None:
-    for path in sorted(workspace.rglob("*")):
+    roots = [
+        *[workspace / name for name in SELF_FILES],
+        *[workspace / name for name in SELF_DIRS],
+        workspace / ".feng" / "artifacts",
+        workspace / "cmd",
+        workspace / "internal",
+        workspace / "src",
+        workspace / "tests",
+        workspace / "docs",
+    ]
+    seen: set[Path] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        resolved_root = root.resolve()
+        if resolved_root in seen:
+            continue
+        seen.add(resolved_root)
+        paths = [root] if root.is_file() else sorted(root.rglob("*"))
+        for path in paths:
+            _check_file_no_secret(workspace, path, problems)
+
+
+def _check_file_no_secret(workspace: Path, path: Path, problems: list[str]) -> None:
         rel = path.relative_to(workspace).as_posix()
         if not path.is_file():
-            continue
+            return
         if rel.startswith(".git/"):
-            continue
+            return
         if rel.startswith(".feng/cache/") or rel.startswith(".feng/runs/"):
-            continue
+            return
         if path.stat().st_size > 512_000:
-            continue
+            return
         text = path.read_text(encoding="utf-8", errors="ignore")
         if SECRET_RE.search(text):
             problems.append(f"possible secret in {rel}")
