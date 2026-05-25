@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+dist/
+.feng/state.yaml
+.feng/events.jsonl
+.feng/artifacts/
+.feng/cache/
+.feng/runs/
