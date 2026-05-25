@@ -15,7 +15,7 @@ SELF_FILES = {
     "feng.yaml": {
         "version": 1,
         "name": "feng-workspace",
-        "llm": {"provider": "deepseek", "model": "deepseek-v4-pro"},
+        "llm": {"provider": "deepseek", "model": "deepseek-chat"},
     },
     "hooks.yaml": {"on_grow": [], "on_check_failed": []},
     "permissions.yaml": {

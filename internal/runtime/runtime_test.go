@@ -59,3 +59,32 @@ func TestGoRuntimeNoBootstrapCommand(t *testing.T) {
 		t.Fatalf("bootstrap should not be public, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
 }
+
+func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "make a portable agent", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	packagePath := strings.TrimSpace(out.String())
+	if _, err := os.Stat(filepath.Join(packagePath, "self", "identity.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(packagePath, "feng-release.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(packagePath, "checksums.json")); err != nil {
+		t.Fatal(err)
+	}
+}

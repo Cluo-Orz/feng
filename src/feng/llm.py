@@ -33,7 +33,7 @@ def default_deepseek_profile() -> ProviderProfile:
         protocol="openai_chat",
         base_url="https://api.deepseek.com",
         api_key_env="DEEPSEEK_API_KEY",
-        default_model=os.environ.get("FENG_LLM_MODEL", "deepseek-v4-pro"),
+        default_model=os.environ.get("FENG_LLM_MODEL", "deepseek-chat"),
     )
 
 

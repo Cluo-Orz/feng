@@ -30,7 +30,7 @@ var (
 			"name":    "feng-workspace",
 			"llm": map[string]any{
 				"provider": "deepseek",
-				"model":    "deepseek-v4-pro",
+				"model":    "deepseek-chat",
 			},
 		},
 		"hooks.yaml": map[string]any{
@@ -141,8 +141,7 @@ func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 	case "artifacts":
 		return cmdArtifacts(cwd, stdout, stderr)
 	case "hatch":
-		fmt.Fprintln(stderr, "hatch is not implemented in the Go runtime yet")
-		return 1
+		return cmdHatch(args[1:], cwd, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printHelp(stderr)
@@ -161,7 +160,7 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	workspace := workspaceOrCwd(cwd)
-	if _, err := bootstrap(workspace, goal); err != nil {
+	if _, err := bootstrap(workspace, goal, packagedSeedSelf()); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -185,8 +184,23 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	printJSON(stdout, map[string]any{"ok": false, "reason": "llm_loop_pending", "message": "Go runtime bootstrap is ready; LLM loop migration is pending"})
-	return 2
+	messages := compileGrowMessages(workspace, goal)
+	appendEvent(workspace, "message_compiled", map[string]any{"estimated_input_tokens": estimateMessageTokens(messages)})
+	assistant, err := callOpenAIChat(defaultProviderProfile(), messages)
+	if err != nil {
+		return handleLLMError(workspace, err, stdout)
+	}
+	state, _ = loadState(workspace)
+	state.Mode = "ready"
+	saveState(workspace, state)
+	appendEvent(workspace, "llm_called", map[string]any{"provider": "deepseek", "model": defaultProviderProfile().Model})
+	printJSON(stdout, map[string]any{
+		"ok":      true,
+		"turns":   1,
+		"message": assistant,
+		"note":    "Go runtime has verified the LLM call; tool-call loop migration is still in progress",
+	})
+	return 0
 }
 
 func parseGrowGoal(args []string) (string, error) {
@@ -321,7 +335,7 @@ func runCheck(workspace string) CheckReport {
 	return report
 }
 
-func bootstrap(workspace, goal string) (bool, error) {
+func bootstrap(workspace, goal string, seedSelf string) (bool, error) {
 	created := false
 	if !exists(filepath.Join(workspace, ".git")) {
 		if _, err := runGit(workspace, "init"); err != nil {
@@ -342,7 +356,11 @@ func bootstrap(workspace, goal string) (bool, error) {
 		if exists(path) {
 			continue
 		}
-		if name == "goal.md" && goal != "" {
+		if seed := filepath.Join(seedSelf, name); seedSelf != "" && exists(seed) {
+			if err := copyFile(seed, path); err != nil {
+				return false, err
+			}
+		} else if name == "goal.md" && goal != "" {
 			if err := writeText(path, goal+"\n"); err != nil {
 				return false, err
 			}
@@ -358,6 +376,13 @@ func bootstrap(workspace, goal string) (bool, error) {
 	dirKeys := sortedKeysString(selfDirs)
 	for _, name := range dirKeys {
 		dir := filepath.Join(workspace, name)
+		if seed := filepath.Join(seedSelf, name); seedSelf != "" && !exists(dir) && exists(seed) {
+			if err := copyDir(seed, dir); err != nil {
+				return false, err
+			}
+			created = true
+			continue
+		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return false, err
 		}

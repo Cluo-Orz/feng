@@ -106,6 +106,17 @@ dist/xiaogui/
 
 第一个 Go hatch 可以仍然是目录包。后续可以把 `self.feng` append 或 embed 到可执行文件里，但这是打包优化，不是新架构层。
 
-## 当前约束
+## 当前状态
 
-当前本机没有安装 Go、Rust 或 Cargo，因此不能在这里编译和测试 Go/Rust 代码。安装 Go 工具链之前，影响 runtime 行为的改动应先通过 Python 行为原型验证，并把 Go 迁移要求写清楚，而不能把未编译的 Go 代码当作已验证实现。
+当前本机已经安装 Go，可以编译和测试 Go runtime。Rust/Cargo 仍不是 MVP 必需项。
+
+影响 runtime 行为的改动必须至少通过：
+
+```text
+go test ./...
+go vet ./...
+Python 行为原型回归测试
+真实二进制 smoke
+```
+
+如果涉及 provider，还必须用临时环境变量验证真实 provider 调用，并确认 API key 没有写入仓库、artifact 或 hatch package。

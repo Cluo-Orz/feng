@@ -37,7 +37,7 @@ id: deepseek
 protocol: openai_chat
 base_url: https://api.deepseek.com
 api_key_env: DEEPSEEK_API_KEY
-default_model: deepseek-v4-pro
+default_model: deepseek-chat
 ```
 
 ## Recovery

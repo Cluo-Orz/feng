@@ -96,7 +96,7 @@ ProviderProfile
 
 ```yaml
 provider: deepseek
-model: deepseek-v4-pro
+model: deepseek-chat
 mode: grow
 messages: []
 tools: []
@@ -751,8 +751,18 @@ llm:
       protocol: openai_chat
       base_url: https://api.deepseek.com
       api_key_env: DEEPSEEK_API_KEY
-      default_model: deepseek-v4-pro
+      default_model: deepseek-chat
       models:
+        deepseek-chat:
+          supports:
+            streaming: true
+            tool_calling: true
+            json_object: true
+            prompt_cache: automatic_disk
+            explicit_cache_control: false
+            reasoning: false
+            images: false
+            documents: false
         deepseek-v4-pro:
           supports:
             streaming: true
@@ -782,7 +792,7 @@ llm:
       protocol: anthropic_messages
       base_url: https://api.deepseek.com/anthropic
       api_key_env: DEEPSEEK_API_KEY
-      default_model: deepseek-v4-pro
+      default_model: deepseek-chat
       compatibility:
         prompt_cache_control: ignored
         anthropic_version_header: required_by_sdk
@@ -833,7 +843,7 @@ Workspace 可以引用 provider 名称，但不能保存 key：
 # self/feng.yaml 或 workspace 配置中的非 secret 引用
 llm:
   provider: deepseek
-  model: deepseek-v4-pro
+  model: deepseek-chat
 ```
 
 用户本机 provider profile 保存：
@@ -843,7 +853,7 @@ id: deepseek
 protocol: openai_chat
 base_url: https://api.deepseek.com
 api_key_env: DEEPSEEK_API_KEY
-default_model: deepseek-v4-pro
+default_model: deepseek-chat
 ```
 
 这样 hatch package 可以传播：
