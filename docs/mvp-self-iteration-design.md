@@ -55,6 +55,32 @@ MVP 也不做 feng 专用逻辑：
 不自动重写 Git 历史
 ```
 
+## 2.1 Runtime 语言边界
+
+MVP 的架构不绑定语言，但产品级 runtime 目标是 Go。
+
+当前 Python runtime 可以作为行为原型，用来验证：
+
+```text
+grow loop
+self repo 文件约定
+.feng state/events/artifacts
+tool permission
+check checkpoint
+hatch package
+```
+
+正式 hatch 体验不应该长期要求用户安装 Python 或理解虚拟环境。Go runtime 应成为下一阶段实现目标，因为它更容易产出跨平台命名命令。
+
+语言迁移不能改变 MVP 的核心约束：
+
+```text
+仍然只有一个通用 loop
+仍然从 self repo 和 .feng state 读写
+仍然由 check 推进 validated commit
+仍然不能写 feng 自举专用 runtime
+```
+
 ## 3. 成功标准
 
 MVP 成功标准：
@@ -574,13 +600,14 @@ feng hatch --name feng --portable
 ```text
 dist/feng/
   feng
-  feng.ps1
-  runner/
-  self/
+  feng.exe
+  self.feng 或 self/
   provider-examples/
   feng-release.yaml
   checksums.json
 ```
+
+Python 行为原型可以暂时使用 `runner/ + self/` 目录结构；Go 产品 runtime 的目标是直接产出命名可执行文件，并携带或定位 frozen self bundle。
 
 manifest：
 

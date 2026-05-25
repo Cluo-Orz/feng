@@ -43,6 +43,8 @@ provider examples
 named entry command
 ```
 
+产品级 hatch 的 runner 目标是 Go binary。Python runner 只作为当前行为原型存在，不能成为长期使用者体验的前提。
+
 不包含：
 
 ```text

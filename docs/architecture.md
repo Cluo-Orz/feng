@@ -52,6 +52,14 @@ workspace = self repo + .feng state + Git history
 
 同一个 workspace 同一时间只允许一个 feng kernel 修改 self。
 
+## 2.1 Runtime 语言策略
+
+Runtime Kernel 的架构是语言无关的，但产品级实现应该优先使用 Go。
+
+原因很简单：feng 最终要 hatch 成一个可传播的命名命令。Go 更适合把 runner、CLI、文件系统、Git、HTTP provider、权限检查和打包能力收敛成跨平台单命令。Rust 可以作为未来高风险原生工具或平台 adapter 的选择，但不适合作为第一版 kernel 的复杂度起点。
+
+当前 Python 实现只作为 MVP 行为原型和测试基准。它证明通用 loop、self repo、state、Git、tools、check、hatch 语义是否成立；产品化 runtime 应向 Go 收敛，但不能改变四个核心对象和通用 loop。
+
 ## 3. 两个界面
 
 feng 要易用，必须隐藏内部结构。
