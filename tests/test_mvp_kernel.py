@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -9,7 +10,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+
+from feng.tools import active_tool_pack
 
 
 def env_without_llm_key() -> dict[str, str]:
@@ -43,6 +47,22 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((work / ".feng" / "state.yaml").exists())
             self.assertTrue((work / "skills" / "README.md").exists())
             self.assertTrue((work / ".gitignore").exists())
+            (work / "tools" / "hello.tool.yaml").write_text(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "name": "hello_tool",
+                        "description": "Say hello through a self repo command tool.",
+                        "command": "python -c \"print('hello')\"",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (work / "evals" / "smoke.eval.yaml").write_text(
+                json.dumps({"type": "command", "command": "python -c \"print('eval ok')\""}),
+                encoding="utf-8",
+            )
+            self.assertIn("hello_tool", [tool.name for tool in active_tool_pack(work, "check", "")])
 
             check = run_feng(work, "check")
             self.assertEqual(check.returncode, 0, check.stderr + check.stdout)

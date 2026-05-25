@@ -67,7 +67,7 @@ SELF_FILES = {
 
 SELF_DIRS = {
     "skills": "Skills grow from candidate files. This directory may be empty.\n",
-    "tools": "Tool declarations and implementations grow here.\n",
+    "tools": "Tool declarations grow here. MVP supports JSON-compatible *.tool.yaml command wrappers.\n",
     "world": "Stable world descriptions live here. Runtime logs do not.\n",
     "evals": "Candidate and baseline evals live here.\n",
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -8,7 +9,7 @@ from typing import Any, Callable
 from .artifacts import write_artifact
 from .events import append_event
 from .permissions import PermissionDenied, check_command, check_file_read, check_file_write
-from .utils import ensure_dir, rel_path, run_process
+from .utils import FengError, ensure_dir, read_jsonish, rel_path, run_process
 
 
 MAX_INLINE_RESULT = 8000
@@ -106,6 +107,55 @@ def run_run_command(workspace: Path, args: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _valid_tool_name(name: str) -> bool:
+    return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) is not None
+
+
+def _command_tool(workspace: Path, path: Path) -> Tool | None:
+    try:
+        data = read_jsonish(path, {})
+    except FengError as exc:
+        append_event(workspace, "tool_load_failed", {"path": rel_path(workspace, path), "reason": str(exc)})
+        return None
+    if not isinstance(data, dict) or data.get("type") != "command":
+        return None
+    name = str(data.get("name") or path.stem.split(".")[0])
+    command = str(data.get("command") or "").strip()
+    if not _valid_tool_name(name) or not command:
+        append_event(workspace, "tool_load_failed", {"path": rel_path(workspace, path), "reason": "invalid name or command"})
+        return None
+    description = str(data.get("description") or f"Run the self-defined command tool {name}.")
+    input_schema = data.get("input_schema") or {"type": "object", "properties": {}, "required": []}
+    timeout = int(data.get("timeout", 60))
+
+    def handler(tool_workspace: Path, _args: dict[str, Any]) -> dict[str, Any]:
+        check_command(tool_workspace, command)
+        code, output = run_process([command], cwd=tool_workspace, timeout=timeout, shell=True)
+        append_event(tool_workspace, "tool_called", {"tool": name, "command": command, "exit_code": code})
+        result = _maybe_artifact(tool_workspace, f"{name}:{command}", f"exit_code={code}\n{output}", f"{name} output")
+        result["is_error"] = code != 0
+        return result
+
+    return Tool(name, description[:500], input_schema, handler)
+
+
+def self_repo_tools(workspace: Path) -> list[Tool]:
+    tools_dir = workspace / "tools"
+    if not tools_dir.exists():
+        return []
+    loaded: list[Tool] = []
+    seen = {tool.name for tool in BOOTSTRAP_TOOLS}
+    for path in sorted(tools_dir.rglob("*")):
+        if not path.is_file() or not path.name.endswith((".tool.yaml", ".tool.json")):
+            continue
+        tool = _command_tool(workspace, path)
+        if not tool or tool.name in seen:
+            continue
+        seen.add(tool.name)
+        loaded.append(tool)
+    return loaded
+
+
 BOOTSTRAP_TOOLS: list[Tool] = [
     Tool(
         "read_file",
@@ -151,7 +201,7 @@ BOOTSTRAP_TOOLS: list[Tool] = [
 
 
 def tool_registry(_workspace: Path) -> list[Tool]:
-    return list(BOOTSTRAP_TOOLS)
+    return [*BOOTSTRAP_TOOLS, *self_repo_tools(_workspace)]
 
 
 def active_tool_pack(workspace: Path, _mode: str, _latest_event: str) -> list[Tool]:

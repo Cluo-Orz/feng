@@ -10,13 +10,15 @@ from .events import append_event
 from .git_utils import checkpoint_commit
 from .llm import load_provider_profile
 from .message_context import compile_messages
+from .permissions import check_command
 from .self_repo import SELF_DIRS, SELF_FILES
 from .state import load_state, save_state
 from .tools import active_tool_pack
-from .utils import FengError, read_jsonish
+from .utils import FengError, read_jsonish, rel_path, run_process
 
 
 SECRET_RE = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
+TOOL_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 
 
 def _check_required_files(workspace: Path, problems: list[str]) -> None:
@@ -70,6 +72,75 @@ def _check_no_special_runtime(workspace: Path, problems: list[str]) -> None:
                 problems.append(f"special runtime marker in {path.relative_to(workspace).as_posix()}: {needle}")
 
 
+def _run_evals(workspace: Path, problems: list[str]) -> None:
+    evals_dir = workspace / "evals"
+    if not evals_dir.exists():
+        return
+    for path in sorted(evals_dir.rglob("*")):
+        if not path.is_file() or not path.name.endswith((".eval.yaml", ".eval.json")):
+            continue
+        rel = rel_path(workspace, path)
+        try:
+            data = read_jsonish(path, {})
+        except FengError as exc:
+            problems.append(f"eval parse failed in {rel}: {exc}")
+            continue
+        if not isinstance(data, dict) or data.get("type") != "command":
+            problems.append(f"eval has unsupported type in {rel}")
+            continue
+        command = str(data.get("command") or "").strip()
+        if not command:
+            problems.append(f"eval command is empty in {rel}")
+            continue
+        try:
+            check_command(workspace, command)
+        except Exception as exc:
+            problems.append(f"eval command denied in {rel}: {exc}")
+            continue
+        code, output = run_process([command], cwd=workspace, timeout=int(data.get("timeout", 60)), shell=True)
+        if code != 0:
+            artifact = write_artifact(
+                workspace,
+                "eval-output",
+                rel,
+                output,
+                f"eval failed: {rel}",
+                "eval output helps the next grow repair the candidate",
+                extension="txt",
+                snippets=[output[:1000]],
+            )
+            problems.append(f"eval failed in {rel}: exit_code={code}; artifact={artifact['path']}")
+
+
+def _check_tool_files(workspace: Path, problems: list[str]) -> None:
+    tools_dir = workspace / "tools"
+    if not tools_dir.exists():
+        return
+    for path in sorted(tools_dir.rglob("*")):
+        if not path.is_file() or not path.name.endswith((".tool.yaml", ".tool.json")):
+            continue
+        rel = rel_path(workspace, path)
+        try:
+            data = read_jsonish(path, {})
+        except FengError as exc:
+            problems.append(f"tool parse failed in {rel}: {exc}")
+            continue
+        if not isinstance(data, dict) or data.get("type") != "command":
+            problems.append(f"tool has unsupported type in {rel}")
+            continue
+        name = str(data.get("name") or path.stem.split(".")[0])
+        command = str(data.get("command") or "").strip()
+        if TOOL_NAME_RE.fullmatch(name) is None:
+            problems.append(f"tool has invalid name in {rel}: {name}")
+        if not command:
+            problems.append(f"tool command is empty in {rel}")
+            continue
+        try:
+            check_command(workspace, command)
+        except Exception as exc:
+            problems.append(f"tool command denied in {rel}: {exc}")
+
+
 def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
     problems: list[str] = []
     state = load_state(workspace)
@@ -79,6 +150,7 @@ def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
     _check_jsonish(workspace, problems)
     _check_no_secrets(workspace, problems)
     _check_no_special_runtime(workspace, problems)
+    _check_tool_files(workspace, problems)
     try:
         load_provider_profile(workspace)
     except Exception as exc:
@@ -88,6 +160,7 @@ def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
         compile_messages(workspace, "check candidate self", tools)
     except Exception as exc:
         problems.append(f"message compiler failed: {type(exc).__name__}: {exc}")
+    _run_evals(workspace, problems)
 
     ok = not problems
     state = load_state(workspace)
