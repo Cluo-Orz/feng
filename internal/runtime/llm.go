@@ -55,6 +55,7 @@ type chatResponse struct {
 			ToolCalls        []ToolCall `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
+	Usage map[string]any `json:"usage"`
 }
 
 type ToolCall struct {
@@ -71,6 +72,7 @@ type FunctionCall struct {
 type AssistantTurn struct {
 	Content   string
 	ToolCalls []ToolCall
+	Usage     map[string]any
 }
 
 func defaultProviderProfile() ProviderProfile {
@@ -252,7 +254,7 @@ func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map
 		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "provider response has no choices"}
 	}
 	message := parsed.Choices[0].Message
-	turn := AssistantTurn{ToolCalls: message.ToolCalls}
+	turn := AssistantTurn{ToolCalls: message.ToolCalls, Usage: normalizeUsage(parsed.Usage)}
 	if strings.TrimSpace(message.Content) != "" {
 		turn.Content = message.Content
 		return turn, nil
@@ -262,6 +264,44 @@ func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map
 		return turn, nil
 	}
 	return turn, nil
+}
+
+func normalizeUsage(usage map[string]any) map[string]any {
+	if len(usage) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	copyUsageInt(out, usage, "prompt_tokens")
+	copyUsageInt(out, usage, "completion_tokens")
+	copyUsageInt(out, usage, "total_tokens")
+	if details, ok := usage["prompt_tokens_details"].(map[string]any); ok {
+		copyUsageInt(out, details, "cached_tokens")
+	}
+	copyUsageInt(out, usage, "prompt_cache_hit_tokens")
+	copyUsageInt(out, usage, "prompt_cache_miss_tokens")
+	return out
+}
+
+func copyUsageInt(out map[string]any, usage map[string]any, key string) {
+	if value, ok := usage[key]; ok {
+		out[key] = intFromAny(value)
+	}
+}
+
+func intFromAny(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		parsed, _ := typed.Int64()
+		return int(parsed)
+	default:
+		return 0
+	}
 }
 
 func normalizeLLMHTTPError(status int, body string) LLMError {

@@ -124,8 +124,16 @@ func lastToolMessage(messages []chatMessage) string {
 }
 
 func writeChatResponse(w http.ResponseWriter, message map[string]any) {
+	writeChatResponseWithUsage(w, message, nil)
+}
+
+func writeChatResponseWithUsage(w http.ResponseWriter, message map[string]any, usage map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	response := map[string]any{
 		"choices": []map[string]any{{"message": message}},
-	})
+	}
+	if usage != nil {
+		response["usage"] = usage
+	}
+	_ = json.NewEncoder(w).Encode(response)
 }

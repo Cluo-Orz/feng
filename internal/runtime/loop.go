@@ -29,7 +29,8 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 		if err != nil {
 			return handleLLMError(workspace, err, stdout)
 		}
-		appendEvent(workspace, "llm_called", map[string]any{"provider": profile.ID, "model": profile.Model, "turn": turn, "tool_calls": len(assistant.ToolCalls)})
+		updateUsageMetrics(workspace, assistant.Usage)
+		appendEvent(workspace, "llm_called", map[string]any{"provider": profile.ID, "model": profile.Model, "turn": turn, "tool_calls": len(assistant.ToolCalls), "usage": assistant.Usage})
 
 		if len(assistant.ToolCalls) == 0 {
 			state, _ := loadState(workspace)
@@ -55,6 +56,20 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func updateUsageMetrics(workspace string, usage map[string]any) {
+	if len(usage) == 0 {
+		return
+	}
+	state, err := loadState(workspace)
+	if err != nil {
+		return
+	}
+	for key, value := range usage {
+		state.ContextBudget["last_"+key] = intFromAny(value)
+	}
+	saveState(workspace, state)
 }
 
 func parseToolArguments(raw string) map[string]any {
