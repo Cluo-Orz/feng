@@ -290,14 +290,24 @@ func copyRunner(output, cleanName string) ([]string, error) {
 }
 
 func writeProviderExample(output string) error {
-	example := map[string]any{
+	deepseek := map[string]any{
 		"id":            "deepseek",
 		"protocol":      "openai_chat",
 		"base_url":      "https://api.deepseek.com",
 		"api_key_env":   "DEEPSEEK_API_KEY",
 		"default_model": "deepseek-chat",
 	}
-	return writeJSONFile(filepath.Join(output, "provider-examples", "deepseek.yaml"), example)
+	if err := writeJSONFile(filepath.Join(output, "provider-examples", "deepseek.yaml"), deepseek); err != nil {
+		return err
+	}
+	deepseekAnthropic := map[string]any{
+		"id":            "deepseek-anthropic",
+		"protocol":      "anthropic_messages",
+		"base_url":      "https://api.deepseek.com/anthropic",
+		"api_key_env":   "DEEPSEEK_API_KEY",
+		"default_model": "deepseek-chat",
+	}
+	return writeJSONFile(filepath.Join(output, "provider-examples", "deepseek-anthropic.yaml"), deepseekAnthropic)
 }
 
 func packageChecksums(root string) (map[string]string, error) {

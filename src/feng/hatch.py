@@ -54,6 +54,41 @@ def _copy_runner(_workspace: Path, dst: Path) -> None:
     )
 
 
+def _write_provider_examples(output: Path) -> None:
+    examples = output / "provider-examples"
+    ensure_dir(examples)
+    write_text(
+        examples / "deepseek.yaml",
+        json.dumps(
+            {
+                "id": "deepseek",
+                "protocol": "openai_chat",
+                "base_url": "https://api.deepseek.com",
+                "api_key_env": "DEEPSEEK_API_KEY",
+                "default_model": "deepseek-chat",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+    )
+    write_text(
+        examples / "deepseek-anthropic.yaml",
+        json.dumps(
+            {
+                "id": "deepseek-anthropic",
+                "protocol": "anthropic_messages",
+                "base_url": "https://api.deepseek.com/anthropic",
+                "api_key_env": "DEEPSEEK_API_KEY",
+                "default_model": "deepseek-chat",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+    )
+
+
 def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: bool = True) -> Path:
     clean_name = slugify(name)
     state = load_state(workspace)
@@ -93,6 +128,7 @@ def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: boo
         output / f"{clean_name}.cmd",
         f"@echo off\r\npython \"%~dp0{clean_name}.py\" %*\r\n",
     )
+    _write_provider_examples(output)
     manifest = {
         "name": clean_name,
         "portable": portable,

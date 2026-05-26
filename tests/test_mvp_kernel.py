@@ -227,6 +227,7 @@ class MvpKernelTest(unittest.TestCase):
             package = Path(hatch.stdout.strip())
             self.assertTrue((package / "sample.py").exists())
             self.assertTrue((package / "self" / "identity.md").exists())
+            self.assertIn("anthropic_messages", (package / "provider-examples" / "deepseek-anthropic.yaml").read_text(encoding="utf-8"))
 
             user_work = Path(tmp) / "user"
             user_work.mkdir()

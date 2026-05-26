@@ -98,6 +98,13 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(packagePath, "checksums.json")); err != nil {
 		t.Fatal(err)
 	}
+	anthropicExample, err := os.ReadFile(filepath.Join(packagePath, "provider-examples", "deepseek-anthropic.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(anthropicExample), `"protocol": "anthropic_messages"`) {
+		t.Fatalf("anthropic provider example missing protocol: %s", string(anthropicExample))
+	}
 	manifest, err := os.ReadFile(filepath.Join(packagePath, "feng-release.yaml"))
 	if err != nil {
 		t.Fatal(err)

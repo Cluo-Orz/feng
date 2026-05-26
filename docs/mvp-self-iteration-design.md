@@ -640,10 +640,11 @@ API key
 未通过 check 的 candidate
 ```
 
-Hatch 可以包含 provider example：
+Hatch 可以包含 provider examples：
 
 ```text
 provider-examples/deepseek.yaml
+provider-examples/deepseek-anthropic.yaml
 ```
 
 但 example 只能包含：
