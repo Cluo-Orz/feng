@@ -10,6 +10,7 @@ from .checks import run_check
 from .events import tail_events
 from .hatch import hatch
 from .kernel import grow as run_grow
+from .llm import provider_status
 from .self_repo import is_workspace
 from .state import load_state
 from .utils import workspace_or_cwd
@@ -49,7 +50,9 @@ def cmd_status(_args: argparse.Namespace) -> int:
     if not (workspace / ".feng").exists():
         print("not a feng workspace")
         return 1
-    print(json.dumps(load_state(workspace), ensure_ascii=False, indent=2))
+    state = load_state(workspace)
+    state["provider"] = provider_status(workspace)
+    print(json.dumps(state, ensure_ascii=False, indent=2))
     return 0
 
 

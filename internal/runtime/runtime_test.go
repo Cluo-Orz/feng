@@ -37,6 +37,11 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	if !strings.Contains(out.String(), `"mode": "missing_config"`) {
 		t.Fatalf("status did not expose missing_config: %s", out.String())
 	}
+	if !strings.Contains(out.String(), `"provider":`) ||
+		!strings.Contains(out.String(), `"api_key_env": "DEEPSEEK_API_KEY"`) ||
+		!strings.Contains(out.String(), `"missing_config": true`) {
+		t.Fatalf("status did not expose provider configuration hint: %s", out.String())
+	}
 
 	out.Reset()
 	errOut.Reset()

@@ -122,6 +122,11 @@ type CheckReport struct {
 	ValidatedCommit string   `json:"validated_commit"`
 }
 
+type StatusSnapshot struct {
+	State
+	Provider map[string]any `json:"provider"`
+}
+
 func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 	if cwd == "" {
 		var err error
@@ -252,7 +257,7 @@ func cmdStatus(cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	printJSON(stdout, state)
+	printJSON(stdout, StatusSnapshot{State: state, Provider: providerStatus(workspace)})
 	return 0
 }
 

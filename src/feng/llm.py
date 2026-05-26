@@ -56,6 +56,23 @@ def load_provider_profile(workspace: Path) -> ProviderProfile:
     return default_deepseek_profile()
 
 
+def provider_status(workspace: Path) -> dict[str, Any]:
+    try:
+        profile = load_provider_profile(workspace)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    missing = not os.environ.get(profile.api_key_env, "")
+    return {
+        "ok": not missing,
+        "id": profile.id,
+        "protocol": profile.protocol,
+        "base_url": profile.base_url,
+        "api_key_env": profile.api_key_env,
+        "model": profile.default_model,
+        "missing_config": missing,
+    }
+
+
 def _normalize_http_error(exc: urllib.error.HTTPError) -> LLMError:
     body = exc.read().decode("utf-8", errors="replace")
     if exc.code in (401, 402):
