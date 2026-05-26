@@ -39,21 +39,32 @@ def default_deepseek_profile() -> ProviderProfile:
 
 def load_provider_profile(workspace: Path) -> ProviderProfile:
     explicit = os.environ.get("FENG_PROVIDER_CONFIG")
-    candidates = []
+    candidates: list[Path] = []
     if explicit:
         candidates.append(Path(explicit))
-    candidates.append(workspace / ".feng" / "provider.yaml")
+    candidates.extend([workspace / ".feng" / "provider.yaml", workspace / ".feng" / "provider.json"])
+    feng_home = os.environ.get("FENG_HOME", "").strip()
+    if feng_home:
+        candidates.extend([Path(feng_home) / "provider.yaml", Path(feng_home) / "provider.json"])
     for path in candidates:
         if path.exists():
             data = read_jsonish(path, {})
-            return ProviderProfile(
+            return _apply_provider_env_overrides(ProviderProfile(
                 id=data.get("id", "provider"),
                 protocol=data.get("protocol", "openai_chat"),
                 base_url=data.get("base_url", ""),
                 api_key_env=data.get("api_key_env", ""),
                 default_model=data.get("default_model", data.get("model", "")),
-            )
-    return default_deepseek_profile()
+            ))
+    return _apply_provider_env_overrides(default_deepseek_profile())
+
+
+def _apply_provider_env_overrides(profile: ProviderProfile) -> ProviderProfile:
+    if os.environ.get("FENG_LLM_MODEL", "").strip():
+        profile.default_model = os.environ["FENG_LLM_MODEL"].strip()
+    if os.environ.get("FENG_LLM_BASE_URL", "").strip():
+        profile.base_url = os.environ["FENG_LLM_BASE_URL"].strip()
+    return profile
 
 
 def provider_status(workspace: Path) -> dict[str, Any]:

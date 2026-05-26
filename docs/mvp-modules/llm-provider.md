@@ -41,6 +41,17 @@ api_key_env: DEEPSEEK_API_KEY
 default_model: deepseek-chat
 ```
 
+查找顺序保持简单：
+
+```text
+FENG_PROVIDER_CONFIG
+workspace/.feng/provider.yaml|json
+FENG_HOME/provider.yaml|json
+default deepseek profile
+```
+
+`FENG_HOME` 是用户级配置目录，用来让 hatch 出来的命名命令在任意 workspace 复用同一份本机 provider profile。
+
 ## Recovery
 
 ```text

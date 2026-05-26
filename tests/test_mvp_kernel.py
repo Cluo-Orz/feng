@@ -11,10 +11,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+TEST_FENG_HOME = Path(tempfile.mkdtemp(prefix="feng-test-home-"))
+ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "FENG_HOME": str(TEST_FENG_HOME)}
 
 from feng.permissions import check_command, check_file_write
-from feng.llm import _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic
+from feng.llm import _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, load_provider_profile
 from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
 
 
@@ -208,6 +209,48 @@ class MvpKernelTest(unittest.TestCase):
                 return b"overloaded"
 
         self.assertEqual(_normalize_http_error(FakeHTTPError()).kind, "transient")
+
+    def test_provider_profile_can_load_from_feng_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            work = Path(tmp)
+            home_path = Path(home)
+            (home_path / "provider.yaml").write_text(
+                json.dumps(
+                    {
+                        "id": "home",
+                        "protocol": "openai_chat",
+                        "base_url": "http://127.0.0.1:7777",
+                        "api_key_env": "HOME_LLM_KEY",
+                        "default_model": "home-model",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_home = os.environ.get("FENG_HOME")
+            old_model = os.environ.get("FENG_LLM_MODEL")
+            old_base = os.environ.get("FENG_LLM_BASE_URL")
+            try:
+                os.environ["FENG_HOME"] = str(home_path)
+                os.environ.pop("FENG_LLM_MODEL", None)
+                os.environ.pop("FENG_LLM_BASE_URL", None)
+                profile = load_provider_profile(work)
+            finally:
+                if old_home is None:
+                    os.environ.pop("FENG_HOME", None)
+                else:
+                    os.environ["FENG_HOME"] = old_home
+                if old_model is None:
+                    os.environ.pop("FENG_LLM_MODEL", None)
+                else:
+                    os.environ["FENG_LLM_MODEL"] = old_model
+                if old_base is None:
+                    os.environ.pop("FENG_LLM_BASE_URL", None)
+                else:
+                    os.environ["FENG_LLM_BASE_URL"] = old_base
+
+            self.assertEqual(profile.id, "home")
+            self.assertEqual(profile.api_key_env, "HOME_LLM_KEY")
+            self.assertEqual(profile.default_model, "home-model")
 
     def test_grow_missing_config_keeps_state_observable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

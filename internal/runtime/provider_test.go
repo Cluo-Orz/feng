@@ -12,6 +12,14 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "feng-test-home-")
+	if err == nil {
+		_ = os.Setenv("FENG_HOME", home)
+	}
+	os.Exit(m.Run())
+}
+
 func TestLoadProviderProfileFromWorkspaceConfig(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "provider test", ""); err != nil {
@@ -33,6 +41,32 @@ func TestLoadProviderProfileFromWorkspaceConfig(t *testing.T) {
 	}
 	if profile.ID != "local" || profile.APIKeyEnv != "LOCAL_LLM_KEY" || profile.Model != "local-model" {
 		t.Fatalf("unexpected provider profile: %+v", profile)
+	}
+}
+
+func TestLoadProviderProfileFromFengHome(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "provider home test", ""); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv("FENG_HOME", home)
+	if err := writeJSONFile(filepath.Join(home, "provider.yaml"), map[string]any{
+		"id":            "home",
+		"protocol":      "openai_chat",
+		"base_url":      "http://127.0.0.1:7777",
+		"api_key_env":   "HOME_LLM_KEY",
+		"default_model": "home-model",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	profile, err := loadProviderProfile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.ID != "home" || profile.APIKeyEnv != "HOME_LLM_KEY" || profile.Model != "home-model" {
+		t.Fatalf("unexpected provider profile from FENG_HOME: %+v", profile)
 	}
 }
 

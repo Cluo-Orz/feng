@@ -161,6 +161,12 @@ func providerProfileCandidates(workspace string) []string {
 		filepath.Join(workspace, ".feng", "provider.yaml"),
 		filepath.Join(workspace, ".feng", "provider.json"),
 	)
+	if root := strings.TrimSpace(os.Getenv("FENG_HOME")); root != "" {
+		candidates = append(candidates,
+			filepath.Join(root, "provider.yaml"),
+			filepath.Join(root, "provider.json"),
+		)
+	}
 	return candidates
 }
 
