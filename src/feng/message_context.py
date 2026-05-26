@@ -83,6 +83,7 @@ def compile_messages(
         "estimated_input_tokens": estimate_tokens(stable_prefix + dynamic_suffix + stable_json(tool_schemas)),
         "dynamic_suffix_tokens": estimate_tokens(dynamic_suffix),
         "tool_schema_tokens": estimate_tokens(stable_json(tool_schemas)),
+        "selected_tools": [tool.name for tool in tools],
     }
     state["active_tool_pack_hash"] = metrics["active_tool_pack_hash"]
     state["stable_prefix_hash"] = metrics["stable_prefix_hash"]

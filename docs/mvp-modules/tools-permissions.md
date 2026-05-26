@@ -19,6 +19,18 @@ self repo tools
 
 registry 是全集，active tool pack 是本轮暴露给 LLM 的子集。
 
+self repo tool 可以带少量选择提示：
+
+```text
+when / keywords / tags
+  帮助本轮 goal/latest event 选择工具。
+
+always
+  极少数工具可声明总是候选，但仍受 active pack 数量上限和 permission check 约束。
+```
+
+这些字段只影响是否把 tool schema 暴露给 LLM，不授予额外权限。
+
 ## Active Tool Pack
 
 选择依据：

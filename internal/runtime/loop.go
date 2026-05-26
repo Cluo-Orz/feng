@@ -8,21 +8,34 @@ import (
 )
 
 func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
-	tools := activeToolPack(workspace, "grow", goal)
 	messages := compileGrowMessages(workspace, goal)
+	latestEvent := goal
+	toolPack := activeToolPackReport(workspace, "grow", latestEvent)
+	tools := toolPack.Tools
 	toolSchemas := toolSchemasForProvider(tools)
-	updateContextMetrics(workspace, messages, toolSchemas)
+	refreshToolPack := func() {
+		toolPack = activeToolPackReport(workspace, "grow", latestEvent)
+		tools = toolPack.Tools
+		toolSchemas = toolSchemasForProvider(tools)
+		updateContextMetrics(workspace, messages, toolSchemas)
+	}
+	refreshToolPack()
 	profile, err := loadProviderProfile(workspace)
 	if err != nil {
 		return handleLLMError(workspace, err, stdout)
 	}
 
 	for turn := 0; turn < maxTurns; turn++ {
+		if turn > 0 {
+			refreshToolPack()
+		}
 		appendEvent(workspace, "message_compiled", map[string]any{
 			"turn":                   turn,
 			"estimated_input_tokens": estimateMessageTokens(messages),
 			"tool_schema_tokens":     estimateJSONTokens(toolSchemas),
 			"active_tool_pack_hash":  shaJSON(toolSchemas),
+			"selected_tools":         toolPack.SelectedTools,
+			"selection_reason":       toolPack.SelectionReason,
 		})
 		assistant, updatedMessages, err := callProviderWithRecovery(workspace, profile, messages, toolSchemas)
 		messages = updatedMessages
@@ -46,6 +59,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 			args := parseToolArguments(call.Function.Arguments)
 			result := executeTool(workspace, tools, call.Function.Name, args)
 			messages = append(messages, chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)})
+			latestEvent = "tool " + call.Function.Name + " returned: " + truncateString(result.Content, 500)
 		}
 		updateContextMetrics(workspace, messages, toolSchemas)
 	}

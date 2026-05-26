@@ -96,6 +96,51 @@ class MvpKernelTest(unittest.TestCase):
             for command in ["go test ./...", "go vet ./...", "go build ./cmd/feng"]:
                 check_command(work, command)
 
+    def test_active_tool_pack_selects_relevant_self_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed tool selection", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            (work / "tools" / "api.tool.yaml").write_text(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "name": "api_contract_check",
+                        "description": "Run API contract checks.",
+                        "keywords": ["api", "contract", "http"],
+                        "command": "git status --short",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (work / "tools" / "news.tool.yaml").write_text(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "name": "news_fetch",
+                        "description": "Fetch RSS news sources.",
+                        "keywords": ["news", "rss"],
+                        "command": "git status --short",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            selected = [tool.name for tool in active_tool_pack(work, "grow", "improve api contract checks")]
+            self.assertIn("read_file", selected)
+            self.assertIn("run_command", selected)
+            self.assertIn("api_contract_check", selected)
+            self.assertNotIn("news_fetch", selected)
+            check_tools = [tool.name for tool in active_tool_pack(work, "check", "")]
+            self.assertIn("api_contract_check", check_tools)
+            self.assertIn("news_fetch", check_tools)
+
     def test_grow_missing_config_keeps_state_observable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,9 @@ class Tool:
     description: str
     input_schema: dict[str, Any]
     handler: Callable[[Path, dict[str, Any]], dict[str, Any]]
+    source: str = ""
+    selection_terms: tuple[str, ...] = ()
+    always_active: bool = False
 
     def schema_for_provider(self) -> dict[str, Any]:
         return {
@@ -127,6 +131,7 @@ def _command_tool(workspace: Path, path: Path) -> Tool | None:
     description = str(data.get("description") or f"Run the self-defined command tool {name}.")
     input_schema = data.get("input_schema") or {"type": "object", "properties": {}, "required": []}
     timeout = int(data.get("timeout", 60))
+    source = rel_path(workspace, path)
 
     def handler(tool_workspace: Path, _args: dict[str, Any]) -> dict[str, Any]:
         check_command(tool_workspace, command)
@@ -136,7 +141,15 @@ def _command_tool(workspace: Path, path: Path) -> Tool | None:
         result["is_error"] = code != 0
         return result
 
-    return Tool(name, description[:500], input_schema, handler)
+    return Tool(
+        name,
+        description[:500],
+        input_schema,
+        handler,
+        source=source,
+        selection_terms=tuple(_selection_terms(name, source, description, data)),
+        always_active=_boolish(data.get("always")),
+    )
 
 
 def self_repo_tools(workspace: Path) -> list[Tool]:
@@ -204,8 +217,89 @@ def tool_registry(_workspace: Path) -> list[Tool]:
     return [*BOOTSTRAP_TOOLS, *self_repo_tools(_workspace)]
 
 
-def active_tool_pack(workspace: Path, _mode: str, _latest_event: str) -> list[Tool]:
-    return tool_registry(workspace)
+def active_tool_pack(workspace: Path, mode: str, latest_event: str) -> list[Tool]:
+    bootstrap = list(BOOTSTRAP_TOOLS)
+    self_tools = self_repo_tools(workspace)
+    if not self_tools:
+        return bootstrap
+    if mode in {"check", "checking"}:
+        return [*bootstrap, *self_tools]
+    query = _selection_query(mode, latest_event)
+    selected = _select_self_tools(self_tools, query, _active_self_tool_limit())
+    return [*bootstrap, *selected]
+
+
+def _selection_query(mode: str, latest_event: str) -> str:
+    return f"{mode}\n{latest_event}".lower()
+
+
+def _select_self_tools(tools: list[Tool], query: str, limit: int) -> list[Tool]:
+    scored: list[tuple[int, str, Tool]] = []
+    for tool in tools:
+        score = 0
+        if tool.always_active:
+            score += 100
+        if _selection_match(query, tool.name):
+            score += 10
+        for term in tool.selection_terms:
+            if _selection_match(query, term):
+                score += 3
+        if score > 0:
+            scored.append((score, tool.name, tool))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [item[2] for item in scored[: max(0, min(limit, len(scored)))]]
+
+
+def _active_self_tool_limit() -> int:
+    raw = os.environ.get("FENG_ACTIVE_SELF_TOOL_LIMIT", "").strip()
+    if raw:
+        try:
+            return max(0, min(32, int(raw)))
+        except ValueError:
+            pass
+    return 8
+
+
+def _selection_terms(name: str, source: str, description: str, data: dict[str, Any]) -> list[str]:
+    seen: set[str] = set()
+    terms: list[str] = []
+
+    def add(value: str) -> None:
+        term = value.strip().lower()
+        if not term or term in seen:
+            return
+        seen.add(term)
+        terms.append(term)
+
+    for value in re.split(r"[^A-Za-z0-9_]+", name + " " + Path(source).stem):
+        add(value)
+    for key in ("when", "keywords", "tags"):
+        raw = data.get(key)
+        values = raw if isinstance(raw, list) else [raw]
+        for value in values:
+            if value is not None:
+                add(str(value))
+    stop = {"with", "from", "this", "that", "tool", "command", "self", "defined", "through", "using"}
+    for value in re.split(r"[^A-Za-z0-9_]+", description):
+        term = value.lower()
+        if len(term) >= 4 and term not in stop:
+            add(term)
+        if len(terms) >= 20:
+            break
+    return terms
+
+
+def _boolish(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return False
+
+
+def _selection_match(query: str, term: str) -> bool:
+    term = term.strip().lower()
+    return len(term) >= 3 and bool(query) and term in query
 
 
 def execute_tool(workspace: Path, tools: list[Tool], name: str, arguments: dict[str, Any]) -> dict[str, Any]:

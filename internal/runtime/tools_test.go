@@ -217,6 +217,47 @@ func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
 	}
 }
 
+func TestActiveToolPackSelectsRelevantSelfRepoTools(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "tool selection test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "api.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "api_contract_check",
+		"description": "Run API contract checks.",
+		"keywords":    []any{"api", "contract", "http"},
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "news.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "news_fetch",
+		"description": "Fetch RSS news sources.",
+		"keywords":    []any{"news", "rss"},
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := activeToolPack(dir, "grow", "improve api contract checks")
+	if !hasTool(tools, "read_file") || !hasTool(tools, "run_command") {
+		t.Fatalf("bootstrap tools must remain available: %+v", tools)
+	}
+	if !hasTool(tools, "api_contract_check") {
+		t.Fatalf("relevant self repo tool was not selected: %+v", tools)
+	}
+	if hasTool(tools, "news_fetch") {
+		t.Fatalf("unrelated self repo tool should not be exposed to this round: %+v", tools)
+	}
+
+	checkTools := activeToolPack(dir, "check", "")
+	if !hasTool(checkTools, "api_contract_check") || !hasTool(checkTools, "news_fetch") {
+		t.Fatalf("check should validate all self repo tools: %+v", checkTools)
+	}
+}
+
 func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "bad tool test", ""); err != nil {

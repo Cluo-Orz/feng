@@ -103,6 +103,73 @@ func TestGrowRunsOpenAIToolCallLoop(t *testing.T) {
 	if state.ContextBudget["estimated_input_tokens"] == 0 || state.ActiveToolPackHash == "" {
 		t.Fatalf("context metrics were not recorded: %+v", state)
 	}
+	if !messageCompiledSelectedTool(dir, "write_file") {
+		t.Fatalf("message_compiled event did not expose selected tools: %+v", tailEvents(dir, 20))
+	}
+}
+
+func TestGrowRefreshesActiveToolPackAfterToolGrowth(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requestNumber := requests.Add(1)
+		switch requestNumber {
+		case 1:
+			if requestHasTool(request.Tools, "generated_helper") {
+				t.Errorf("generated tool should not exist before the candidate writes it")
+				http.Error(w, "unexpected generated tool", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role": "assistant",
+				"tool_calls": []map[string]any{
+					{
+						"id":   "call_1",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "write_file",
+							"arguments": `{"path":"tools/generated-helper.tool.yaml","content":"{\"type\":\"command\",\"name\":\"generated_helper\",\"description\":\"Run generated helper checks.\",\"keywords\":[\"generated\",\"helper\"],\"command\":\"git status --short\"}\n"}`,
+						},
+					},
+				},
+			})
+		case 2:
+			if !requestHasTool(request.Tools, "generated_helper") {
+				t.Errorf("generated tool was not exposed on the next turn: %+v", request.Tools)
+				http.Error(w, "missing generated tool", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role":    "assistant",
+				"content": "done",
+			})
+		default:
+			t.Errorf("unexpected extra request")
+			http.Error(w, "unexpected extra request", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "create generated helper", "--max-turns", "3"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected two provider calls, got %d", requests.Load())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "tools", "generated-helper.tool.yaml")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func hasToolMessage(messages []chatMessage) bool {
@@ -121,6 +188,31 @@ func lastToolMessage(messages []chatMessage) string {
 		}
 	}
 	return ""
+}
+
+func requestHasTool(tools []map[string]any, name string) bool {
+	for _, tool := range tools {
+		function, _ := tool["function"].(map[string]any)
+		if function["name"] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func messageCompiledSelectedTool(workspace, name string) bool {
+	for _, event := range tailEvents(workspace, 20) {
+		if event.Type != "message_compiled" {
+			continue
+		}
+		items, _ := event.Data["selected_tools"].([]any)
+		for _, item := range items {
+			if item == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func writeChatResponse(w http.ResponseWriter, message map[string]any) {

@@ -78,7 +78,7 @@ def grow(workspace: Path, goal: str, max_turns: int = 12) -> dict[str, Any]:
         for call in calls:
             result = execute_tool(workspace, tools, call["name"], call["arguments"])
             conversation.append(_tool_result_message(call["id"], result))
-            latest_event = f"Tool {call['name']} returned. Continue if more work is needed."
+            latest_event = f"Tool {call['name']} returned: {str(result.get('content', ''))[:500]}"
     state = load_state(workspace)
     state["mode"] = "blocked"
     save_state(workspace, state)

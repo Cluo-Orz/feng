@@ -20,16 +20,25 @@ const maxInlineToolResult = 8000
 var toolNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
 type Tool struct {
-	Name        string
-	Description string
-	Parameters  map[string]any
-	Handler     func(workspace string, args map[string]any) ToolResult
+	Name           string
+	Description    string
+	Parameters     map[string]any
+	Source         string
+	SelectionTerms []string
+	AlwaysActive   bool
+	Handler        func(workspace string, args map[string]any) ToolResult
 }
 
 type ToolResult struct {
 	Content  string    `json:"content"`
 	Artifact *Artifact `json:"artifact,omitempty"`
 	IsError  bool      `json:"is_error"`
+}
+
+type ActiveToolPackReport struct {
+	Tools           []Tool
+	SelectedTools   []string
+	SelectionReason map[string]string
 }
 
 func bootstrapTools() []Tool {
@@ -89,7 +98,36 @@ func bootstrapTools() []Tool {
 }
 
 func activeToolPack(workspace, _mode, _latestEvent string) []Tool {
-	return append(bootstrapTools(), selfRepoTools(workspace)...)
+	return activeToolPackReport(workspace, _mode, _latestEvent).Tools
+}
+
+func activeToolPackReport(workspace, mode, latestEvent string) ActiveToolPackReport {
+	tools := bootstrapTools()
+	reasons := map[string]string{}
+	for _, tool := range tools {
+		reasons[tool.Name] = "bootstrap tool"
+	}
+
+	selfTools := selfRepoTools(workspace)
+	if len(selfTools) == 0 {
+		return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
+	}
+
+	if mode == "check" || mode == "checking" {
+		tools = append(tools, selfTools...)
+		for _, tool := range selfTools {
+			reasons[tool.Name] = "check validates every self repo tool"
+		}
+		return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
+	}
+
+	query := selectionQuery(workspace, mode, latestEvent)
+	selected, selectedReasons := selectSelfRepoTools(selfTools, query, activeSelfToolLimit())
+	tools = append(tools, selected...)
+	for name, reason := range selectedReasons {
+		reasons[name] = reason
+	}
+	return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
 }
 
 func executeTool(workspace string, tools []Tool, name string, args map[string]any) ToolResult {
@@ -269,11 +307,15 @@ func commandTool(workspace, path string) *Tool {
 		inputSchema = map[string]any{"type": "object", "properties": map[string]any{}, "required": []any{}}
 	}
 	timeout := clampInt(argInt(raw, "timeout", 60), 1, 600)
+	rel := relPath(workspace, path)
 
 	return &Tool{
-		Name:        name,
-		Description: description[:minInt(len(description), 500)],
-		Parameters:  inputSchema,
+		Name:           name,
+		Description:    description[:minInt(len(description), 500)],
+		Parameters:     inputSchema,
+		Source:         rel,
+		SelectionTerms: selectionTerms(name, rel, description, raw),
+		AlwaysActive:   boolFromAny(raw["always"]),
 		Handler: func(toolWorkspace string, _args map[string]any) ToolResult {
 			if err := checkCommand(toolWorkspace, command); err != nil {
 				appendEvent(toolWorkspace, "tool_denied", map[string]any{"tool": name, "reason": err.Error()})
@@ -286,6 +328,166 @@ func commandTool(workspace, path string) *Tool {
 			return result
 		},
 	}
+}
+
+func selectionQuery(_workspace, mode, latestEvent string) string {
+	return strings.ToLower(mode + "\n" + latestEvent)
+}
+
+func selectSelfRepoTools(tools []Tool, query string, limit int) ([]Tool, map[string]string) {
+	type scoredTool struct {
+		tool    Tool
+		score   int
+		reasons []string
+	}
+	var scored []scoredTool
+	for _, tool := range tools {
+		score := 0
+		var reasons []string
+		if tool.AlwaysActive {
+			score += 100
+			reasons = append(reasons, "always")
+		}
+		if selectionTermMatches(query, tool.Name) {
+			score += 10
+			reasons = append(reasons, "name:"+tool.Name)
+		}
+		for _, term := range tool.SelectionTerms {
+			if selectionTermMatches(query, term) {
+				score += 3
+				if len(reasons) < 4 {
+					reasons = append(reasons, "term:"+term)
+				}
+			}
+		}
+		if score > 0 {
+			scored = append(scored, scoredTool{tool: tool, score: score, reasons: reasons})
+		}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].tool.Name < scored[j].tool.Name
+	})
+	limit = clampInt(limit, 0, len(scored))
+	selected := make([]Tool, 0, limit)
+	reasons := map[string]string{}
+	for i := 0; i < limit; i++ {
+		selected = append(selected, scored[i].tool)
+		reasons[scored[i].tool.Name] = strings.Join(scored[i].reasons, ",")
+	}
+	return selected, reasons
+}
+
+func activeSelfToolLimit() int {
+	if raw := strings.TrimSpace(os.Getenv("FENG_ACTIVE_SELF_TOOL_LIMIT")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			return clampInt(parsed, 0, 32)
+		}
+	}
+	return 8
+}
+
+func selectionTerms(name, rel, description string, raw map[string]any) []string {
+	seen := map[string]bool{}
+	var terms []string
+	add := func(term string) {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term == "" || seen[term] {
+			return
+		}
+		seen[term] = true
+		terms = append(terms, term)
+	}
+	for _, term := range strings.FieldsFunc(name, splitSelectionRune) {
+		add(term)
+	}
+	for _, term := range strings.FieldsFunc(defaultToolName(rel), splitSelectionRune) {
+		add(term)
+	}
+	for _, key := range []string{"when", "keywords", "tags"} {
+		for _, term := range stringListFromAny(raw[key]) {
+			add(term)
+		}
+	}
+	for _, term := range significantSelectionTerms(description) {
+		add(term)
+	}
+	return terms
+}
+
+func significantSelectionTerms(text string) []string {
+	stop := map[string]bool{
+		"with": true, "from": true, "this": true, "that": true, "tool": true,
+		"command": true, "self": true, "defined": true, "through": true, "using": true,
+	}
+	var terms []string
+	for _, term := range strings.FieldsFunc(text, splitSelectionRune) {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if len(term) < 4 || stop[term] {
+			continue
+		}
+		terms = append(terms, term)
+		if len(terms) >= 12 {
+			break
+		}
+	}
+	return terms
+}
+
+func splitSelectionRune(r rune) bool {
+	return !(r >= 'a' && r <= 'z') &&
+		!(r >= 'A' && r <= 'Z') &&
+		!(r >= '0' && r <= '9') &&
+		r != '_'
+}
+
+func stringListFromAny(value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, fmt.Sprint(item))
+		}
+		return out
+	case []string:
+		return typed
+	default:
+		return nil
+	}
+}
+
+func boolFromAny(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
+func selectionTermMatches(query, term string) bool {
+	term = strings.ToLower(strings.TrimSpace(term))
+	if term == "" || query == "" {
+		return false
+	}
+	if len(term) < 3 {
+		return false
+	}
+	return strings.Contains(query, term)
+}
+
+func toolNameList(tools []Tool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	return names
 }
 
 func isToolFile(path string) bool {
