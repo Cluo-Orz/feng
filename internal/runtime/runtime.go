@@ -154,7 +154,7 @@ func printHelp(w io.Writer) {
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
-	goal, err := parseGrowGoal(args)
+	goal, maxTurns, err := parseGrowArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -184,42 +184,38 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	messages := compileGrowMessages(workspace, goal)
-	appendEvent(workspace, "message_compiled", map[string]any{"estimated_input_tokens": estimateMessageTokens(messages)})
-	assistant, err := callOpenAIChat(defaultProviderProfile(), messages)
-	if err != nil {
-		return handleLLMError(workspace, err, stdout)
-	}
-	state, _ = loadState(workspace)
-	state.Mode = "ready"
-	saveState(workspace, state)
-	appendEvent(workspace, "llm_called", map[string]any{"provider": "deepseek", "model": defaultProviderProfile().Model})
-	printJSON(stdout, map[string]any{
-		"ok":      true,
-		"turns":   1,
-		"message": assistant,
-		"note":    "Go runtime has verified the LLM call; tool-call loop migration is still in progress",
-	})
-	return 0
+	return runGrowLoop(workspace, goal, maxTurns, stdout)
 }
 
-func parseGrowGoal(args []string) (string, error) {
+func parseGrowArgs(args []string) (string, int, error) {
 	var parts []string
+	maxTurns := 12
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--max-turns" {
+			if i+1 < len(args) {
+				if parsed, err := strconv.Atoi(args[i+1]); err == nil {
+					maxTurns = parsed
+				}
+			}
 			i++
 			continue
 		}
 		if strings.HasPrefix(args[i], "--max-turns=") {
+			if parsed, err := strconv.Atoi(strings.TrimPrefix(args[i], "--max-turns=")); err == nil {
+				maxTurns = parsed
+			}
 			continue
 		}
 		parts = append(parts, args[i])
 	}
 	goal := strings.TrimSpace(strings.Join(parts, " "))
 	if goal == "" {
-		return "", errors.New("grow requires a goal")
+		return "", 0, errors.New("grow requires a goal")
 	}
-	return goal, nil
+	if maxTurns < 1 {
+		maxTurns = 1
+	}
+	return goal, maxTurns, nil
 }
 
 func cmdCheck(cwd string, stdout, stderr io.Writer) int {

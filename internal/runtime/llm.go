@@ -31,25 +31,46 @@ func (e LLMError) Error() string {
 }
 
 type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 }
 
 type chatRequest struct {
-	Model     string        `json:"model"`
-	Messages  []chatMessage `json:"messages"`
-	MaxTokens int           `json:"max_tokens"`
-	Stream    bool          `json:"stream"`
+	Model      string           `json:"model"`
+	Messages   []chatMessage    `json:"messages"`
+	Tools      []map[string]any `json:"tools,omitempty"`
+	ToolChoice string           `json:"tool_choice,omitempty"`
+	MaxTokens  int              `json:"max_tokens"`
+	Stream     bool             `json:"stream"`
 }
 
 type chatResponse struct {
 	Choices []struct {
 		Message struct {
-			Role             string `json:"role"`
-			Content          string `json:"content"`
-			ReasoningContent string `json:"reasoning_content"`
+			Role             string     `json:"role"`
+			Content          string     `json:"content"`
+			ReasoningContent string     `json:"reasoning_content"`
+			ToolCalls        []ToolCall `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
+}
+
+type ToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
+}
+
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type AssistantTurn struct {
+	Content   string
+	ToolCalls []ToolCall
 }
 
 func defaultProviderProfile() ProviderProfile {
@@ -57,10 +78,14 @@ func defaultProviderProfile() ProviderProfile {
 	if model == "" {
 		model = "deepseek-chat"
 	}
+	baseURL := os.Getenv("FENG_LLM_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.deepseek.com"
+	}
 	return ProviderProfile{
 		ID:        "deepseek",
 		Protocol:  "openai_chat",
-		BaseURL:   "https://api.deepseek.com",
+		BaseURL:   baseURL,
 		APIKeyEnv: "DEEPSEEK_API_KEY",
 		Model:     model,
 	}
@@ -80,8 +105,8 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 	return []chatMessage{
 		{
 			Role: "system",
-			Content: "You are feng, a minimal self-growing agent kernel. Keep large evidence in files/artifacts. " +
-				"Do not claim validation; validation is performed by feng check.",
+			Content: "You are feng, a minimal self-growing agent kernel. Use tool calls when you need to inspect or change the workspace. " +
+				"Keep large evidence in files/artifacts. Do not claim validation; validation is performed by feng check.",
 		},
 		{
 			Role:    "system",
@@ -90,57 +115,62 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 		{
 			Role: "user",
 			Content: "Grow this feng workspace toward the goal:\n" + goal + "\n" +
-				"This Go runtime validation turn has no tool-call dispatcher yet. Reply with a concise next-step summary only.",
+				"Use tools to inspect and modify files when useful. Stop when this turn has made coherent progress.",
 		},
 	}
 }
 
-func callOpenAIChat(profile ProviderProfile, messages []chatMessage) (string, error) {
+func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map[string]any) (AssistantTurn, error) {
 	apiKey := os.Getenv(profile.APIKeyEnv)
 	if apiKey == "" {
-		return "", LLMError{Kind: "missing_config", Message: "missing env " + profile.APIKeyEnv}
+		return AssistantTurn{}, LLMError{Kind: "missing_config", Message: "missing env " + profile.APIKeyEnv}
 	}
 	payload := chatRequest{
-		Model:     profile.Model,
-		Messages:  messages,
-		MaxTokens: 256,
-		Stream:    false,
+		Model:      profile.Model,
+		Messages:   messages,
+		Tools:      tools,
+		ToolChoice: "auto",
+		MaxTokens:  1024,
+		Stream:     false,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", LLMError{Kind: "request_error", Message: err.Error()}
+		return AssistantTurn{}, LLMError{Kind: "request_error", Message: err.Error()}
 	}
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(profile.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", LLMError{Kind: "request_error", Message: err.Error()}
+		return AssistantTurn{}, LLMError{Kind: "request_error", Message: err.Error()}
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	client := http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", LLMError{Kind: "transient", Message: err.Error()}
+		return AssistantTurn{}, LLMError{Kind: "transient", Message: err.Error()}
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return "", normalizeLLMHTTPError(resp.StatusCode, string(data))
+		return AssistantTurn{}, normalizeLLMHTTPError(resp.StatusCode, string(data))
 	}
 	var parsed chatResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return "", LLMError{Kind: "provider_error", Message: "invalid provider response: " + err.Error()}
+		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "invalid provider response: " + err.Error()}
 	}
 	if len(parsed.Choices) == 0 {
-		return "", LLMError{Kind: "provider_error", Message: "provider response has no choices"}
+		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "provider response has no choices"}
 	}
 	message := parsed.Choices[0].Message
+	turn := AssistantTurn{ToolCalls: message.ToolCalls}
 	if strings.TrimSpace(message.Content) != "" {
-		return message.Content, nil
+		turn.Content = message.Content
+		return turn, nil
 	}
 	if strings.TrimSpace(message.ReasoningContent) != "" {
-		return message.ReasoningContent, nil
+		turn.Content = message.ReasoningContent
+		return turn, nil
 	}
-	return "", nil
+	return turn, nil
 }
 
 func normalizeLLMHTTPError(status int, body string) LLMError {
