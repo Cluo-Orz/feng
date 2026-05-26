@@ -12,7 +12,10 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 	messages := compileGrowMessages(workspace, goal)
 	toolSchemas := toolSchemasForProvider(tools)
 	updateContextMetrics(workspace, messages, toolSchemas)
-	profile := defaultProviderProfile()
+	profile, err := loadProviderProfile(workspace)
+	if err != nil {
+		return handleLLMError(workspace, err, stdout)
+	}
 
 	for turn := 0; turn < maxTurns; turn++ {
 		appendEvent(workspace, "message_compiled", map[string]any{

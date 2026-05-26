@@ -91,6 +91,82 @@ func defaultProviderProfile() ProviderProfile {
 	}
 }
 
+func loadProviderProfile(workspace string) (ProviderProfile, error) {
+	for _, path := range providerProfileCandidates(workspace) {
+		if path == "" || !exists(path) {
+			continue
+		}
+		value, err := readJSONFile(path)
+		if err != nil {
+			return ProviderProfile{}, err
+		}
+		raw, _ := value.(map[string]any)
+		profile := ProviderProfile{
+			ID:        firstNonEmpty(argString(raw, "id"), "provider"),
+			Protocol:  firstNonEmpty(argString(raw, "protocol"), "openai_chat"),
+			BaseURL:   argString(raw, "base_url"),
+			APIKeyEnv: argString(raw, "api_key_env"),
+			Model:     firstNonEmpty(argString(raw, "default_model"), argString(raw, "model")),
+		}
+		profile = applyProviderEnvOverrides(profile)
+		return validateProviderProfile(profile)
+	}
+	return validateProviderProfile(defaultProviderProfile())
+}
+
+func providerProfileCandidates(workspace string) []string {
+	candidates := []string{}
+	if explicit := strings.TrimSpace(os.Getenv("FENG_PROVIDER_CONFIG")); explicit != "" {
+		candidates = append(candidates, explicit)
+	}
+	candidates = append(candidates,
+		filepath.Join(workspace, ".feng", "provider.yaml"),
+		filepath.Join(workspace, ".feng", "provider.json"),
+	)
+	return candidates
+}
+
+func applyProviderEnvOverrides(profile ProviderProfile) ProviderProfile {
+	if model := strings.TrimSpace(os.Getenv("FENG_LLM_MODEL")); model != "" {
+		profile.Model = model
+	}
+	if baseURL := strings.TrimSpace(os.Getenv("FENG_LLM_BASE_URL")); baseURL != "" {
+		profile.BaseURL = baseURL
+	}
+	return profile
+}
+
+func validateProviderProfile(profile ProviderProfile) (ProviderProfile, error) {
+	if strings.TrimSpace(profile.Protocol) == "" {
+		profile.Protocol = "openai_chat"
+	}
+	if strings.TrimSpace(profile.ID) == "" {
+		profile.ID = "provider"
+	}
+	if profile.Protocol != "openai_chat" {
+		return profile, LLMError{Kind: "request_error", Message: "unsupported provider protocol in MVP: " + profile.Protocol}
+	}
+	if strings.TrimSpace(profile.BaseURL) == "" {
+		return profile, LLMError{Kind: "request_error", Message: "provider base_url is required"}
+	}
+	if strings.TrimSpace(profile.APIKeyEnv) == "" {
+		return profile, LLMError{Kind: "request_error", Message: "provider api_key_env is required"}
+	}
+	if strings.TrimSpace(profile.Model) == "" {
+		return profile, LLMError{Kind: "request_error", Message: "provider model is required"}
+	}
+	return profile, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func compileGrowMessages(workspace, goal string) []chatMessage {
 	state, _ := loadState(workspace)
 	selfCommit := currentHead(workspace)
@@ -133,6 +209,9 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 }
 
 func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map[string]any) (AssistantTurn, error) {
+	if _, err := validateProviderProfile(profile); err != nil {
+		return AssistantTurn{}, err
+	}
 	apiKey := os.Getenv(profile.APIKeyEnv)
 	if apiKey == "" {
 		return AssistantTurn{}, LLMError{Kind: "missing_config", Message: "missing env " + profile.APIKeyEnv}

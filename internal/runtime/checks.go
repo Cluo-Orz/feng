@@ -114,6 +114,13 @@ func checkMessageCompiler(workspace string) []string {
 	return nil
 }
 
+func checkProviderProfile(workspace string) []string {
+	if _, err := loadProviderProfile(workspace); err != nil {
+		return []string{"provider profile parse failed: " + err.Error()}
+	}
+	return nil
+}
+
 func checkNoSpecialRuntime(workspace string) []string {
 	var problems []string
 	for _, rootName := range []string{"cmd", "internal", "src"} {

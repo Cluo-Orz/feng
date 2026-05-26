@@ -67,6 +67,8 @@ var (
 
 	runtimeGitignore = []string{
 		".feng/lock",
+		".feng/provider.yaml",
+		".feng/provider.json",
 		".feng/state.yaml",
 		".feng/events.jsonl",
 		".feng/artifacts/",
@@ -177,19 +179,6 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 	state.CandidateStatus = "dirty"
 	saveState(workspace, state)
 	appendEvent(workspace, "run_started", map[string]any{"mode": "grow", "goal": goal})
-
-	if os.Getenv("DEEPSEEK_API_KEY") == "" {
-		artifact, _ := writeArtifact(workspace, "provider-error", "llm", "missing env DEEPSEEK_API_KEY", "LLM error: missing_config", "provider config is required before grow can call LLM", "txt", nil)
-		state, _ = loadState(workspace)
-		state.Mode = "missing_config"
-		state.LastRecovery = map[string]string{"type": "missing_config", "artifact": artifact.Path}
-		state.RecoveryCount++
-		state.LastArtifacts = []Artifact{artifact}
-		saveState(workspace, state)
-		appendEvent(workspace, "blocked", map[string]any{"reason": "missing_config", "message": "missing env DEEPSEEK_API_KEY"})
-		printJSON(stdout, map[string]any{"ok": false, "reason": "missing_config", "message": "missing env DEEPSEEK_API_KEY"})
-		return 2
-	}
 
 	return runGrowLoop(workspace, goal, maxTurns, stdout)
 }
@@ -318,6 +307,7 @@ func runCheck(workspace string) CheckReport {
 	problems = append(problems, checkNoSpecialRuntime(workspace)...)
 	problems = append(problems, checkSelfRepoTools(workspace)...)
 	problems = append(problems, checkMessageCompiler(workspace)...)
+	problems = append(problems, checkProviderProfile(workspace)...)
 	problems = append(problems, runCommandEvals(workspace)...)
 
 	report := CheckReport{OK: len(problems) == 0, Problems: problems, ValidatedCommit: state.ValidatedCommit}
