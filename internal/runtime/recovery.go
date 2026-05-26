@@ -12,7 +12,7 @@ func callProviderWithRecovery(workspace string, profile ProviderProfile, message
 	attempts := providerRetryAttempts()
 	var lastErr error
 	for attempt := 0; attempt < attempts; attempt++ {
-		turn, err := callOpenAIChat(profile, messages, tools)
+		turn, err := callProvider(profile, messages, tools)
 		if err == nil {
 			return turn, messages, nil
 		}
@@ -29,7 +29,7 @@ func callProviderWithRecovery(workspace string, profile ProviderProfile, message
 				"after_tokens":  estimateMessageTokens(compacted),
 			})
 			messages = compacted
-			turn, retryErr := callOpenAIChat(profile, messages, tools)
+			turn, retryErr := callProvider(profile, messages, tools)
 			if retryErr == nil {
 				return turn, messages, nil
 			}

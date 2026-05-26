@@ -58,6 +58,42 @@ type chatResponse struct {
 	Usage map[string]any `json:"usage"`
 }
 
+type anthropicRequest struct {
+	Model      string             `json:"model"`
+	System     string             `json:"system,omitempty"`
+	Messages   []anthropicMessage `json:"messages"`
+	Tools      []map[string]any   `json:"tools,omitempty"`
+	ToolChoice map[string]string  `json:"tool_choice,omitempty"`
+	MaxTokens  int                `json:"max_tokens"`
+	Stream     bool               `json:"stream"`
+}
+
+type anthropicMessage struct {
+	Role    string                  `json:"role"`
+	Content []anthropicContentBlock `json:"content"`
+}
+
+type anthropicContentBlock struct {
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Input     any    `json:"input,omitempty"`
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	Content   string `json:"content,omitempty"`
+}
+
+type anthropicResponse struct {
+	Content []struct {
+		Type  string          `json:"type"`
+		Text  string          `json:"text"`
+		ID    string          `json:"id"`
+		Name  string          `json:"name"`
+		Input json.RawMessage `json:"input"`
+	} `json:"content"`
+	Usage map[string]any `json:"usage"`
+}
+
 type ToolCall struct {
 	ID       string       `json:"id"`
 	Type     string       `json:"type"`
@@ -145,7 +181,7 @@ func validateProviderProfile(profile ProviderProfile) (ProviderProfile, error) {
 	if strings.TrimSpace(profile.ID) == "" {
 		profile.ID = "provider"
 	}
-	if profile.Protocol != "openai_chat" {
+	if profile.Protocol != "openai_chat" && profile.Protocol != "anthropic_messages" {
 		return profile, LLMError{Kind: "request_error", Message: "unsupported provider protocol in MVP: " + profile.Protocol}
 	}
 	if strings.TrimSpace(profile.BaseURL) == "" {
@@ -210,6 +246,20 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 	}
 }
 
+func callProvider(profile ProviderProfile, messages []chatMessage, tools []map[string]any) (AssistantTurn, error) {
+	if _, err := validateProviderProfile(profile); err != nil {
+		return AssistantTurn{}, err
+	}
+	switch profile.Protocol {
+	case "openai_chat":
+		return callOpenAIChat(profile, messages, tools)
+	case "anthropic_messages":
+		return callAnthropicMessages(profile, messages, tools)
+	default:
+		return AssistantTurn{}, LLMError{Kind: "request_error", Message: "unsupported provider protocol in MVP: " + profile.Protocol}
+	}
+}
+
 func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map[string]any) (AssistantTurn, error) {
 	if _, err := validateProviderProfile(profile); err != nil {
 		return AssistantTurn{}, err
@@ -266,6 +316,144 @@ func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map
 	return turn, nil
 }
 
+func callAnthropicMessages(profile ProviderProfile, messages []chatMessage, tools []map[string]any) (AssistantTurn, error) {
+	if _, err := validateProviderProfile(profile); err != nil {
+		return AssistantTurn{}, err
+	}
+	apiKey := os.Getenv(profile.APIKeyEnv)
+	if apiKey == "" {
+		return AssistantTurn{}, LLMError{Kind: "missing_config", Message: "missing env " + profile.APIKeyEnv}
+	}
+	system, anthropicMessages := convertAnthropicMessages(messages)
+	payload := anthropicRequest{
+		Model:      profile.Model,
+		System:     system,
+		Messages:   anthropicMessages,
+		Tools:      anthropicTools(tools),
+		ToolChoice: map[string]string{"type": "auto"},
+		MaxTokens:  1024,
+		Stream:     false,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return AssistantTurn{}, LLMError{Kind: "request_error", Message: err.Error()}
+	}
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(profile.BaseURL, "/")+"/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return AssistantTurn{}, LLMError{Kind: "request_error", Message: err.Error()}
+	}
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("Content-Type", "application/json")
+	client := http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return AssistantTurn{}, LLMError{Kind: "transient", Message: err.Error()}
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return AssistantTurn{}, normalizeLLMHTTPError(resp.StatusCode, string(data))
+	}
+	var parsed anthropicResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "invalid provider response: " + err.Error()}
+	}
+	turn := AssistantTurn{Usage: normalizeAnthropicUsage(parsed.Usage)}
+	var text []string
+	for _, block := range parsed.Content {
+		switch block.Type {
+		case "text":
+			if strings.TrimSpace(block.Text) != "" {
+				text = append(text, block.Text)
+			}
+		case "tool_use":
+			raw := strings.TrimSpace(string(block.Input))
+			if raw == "" || raw == "null" {
+				raw = "{}"
+			}
+			turn.ToolCalls = append(turn.ToolCalls, ToolCall{
+				ID:   block.ID,
+				Type: "function",
+				Function: FunctionCall{
+					Name:      block.Name,
+					Arguments: raw,
+				},
+			})
+		}
+	}
+	turn.Content = strings.Join(text, "\n")
+	return turn, nil
+}
+
+func convertAnthropicMessages(messages []chatMessage) (string, []anthropicMessage) {
+	var system []string
+	var out []anthropicMessage
+	for _, message := range messages {
+		switch message.Role {
+		case "system":
+			if strings.TrimSpace(message.Content) != "" {
+				system = append(system, message.Content)
+			}
+		case "assistant":
+			var blocks []anthropicContentBlock
+			if strings.TrimSpace(message.Content) != "" {
+				blocks = append(blocks, anthropicContentBlock{Type: "text", Text: message.Content})
+			}
+			for _, call := range message.ToolCalls {
+				blocks = append(blocks, anthropicContentBlock{
+					Type:  "tool_use",
+					ID:    call.ID,
+					Name:  call.Function.Name,
+					Input: parseToolArguments(call.Function.Arguments),
+				})
+			}
+			if len(blocks) > 0 {
+				out = appendAnthropicMessage(out, "assistant", blocks...)
+			}
+		case "tool":
+			block := anthropicContentBlock{
+				Type:      "tool_result",
+				ToolUseID: message.ToolCallID,
+				Content:   message.Content,
+			}
+			out = appendAnthropicMessage(out, "user", block)
+		default:
+			if strings.TrimSpace(message.Content) != "" {
+				out = appendAnthropicMessage(out, "user", anthropicContentBlock{Type: "text", Text: message.Content})
+			}
+		}
+	}
+	return strings.Join(system, "\n\n"), out
+}
+
+func appendAnthropicMessage(messages []anthropicMessage, role string, blocks ...anthropicContentBlock) []anthropicMessage {
+	if len(blocks) == 0 {
+		return messages
+	}
+	if len(messages) > 0 && messages[len(messages)-1].Role == role {
+		messages[len(messages)-1].Content = append(messages[len(messages)-1].Content, blocks...)
+		return messages
+	}
+	return append(messages, anthropicMessage{Role: role, Content: blocks})
+}
+
+func anthropicTools(tools []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(tools))
+	for _, tool := range tools {
+		function, _ := tool["function"].(map[string]any)
+		if len(function) == 0 {
+			continue
+		}
+		out = append(out, map[string]any{
+			"name":         function["name"],
+			"description":  function["description"],
+			"input_schema": function["parameters"],
+		})
+	}
+	return out
+}
+
 func normalizeUsage(usage map[string]any) map[string]any {
 	if len(usage) == 0 {
 		return nil
@@ -279,6 +467,34 @@ func normalizeUsage(usage map[string]any) map[string]any {
 	}
 	copyUsageInt(out, usage, "prompt_cache_hit_tokens")
 	copyUsageInt(out, usage, "prompt_cache_miss_tokens")
+	return out
+}
+
+func normalizeAnthropicUsage(usage map[string]any) map[string]any {
+	if len(usage) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	input := intFromAny(usage["input_tokens"])
+	output := intFromAny(usage["output_tokens"])
+	if input > 0 {
+		out["prompt_tokens"] = input
+	}
+	if output > 0 {
+		out["completion_tokens"] = output
+	}
+	if input+output > 0 {
+		out["total_tokens"] = input + output
+	}
+	cacheRead := intFromAny(usage["cache_read_input_tokens"])
+	if cacheRead > 0 {
+		out["cached_tokens"] = cacheRead
+		out["prompt_cache_hit_tokens"] = cacheRead
+	}
+	cacheCreated := intFromAny(usage["cache_creation_input_tokens"])
+	if cacheCreated > 0 {
+		out["prompt_cache_miss_tokens"] = cacheCreated
+	}
 	return out
 }
 
@@ -310,9 +526,9 @@ func normalizeLLMHTTPError(status int, body string) LLMError {
 		trimmed = fmt.Sprintf("provider returned HTTP %d", status)
 	}
 	switch status {
-	case 401, 402:
+	case 401, 402, 403:
 		return LLMError{Kind: "config_error", Message: trimmed}
-	case 429, 500, 503:
+	case 429, 500, 503, 529:
 		return LLMError{Kind: "transient", Message: trimmed}
 	case 400, 413, 422:
 		if status == 413 || strings.Contains(strings.ToLower(trimmed), "token") {

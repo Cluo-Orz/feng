@@ -322,13 +322,12 @@ Capability
 ProviderProfile
 ```
 
-MVP 至少实现一个可用 adapter：
+MVP 实现两个最小 adapter：
 
 ```text
 openai_chat
+anthropic_messages
 ```
-
-同时保留 Anthropic Messages adapter 接口。
 
 DeepSeek 作为 provider profile：
 

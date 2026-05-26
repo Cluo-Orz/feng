@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 
 from feng.permissions import check_command, check_file_write
+from feng.llm import _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic
 from feng.tools import active_tool_pack
 
 
@@ -140,6 +141,47 @@ class MvpKernelTest(unittest.TestCase):
             check_tools = [tool.name for tool in active_tool_pack(work, "check", "")]
             self.assertIn("api_contract_check", check_tools)
             self.assertIn("news_fetch", check_tools)
+
+    def test_anthropic_message_mapping(self) -> None:
+        system, messages = _anthropic_messages(
+            [
+                {"role": "system", "content": "kernel"},
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "toolu_1",
+                            "function": {"name": "read_file", "arguments": '{"path":"docs/a.md"}'},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "toolu_1", "content": '{"content":"ok","is_error":false}'},
+            ]
+        )
+        self.assertEqual(system, "kernel")
+        self.assertEqual(messages[0]["role"], "user")
+        self.assertEqual(messages[1]["content"][0]["type"], "tool_use")
+        self.assertEqual(messages[2]["content"][0]["type"], "tool_result")
+
+        openai_like = _openai_like_from_anthropic(
+            {
+                "content": [{"type": "tool_use", "id": "toolu_2", "name": "write_file", "input": {"path": "docs/b.md"}}],
+                "usage": {"input_tokens": 10, "output_tokens": 3, "cache_read_input_tokens": 7},
+            }
+        )
+        message = openai_like["choices"][0]["message"]
+        self.assertEqual(message["tool_calls"][0]["function"]["name"], "write_file")
+        self.assertEqual(openai_like["usage"]["prompt_cache_hit_tokens"], 7)
+
+    def test_provider_error_status_mapping(self) -> None:
+        class FakeHTTPError(Exception):
+            code = 529
+
+            def read(self) -> bytes:
+                return b"overloaded"
+
+        self.assertEqual(_normalize_http_error(FakeHTTPError()).kind, "transient")
 
     def test_grow_missing_config_keeps_state_observable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

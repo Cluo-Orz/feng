@@ -25,7 +25,8 @@ openai_chat
   MVP 必须可用，用于 DeepSeek OpenAI-compatible 等 provider。
 
 anthropic_messages
-  保留接口，映射 top-level system、tool_use、tool_result。
+  MVP 提供最小 adapter，映射 top-level system、tool_use、tool_result。
+  这不是 provider router，只是第二种协议形态。
 ```
 
 ## Provider Profile
@@ -65,4 +66,5 @@ prompt_too_long
 API key 不进入 self repo、Git、artifact、hatch package。
 provider 特殊参数不泄漏进 Message。
 usage/cache metrics 必须归一化并记录。
+OpenAI-compatible 和 Anthropic Messages 都走同一个 ToolCall / ToolResult 内部结构。
 ```

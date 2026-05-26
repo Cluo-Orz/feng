@@ -75,9 +75,9 @@ def provider_status(workspace: Path) -> dict[str, Any]:
 
 def _normalize_http_error(exc: urllib.error.HTTPError) -> LLMError:
     body = exc.read().decode("utf-8", errors="replace")
-    if exc.code in (401, 402):
+    if exc.code in (401, 402, 403):
         return LLMError("config_error", body or str(exc))
-    if exc.code in (429, 500, 503):
+    if exc.code in (429, 500, 503, 529):
         return LLMError("transient", body or str(exc))
     if exc.code in (400, 413, 422):
         if "token" in body.lower() or exc.code == 413:
@@ -120,6 +120,139 @@ def call_openai_chat(
         raise LLMError("transient", str(exc)) from exc
 
 
+def _anthropic_tools(tool_schemas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    tools: list[dict[str, Any]] = []
+    for item in tool_schemas:
+        function = item.get("function") or {}
+        if not function:
+            continue
+        tools.append(
+            {
+                "name": function.get("name"),
+                "description": function.get("description", ""),
+                "input_schema": function.get("parameters") or {"type": "object", "properties": {}},
+            }
+        )
+    return tools
+
+
+def _anthropic_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    system_parts: list[str] = []
+    converted: list[dict[str, Any]] = []
+
+    def append_message(role: str, blocks: list[dict[str, Any]]) -> None:
+        if not blocks:
+            return
+        if converted and converted[-1]["role"] == role:
+            converted[-1]["content"].extend(blocks)
+        else:
+            converted.append({"role": role, "content": blocks})
+
+    for message in messages:
+        role = message.get("role", "user")
+        content = str(message.get("content", ""))
+        if role == "system":
+            if content.strip():
+                system_parts.append(content)
+        elif role == "assistant":
+            blocks: list[dict[str, Any]] = []
+            if content.strip():
+                blocks.append({"type": "text", "text": content})
+            for call in message.get("tool_calls") or []:
+                function = call.get("function", {})
+                raw = function.get("arguments") or "{}"
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = {"_raw": raw}
+                blocks.append({"type": "tool_use", "id": call.get("id", ""), "name": function.get("name", ""), "input": parsed})
+            append_message("assistant", blocks)
+        elif role == "tool":
+            append_message(
+                "user",
+                [{"type": "tool_result", "tool_use_id": message.get("tool_call_id", ""), "content": content}],
+            )
+        else:
+            if content.strip():
+                append_message("user", [{"type": "text", "text": content}])
+    return "\n\n".join(system_parts), converted
+
+
+def call_anthropic_messages(
+    profile: ProviderProfile,
+    messages: list[dict[str, Any]],
+    tool_schemas: list[dict[str, Any]],
+    max_output_tokens: int = 4096,
+) -> dict[str, Any]:
+    api_key = os.environ.get(profile.api_key_env, "")
+    if not api_key:
+        raise LLMError("missing_config", f"missing env {profile.api_key_env}")
+    system, converted_messages = _anthropic_messages(messages)
+    payload = {
+        "model": profile.default_model,
+        "system": system,
+        "messages": converted_messages,
+        "tools": _anthropic_tools(tool_schemas),
+        "tool_choice": {"type": "auto"},
+        "max_tokens": max_output_tokens,
+        "stream": False,
+    }
+    req = urllib.request.Request(
+        profile.base_url.rstrip("/") + "/v1/messages",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise _normalize_http_error(exc) from exc
+    except urllib.error.URLError as exc:
+        raise LLMError("transient", str(exc)) from exc
+    return _openai_like_from_anthropic(raw)
+
+
+def _openai_like_from_anthropic(response: dict[str, Any]) -> dict[str, Any]:
+    text: list[str] = []
+    tool_calls: list[dict[str, Any]] = []
+    for block in response.get("content") or []:
+        if block.get("type") == "text" and block.get("text"):
+            text.append(block["text"])
+        elif block.get("type") == "tool_use":
+            tool_calls.append(
+                {
+                    "id": block.get("id", ""),
+                    "type": "function",
+                    "function": {
+                        "name": block.get("name", ""),
+                        "arguments": json.dumps(block.get("input") or {}, ensure_ascii=False),
+                    },
+                }
+            )
+    usage = response.get("usage") or {}
+    normalized_usage: dict[str, Any] = {}
+    input_tokens = int(usage.get("input_tokens") or 0)
+    output_tokens = int(usage.get("output_tokens") or 0)
+    if input_tokens:
+        normalized_usage["prompt_tokens"] = input_tokens
+    if output_tokens:
+        normalized_usage["completion_tokens"] = output_tokens
+    if input_tokens or output_tokens:
+        normalized_usage["total_tokens"] = input_tokens + output_tokens
+    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+    if cache_read:
+        normalized_usage["cached_tokens"] = cache_read
+        normalized_usage["prompt_cache_hit_tokens"] = cache_read
+    cache_created = int(usage.get("cache_creation_input_tokens") or 0)
+    if cache_created:
+        normalized_usage["prompt_cache_miss_tokens"] = cache_created
+    return {
+        "choices": [{"message": {"role": "assistant", "content": "\n".join(text), "tool_calls": tool_calls}}],
+        "usage": normalized_usage,
+    }
+
+
 def call_llm(
     workspace: Path,
     messages: list[dict[str, Any]],
@@ -127,11 +260,13 @@ def call_llm(
     retries: int = 3,
 ) -> dict[str, Any]:
     profile = load_provider_profile(workspace)
-    if profile.protocol != "openai_chat":
+    if profile.protocol not in {"openai_chat", "anthropic_messages"}:
         raise LLMError("request_error", f"unsupported protocol in MVP: {profile.protocol}")
     last: LLMError | None = None
     for attempt in range(retries):
         try:
+            if profile.protocol == "anthropic_messages":
+                return call_anthropic_messages(profile, messages, tool_schemas)
             return call_openai_chat(profile, messages, tool_schemas)
         except LLMError as exc:
             last = exc
