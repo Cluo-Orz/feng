@@ -15,22 +15,28 @@ def load_permissions(workspace: Path) -> dict:
 
 
 def check_file_read(workspace: Path, raw_path: str) -> Path:
-    target = safe_join(workspace, raw_path)
+    try:
+        target = safe_join(workspace, raw_path)
+    except FengError as exc:
+        _deny(workspace, "file_read", raw_path, str(exc), "file read target must stay inside the workspace")
     rel = rel_path(workspace, target)
     patterns = load_permissions(workspace).get("files", {}).get("read", ["**"])
     if not matches_any(rel, patterns):
-        raise PermissionDenied(f"file read denied: {rel}")
+        _deny(workspace, "file_read", rel, f"file read denied: {rel}", "file read path did not match permissions.yaml")
     return target
 
 
 def check_file_write(workspace: Path, raw_path: str) -> Path:
-    target = safe_join(workspace, raw_path)
+    try:
+        target = safe_join(workspace, raw_path)
+    except FengError as exc:
+        _deny(workspace, "file_write", raw_path, str(exc), "file write target must stay inside the workspace")
     rel = rel_path(workspace, target)
     if rel.startswith(".git/") or rel == ".git":
-        raise PermissionDenied("writing .git is denied")
+        _deny(workspace, "file_write", rel, "writing .git is denied", "runtime owns Git metadata; tools cannot write .git directly")
     patterns = load_permissions(workspace).get("files", {}).get("write", [])
     if not matches_any(rel, patterns):
-        raise PermissionDenied(f"file write denied: {rel}")
+        _deny(workspace, "file_write", rel, f"file write denied: {rel}", "file write path did not match permissions.yaml")
     return target
 
 
@@ -41,14 +47,11 @@ def check_command(workspace: Path, command: str) -> None:
     lowered = command.lower()
     for pattern in deny:
         if pattern.lower() in lowered:
-            write_artifact(
-                workspace,
-                "permission-denied",
-                "run_command",
-                command,
-                f"Denied command: {pattern}",
-                "dangerous command matched deny rule",
-            )
-            raise PermissionDenied(f"command denied by rule: {pattern}")
+            _deny(workspace, "run_command", command, f"command denied by rule: {pattern}", "dangerous command matched deny rule")
     if allow and not any(command == item or command.startswith(f"{item} ") for item in allow):
-        raise PermissionDenied(f"command is not in allow list: {command}")
+        _deny(workspace, "run_command", command, f"command is not in allow list: {command}", "command did not match permissions.yaml allow list")
+
+
+def _deny(workspace: Path, source: str, attempted: str, message: str, why_relevant: str) -> None:
+    write_artifact(workspace, "permission-denied", source, attempted, message, why_relevant)
+    raise PermissionDenied(message)

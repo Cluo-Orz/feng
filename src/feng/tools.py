@@ -10,7 +10,7 @@ from typing import Any, Callable
 from .artifacts import write_artifact
 from .events import append_event
 from .permissions import PermissionDenied, check_command, check_file_read, check_file_write
-from .utils import FengError, ensure_dir, read_jsonish, rel_path, run_process
+from .utils import FengError, ensure_dir, read_jsonish, redact_secret_text, rel_path, run_process
 
 
 MAX_INLINE_RESULT = 8000
@@ -38,10 +38,11 @@ class Tool:
 
 
 def _result(content: str, artifact: dict[str, Any] | None = None, is_error: bool = False) -> dict[str, Any]:
-    return {"content": content, "artifact": artifact, "is_error": is_error}
+    return {"content": redact_secret_text(content), "artifact": artifact, "is_error": is_error}
 
 
 def _maybe_artifact(workspace: Path, source: str, content: str, summary: str) -> dict[str, Any]:
+    content = redact_secret_text(content)
     if len(content) <= MAX_INLINE_RESULT:
         return _result(content)
     artifact = write_artifact(

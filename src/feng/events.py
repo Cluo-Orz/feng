@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .utils import ensure_dir, utc_ms
+from .utils import ensure_dir, redact_secret_value, utc_ms
 
 
 def events_path(workspace: Path) -> Path:
@@ -16,7 +16,7 @@ def append_event(workspace: Path, event_type: str, data: dict[str, Any] | None =
         "id": f"evt_{utc_ms()}",
         "ts": utc_ms(),
         "type": event_type,
-        "data": data or {},
+        "data": redact_secret_value(data or {}),
     }
     path = events_path(workspace)
     ensure_dir(path.parent)

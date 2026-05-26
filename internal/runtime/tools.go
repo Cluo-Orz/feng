@@ -142,7 +142,7 @@ func executeTool(workspace string, tools []Tool, name string, args map[string]an
 func runReadFile(workspace string, args map[string]any) ToolResult {
 	path, err := checkFileRead(workspace, argString(args, "path"))
 	if err != nil {
-		return ToolResult{Content: err.Error(), IsError: true}
+		return deniedToolResult(workspace, "read_file", err)
 	}
 	limit := clampInt(argInt(args, "limit", 40000), 1, 200000)
 	data, err := os.ReadFile(path)
@@ -160,7 +160,7 @@ func runReadFile(workspace string, args map[string]any) ToolResult {
 func runWriteFile(workspace string, args map[string]any) ToolResult {
 	path, err := checkFileWrite(workspace, argString(args, "path"))
 	if err != nil {
-		return ToolResult{Content: err.Error(), IsError: true}
+		return deniedToolResult(workspace, "write_file", err)
 	}
 	content := argString(args, "content")
 	if err := writeText(path, content); err != nil {
@@ -177,7 +177,7 @@ func runListFiles(workspace string, args map[string]any) ToolResult {
 	}
 	root, err := checkFileRead(workspace, rawPath)
 	if err != nil {
-		return ToolResult{Content: err.Error(), IsError: true}
+		return deniedToolResult(workspace, "list_files", err)
 	}
 	maxFiles := clampInt(argInt(args, "max_files", 300), 1, 2000)
 	var files []string
@@ -218,8 +218,7 @@ func runRunCommand(workspace string, args map[string]any) ToolResult {
 		return ToolResult{Content: "command is required", IsError: true}
 	}
 	if err := checkCommand(workspace, command); err != nil {
-		appendEvent(workspace, "tool_denied", map[string]any{"tool": "run_command", "reason": err.Error()})
-		return ToolResult{Content: err.Error(), IsError: true}
+		return deniedToolResult(workspace, "run_command", err)
 	}
 	timeout := clampInt(argInt(args, "timeout", 60), 1, 600)
 	exitCode, output := runShellCommand(workspace, command, timeout)
@@ -227,6 +226,11 @@ func runRunCommand(workspace string, args map[string]any) ToolResult {
 	result := maybeArtifact(workspace, "run_command:"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), "run_command output")
 	result.IsError = exitCode != 0
 	return result
+}
+
+func deniedToolResult(workspace, tool string, err error) ToolResult {
+	appendEvent(workspace, "tool_denied", map[string]any{"tool": tool, "reason": err.Error()})
+	return ToolResult{Content: redactSecretText(err.Error()), IsError: true}
 }
 
 func runShellCommand(workspace, command string, timeoutSeconds int) (int, string) {
@@ -506,6 +510,7 @@ func defaultToolName(path string) string {
 }
 
 func maybeArtifact(workspace, source, content, summary string) ToolResult {
+	content = redactSecretText(content)
 	if len(content) <= maxInlineToolResult {
 		return ToolResult{Content: content}
 	}

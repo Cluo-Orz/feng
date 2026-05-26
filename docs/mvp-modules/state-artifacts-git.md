@@ -60,6 +60,8 @@ why_relevant: ""
 snippets: []
 ```
 
+events 和 artifacts 写盘前必须做 secret-like redaction。它们用于恢复和观测，不用于保存真实密钥。
+
 ## Git 语义
 
 ```text

@@ -148,6 +148,54 @@ func TestGoRuntimeHatchBuildsRunnerFromWorkspaceSource(t *testing.T) {
 	}
 }
 
+func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
+	goExe, err := goExecutable()
+	if err != nil {
+		t.Skip(err)
+	}
+	root := moduleRoot(t)
+	tmp := t.TempDir()
+	fengExe := filepath.Join(tmp, runnerEntrypointName("feng-e2e"))
+	build := exec.Command(goExe, "build", "-o", fengExe, "./cmd/feng")
+	build.Dir = root
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build cli failed: %v output=%s", err, string(output))
+	}
+	env := append(os.Environ(), "DEEPSEEK_API_KEY=", "FENG_PROVIDER_RETRIES=0")
+
+	maker := filepath.Join(tmp, "maker")
+	if err := os.MkdirAll(maker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	growOut := runExternalFeng(t, fengExe, maker, env, 2, "grow", "make a portable self", "--max-turns", "1")
+	if !strings.Contains(growOut, "missing_config") {
+		t.Fatalf("maker grow did not stop on missing config: %s", growOut)
+	}
+	runExternalFeng(t, fengExe, maker, env, 0, "check")
+	packagePath := strings.TrimSpace(runExternalFeng(t, fengExe, maker, env, 0, "hatch", "--name", "sample", "--portable"))
+	packageRunner := filepath.Join(packagePath, runnerEntrypointName("sample"))
+	if _, err := os.Stat(packageRunner); err != nil {
+		t.Fatal(err)
+	}
+
+	user := filepath.Join(tmp, "user")
+	if err := os.MkdirAll(user, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userGrowOut := runExternalFeng(t, packageRunner, user, env, 2, "grow", "continue from packaged self", "--max-turns", "1")
+	if !strings.Contains(userGrowOut, "missing_config") {
+		t.Fatalf("packaged runner grow did not use normal provider handling: %s", userGrowOut)
+	}
+	if _, err := os.Stat(filepath.Join(user, "identity.md")); err != nil {
+		t.Fatalf("packaged runner did not seed self repo in new workspace: %v", err)
+	}
+	runExternalFeng(t, packageRunner, user, env, 0, "check")
+	secondPackage := strings.TrimSpace(runExternalFeng(t, packageRunner, user, env, 0, "hatch", "--name", "sample2", "--portable"))
+	if _, err := os.Stat(filepath.Join(secondPackage, runnerEntrypointName("sample2"))); err != nil {
+		t.Fatalf("second hatch package is not runnable: %v", err)
+	}
+}
+
 func TestGoRuntimeCheckRejectsBrokenGoSource(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()
@@ -218,6 +266,46 @@ func artifactTypeExists(workspace, artifactType string) bool {
 		}
 	}
 	return false
+}
+
+func moduleRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if exists(filepath.Join(dir, "go.mod")) {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("go.mod not found")
+		}
+		dir = parent
+	}
+}
+
+func runExternalFeng(t *testing.T, exe, cwd string, env []string, wantCode int, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(exe, args...)
+	cmd.Dir = cwd
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	if exitCode(err) != wantCode {
+		t.Fatalf("%s %s exit=%d want=%d err=%v output=%s", exe, strings.Join(args, " "), exitCode(err), wantCode, err, string(output))
+	}
+	return string(output)
+}
+
+func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode()
+	}
+	return -1
 }
 
 func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {

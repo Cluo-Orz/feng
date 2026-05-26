@@ -83,6 +83,49 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	}
 }
 
+func TestPermissionDeniedArtifactsAndEventsAreRedacted(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "permission redaction test", ""); err != nil {
+		t.Fatal(err)
+	}
+	secretLike := "sk-" + "permissionsecret1234567890"
+	tools := bootstrapTools()
+
+	result := executeTool(dir, tools, "write_file", map[string]any{
+		"path":    "private-" + secretLike + ".txt",
+		"content": "nope",
+	})
+	if !result.IsError {
+		t.Fatalf("expected denied write, got %+v", result)
+	}
+	if strings.Contains(result.Content, secretLike) {
+		t.Fatalf("denied write result leaked secret-like value: %s", result.Content)
+	}
+	result = executeTool(dir, tools, "run_command", map[string]any{
+		"command": "git reset --hard " + secretLike,
+	})
+	if !result.IsError {
+		t.Fatalf("expected denied command, got %+v", result)
+	}
+	if strings.Contains(result.Content, secretLike) {
+		t.Fatalf("denied command result leaked secret-like value: %s", result.Content)
+	}
+
+	if !artifactTypeExists(dir, "permission-denied") {
+		t.Fatal("expected permission-denied artifact")
+	}
+	_ = filepath.WalkDir(filepath.Join(dir, ".feng"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err == nil && strings.Contains(string(data), secretLike) {
+			t.Fatalf("secret-like value was not redacted in %s", relPath(dir, path))
+		}
+		return nil
+	})
+}
+
 func TestDefaultPermissionsAllowSelfRuntimeGrowth(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "self runtime permission test", ""); err != nil {

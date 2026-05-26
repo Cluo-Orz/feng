@@ -40,10 +40,10 @@ func loadPermissions(workspace string) Permissions {
 func checkFileRead(workspace, rawPath string) (string, error) {
 	target, rel, err := safeWorkspacePath(workspace, rawPath)
 	if err != nil {
-		return "", err
+		return "", permissionDenied(workspace, "file_read", rawPath, err.Error(), "file read target must stay inside the workspace")
 	}
 	if !matchesAny(rel, loadPermissions(workspace).Files.Read) {
-		return "", errors.New("file read denied: " + rel)
+		return "", permissionDenied(workspace, "file_read", rel, "file read denied: "+rel, "file read path did not match permissions.yaml")
 	}
 	return target, nil
 }
@@ -51,13 +51,13 @@ func checkFileRead(workspace, rawPath string) (string, error) {
 func checkFileWrite(workspace, rawPath string) (string, error) {
 	target, rel, err := safeWorkspacePath(workspace, rawPath)
 	if err != nil {
-		return "", err
+		return "", permissionDenied(workspace, "file_write", rawPath, err.Error(), "file write target must stay inside the workspace")
 	}
 	if rel == ".git" || strings.HasPrefix(rel, ".git/") {
-		return "", errors.New("writing .git is denied")
+		return "", permissionDenied(workspace, "file_write", rel, "writing .git is denied", "runtime owns Git metadata; tools cannot write .git directly")
 	}
 	if !matchesAny(rel, loadPermissions(workspace).Files.Write) {
-		return "", errors.New("file write denied: " + rel)
+		return "", permissionDenied(workspace, "file_write", rel, "file write denied: "+rel, "file write path did not match permissions.yaml")
 	}
 	return target, nil
 }
@@ -67,8 +67,7 @@ func checkCommand(workspace, command string) error {
 	lowered := strings.ToLower(command)
 	for _, pattern := range permissions.Commands.Deny {
 		if strings.Contains(lowered, strings.ToLower(pattern)) {
-			_, _ = writeArtifact(workspace, "permission-denied", "run_command", command, "Denied command: "+pattern, "dangerous command matched deny rule", "txt", nil)
-			return errors.New("command denied by rule: " + pattern)
+			return permissionDenied(workspace, "run_command", command, "command denied by rule: "+pattern, "dangerous command matched deny rule")
 		}
 	}
 	if len(permissions.Commands.Allow) == 0 {
@@ -79,7 +78,12 @@ func checkCommand(workspace, command string) error {
 			return nil
 		}
 	}
-	return errors.New("command is not in allow list: " + command)
+	return permissionDenied(workspace, "run_command", command, "command is not in allow list: "+command, "command did not match permissions.yaml allow list")
+}
+
+func permissionDenied(workspace, source, attempted, message, whyRelevant string) error {
+	_, _ = writeArtifact(workspace, "permission-denied", source, attempted, message, whyRelevant, "txt", nil)
+	return errors.New(message)
 }
 
 func safeWorkspacePath(workspace, rawPath string) (string, string, error) {

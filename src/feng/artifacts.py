@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .events import append_event
-from .utils import ensure_dir, sha256_text, slugify, utc_ms, write_text
+from .utils import ensure_dir, redact_secret_text, sha256_text, slugify, utc_ms, write_text
 
 
 def artifacts_dir(workspace: Path) -> Path:
@@ -22,6 +22,11 @@ def write_artifact(
     extension: str = "txt",
     snippets: list[str] | None = None,
 ) -> dict[str, Any]:
+    content = redact_secret_text(content)
+    source = redact_secret_text(source)
+    summary = redact_secret_text(summary)
+    why_relevant = redact_secret_text(why_relevant)
+    snippets = [redact_secret_text(item) for item in snippets or []]
     digest = sha256_text(content)
     name = f"{utc_ms()}-{slugify(artifact_type)}-{digest[:10]}.{extension}"
     path = artifacts_dir(workspace) / name
@@ -33,7 +38,7 @@ def write_artifact(
         "hash": digest,
         "summary": summary,
         "why_relevant": why_relevant,
-        "snippets": snippets or [],
+        "snippets": snippets,
     }
     meta_path = path.with_suffix(path.suffix + ".json")
     write_text(meta_path, json.dumps(meta, ensure_ascii=False, indent=2) + "\n")

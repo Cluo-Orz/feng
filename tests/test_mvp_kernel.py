@@ -15,7 +15,7 @@ ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 
 from feng.permissions import check_command, check_file_write
 from feng.llm import _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic
-from feng.tools import active_tool_pack
+from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
 
 
 def env_without_llm_key() -> dict[str, str]:
@@ -96,6 +96,32 @@ class MvpKernelTest(unittest.TestCase):
                 self.assertTrue(str(path).endswith(rel.replace("/", os.sep)))
             for command in ["go test ./...", "go vet ./...", "go build ./cmd/feng"]:
                 check_command(work, command)
+
+    def test_permission_denial_artifacts_are_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed permission state", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            secret_like = "sk-" + "permissionsecret1234567890"
+            denied = execute_tool(
+                work,
+                BOOTSTRAP_TOOLS,
+                "write_file",
+                {"path": f"private-{secret_like}.txt", "content": "nope"},
+            )
+            self.assertTrue(denied["is_error"])
+            self.assertNotIn(secret_like, denied["content"])
+            self.assertTrue(any((work / ".feng" / "artifacts").glob("*permission-denied*.txt")))
+            for path in (work / ".feng").rglob("*"):
+                if path.is_file():
+                    self.assertNotIn(secret_like, path.read_text(encoding="utf-8", errors="replace"))
 
     def test_active_tool_pack_selects_relevant_self_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

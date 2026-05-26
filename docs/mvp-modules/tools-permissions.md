@@ -65,6 +65,8 @@ dangerous action deny/ask
 artifact logging on deny
 ```
 
+permission deny 必须生成 `permission-denied` artifact 和 `tool_denied` event；tool result、event、artifact 写入前先做 secret-like redaction，避免把 API key 变成恢复材料。
+
 ## 不变量
 
 ```text

@@ -13,6 +13,7 @@ from typing import Any
 
 
 ROOT_MARKER = ".feng"
+SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
 
 
 class FengError(RuntimeError):
@@ -34,6 +35,20 @@ def stable_json(value: Any) -> str:
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def redact_secret_text(value: str) -> str:
+    return SECRET_PATTERN.sub("[redacted-secret]", value)
+
+
+def redact_secret_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return redact_secret_text(value)
+    if isinstance(value, list):
+        return [redact_secret_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: redact_secret_value(item) for key, item in value.items()}
+    return value
 
 
 def ensure_dir(path: Path) -> None:

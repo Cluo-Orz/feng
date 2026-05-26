@@ -526,6 +526,7 @@ func saveState(workspace string, state State) error {
 
 func appendEvent(workspace, eventType string, data map[string]any) Event {
 	ts := time.Now().UnixMilli()
+	data = redactEventData(data)
 	event := Event{ID: fmt.Sprintf("evt_%d", ts), TS: ts, Type: eventType, Data: data}
 	path := filepath.Join(workspace, ".feng", "events.jsonl")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
@@ -540,6 +541,44 @@ func appendEvent(workspace, eventType string, data map[string]any) Event {
 		_ = saveState(workspace, state)
 	}
 	return event
+}
+
+func redactEventData(data map[string]any) map[string]any {
+	if data == nil {
+		return map[string]any{}
+	}
+	redacted := map[string]any{}
+	for key, value := range data {
+		redacted[key] = redactValue(value)
+	}
+	return redacted
+}
+
+func redactValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return redactSecretText(typed)
+	case []string:
+		out := make([]string, len(typed))
+		for i, item := range typed {
+			out[i] = redactSecretText(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = redactValue(item)
+		}
+		return out
+	case map[string]any:
+		out := map[string]any{}
+		for key, item := range typed {
+			out[key] = redactValue(item)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 func tailEvents(workspace string, limit int) []Event {
@@ -564,6 +603,13 @@ func tailEvents(workspace string, limit int) []Event {
 }
 
 func writeArtifact(workspace, artifactType, source, content, summary, whyRelevant, extension string, snippets []string) (Artifact, error) {
+	content = redactSecretText(content)
+	source = redactSecretText(source)
+	summary = redactSecretText(summary)
+	whyRelevant = redactSecretText(whyRelevant)
+	for i := range snippets {
+		snippets[i] = redactSecretText(snippets[i])
+	}
 	digest := sha256.Sum256([]byte(content))
 	hash := hex.EncodeToString(digest[:])
 	name := fmt.Sprintf("%d-%s-%s.%s", time.Now().UnixMilli(), slug(artifactType), hash[:10], extension)
@@ -578,6 +624,10 @@ func writeArtifact(workspace, artifactType, source, content, summary, whyRelevan
 	}
 	appendEvent(workspace, "artifact_written", map[string]any{"type": artifact.Type, "source": artifact.Source, "path": artifact.Path, "hash": artifact.Hash, "summary": artifact.Summary, "why_relevant": artifact.WhyRelevant, "snippets": artifact.Snippets})
 	return artifact, nil
+}
+
+func redactSecretText(value string) string {
+	return secretPattern.ReplaceAllString(value, "[redacted-secret]")
 }
 
 func listArtifacts(workspace string) []Artifact {
