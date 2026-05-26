@@ -11,8 +11,11 @@ tool/permission 是否可用
 message compiler 是否可编译
 provider profile 是否配置正确
 eval 是否能运行
+如果 candidate 带 Go runtime/source，`go test ./...` 是否通过
 是否存在特殊 runtime 或 secret 泄漏
 ```
+
+Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项目专用 eval，也不要求空白 self 预置业务测试；它只防止明显坏掉的 Go runtime/source 被推进成 validated commit。
 
 失败：
 

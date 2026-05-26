@@ -555,6 +555,7 @@ tools 能加载
 active tool pack 能生成
 message compiler 能编译
 provider profile 能解析，但不要求真实调用
+如果 candidate 带 Go runtime/source，Go source health check 能通过
 evals 能运行
 禁止特殊 runtime 检查通过
 candidate 声明的项目业务 eval 能运行；如果还没有业务 eval，不因此失败

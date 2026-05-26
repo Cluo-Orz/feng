@@ -242,6 +242,28 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((user_work / ".feng" / "state.yaml").exists())
             self.assertTrue((user_work / "identity.md").exists())
 
+    def test_check_rejects_broken_go_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            grow = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "reject broken go source", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(grow.returncode, 2)
+            (work / "go.mod").write_text("module brokenpy\n\ngo 1.26\n", encoding="utf-8")
+            broken = work / "internal" / "runtime" / "broken.go"
+            broken.parent.mkdir(parents=True, exist_ok=True)
+            broken.write_text("package runtime\n\nfunc broken(\n", encoding="utf-8")
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 1)
+            self.assertIn("source health failed", check.stdout)
+            artifacts = run_feng(work, "artifacts")
+            self.assertIn("source-health", artifacts.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

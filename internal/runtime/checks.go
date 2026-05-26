@@ -98,6 +98,32 @@ func runCommandEvals(workspace string) []string {
 	return problems
 }
 
+func runSourceHealthChecks(workspace string) []string {
+	if !exists(filepath.Join(workspace, "go.mod")) {
+		return nil
+	}
+	command := "go test ./..."
+	if err := checkCommand(workspace, command); err != nil {
+		return []string{"source health command denied: " + err.Error()}
+	}
+	exitCode, output := runShellCommand(workspace, command, 120)
+	if exitCode == 0 {
+		appendEvent(workspace, "source_health_passed", map[string]any{"command": command})
+		return nil
+	}
+	artifact, _ := writeArtifact(
+		workspace,
+		"source-health",
+		command,
+		output,
+		"source health failed: "+command,
+		"go.mod exists; check must reject broken Go source before updating validated_commit",
+		"txt",
+		[]string{output[:minInt(1000, len(output))]},
+	)
+	return []string{fmt.Sprintf("source health failed: %s exit_code=%d; artifact=%s", command, exitCode, artifact.Path)}
+}
+
 func checkMessageCompiler(workspace string) []string {
 	tools := activeToolPack(workspace, "checking", "check")
 	messages := compileGrowMessages(workspace, "check candidate self")

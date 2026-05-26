@@ -320,6 +320,7 @@ func runCheck(workspace string) CheckReport {
 	problems = append(problems, checkSelfRepoTools(workspace)...)
 	problems = append(problems, checkMessageCompiler(workspace)...)
 	problems = append(problems, checkProviderProfile(workspace)...)
+	problems = append(problems, runSourceHealthChecks(workspace)...)
 	problems = append(problems, runCommandEvals(workspace)...)
 
 	report := CheckReport{OK: len(problems) == 0, Problems: problems, ValidatedCommit: state.ValidatedCommit}

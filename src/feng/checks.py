@@ -135,6 +135,32 @@ def _run_evals(workspace: Path, problems: list[str]) -> None:
             problems.append(f"eval failed in {rel}: exit_code={code}; artifact={artifact['path']}")
 
 
+def _run_source_health_checks(workspace: Path, problems: list[str]) -> None:
+    if not (workspace / "go.mod").exists():
+        return
+    command = "go test ./..."
+    try:
+        check_command(workspace, command)
+    except Exception as exc:
+        problems.append(f"source health command denied: {exc}")
+        return
+    code, output = run_process([command], cwd=workspace, timeout=120, shell=True)
+    if code == 0:
+        append_event(workspace, "source_health_passed", {"command": command})
+        return
+    artifact = write_artifact(
+        workspace,
+        "source-health",
+        command,
+        output,
+        f"source health failed: {command}",
+        "go.mod exists; check must reject broken Go source before updating validated_commit",
+        extension="txt",
+        snippets=[output[:1000]],
+    )
+    problems.append(f"source health failed: {command} exit_code={code}; artifact={artifact['path']}")
+
+
 def _check_tool_files(workspace: Path, problems: list[str]) -> None:
     tools_dir = workspace / "tools"
     if not tools_dir.exists():
@@ -183,6 +209,7 @@ def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
         compile_messages(workspace, "check candidate self", tools)
     except Exception as exc:
         problems.append(f"message compiler failed: {type(exc).__name__}: {exc}")
+    _run_source_health_checks(workspace, problems)
     _run_evals(workspace, problems)
 
     ok = not problems

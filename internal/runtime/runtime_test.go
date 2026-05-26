@@ -141,6 +141,39 @@ func TestGoRuntimeHatchBuildsRunnerFromWorkspaceSource(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeCheckRejectsBrokenGoSource(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "reject broken go source", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if err := writeText(filepath.Join(dir, "go.mod"), "module brokensource\n\ngo 1.26\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(dir, "internal", "runtime", "broken.go"), "package runtime\n\nfunc broken(\n"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 1 {
+		t.Fatalf("check should fail broken go source, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "source health failed") {
+		t.Fatalf("check did not report source health failure: %s", out.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CandidateStatus != "failed" {
+		t.Fatalf("broken source should not validate: %+v", state)
+	}
+	if !artifactTypeExists(dir, "source-health") {
+		t.Fatalf("source health artifact missing: %+v", listArtifacts(dir))
+	}
+}
+
 func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()
@@ -169,6 +202,15 @@ func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
 	if code := Run([]string{"tag", "dirty-v1"}, dir, &out, &errOut); code != 1 {
 		t.Fatalf("tag on dirty tree should fail, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
+}
+
+func artifactTypeExists(workspace, artifactType string) bool {
+	for _, artifact := range listArtifacts(workspace) {
+		if artifact.Type == artifactType {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {
