@@ -502,6 +502,10 @@ func appendEvent(workspace, eventType string, data map[string]any) Event {
 		encoded, _ := json.Marshal(event)
 		_, _ = f.Write(append(encoded, '\n'))
 	}
+	if state, err := loadState(workspace); err == nil {
+		state.LastEventID = event.ID
+		_ = saveState(workspace, state)
+	}
 	return event
 }
 

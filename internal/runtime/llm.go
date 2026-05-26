@@ -94,14 +94,22 @@ func defaultProviderProfile() ProviderProfile {
 func compileGrowMessages(workspace, goal string) []chatMessage {
 	state, _ := loadState(workspace)
 	selfCommit := currentHead(workspace)
-	manifest := map[string]any{
-		"mode":             state.Mode,
-		"candidate_status": state.CandidateStatus,
-		"validated_commit": state.ValidatedCommit,
-		"self_commit":      selfCommit,
-		"self_files":       selfFileIndex(workspace),
+	selfContract := map[string]any{
+		"self_commit": selfCommit,
+		"self_files":  selfFileIndex(workspace),
 	}
-	manifestJSON, _ := json.MarshalIndent(manifest, "", "  ")
+	stateManifest := map[string]any{
+		"mode":                 state.Mode,
+		"current_goal":         state.CurrentGoal,
+		"candidate_status":     state.CandidateStatus,
+		"validated_commit":     state.ValidatedCommit,
+		"git":                  gitContext(workspace),
+		"workspace_file_index": workspaceFileIndex(workspace, 300),
+		"recent_events":        recentEventRefs(workspace, 8),
+		"artifact_refs":        artifactRefs(workspace, 10),
+	}
+	selfContractJSON, _ := json.MarshalIndent(selfContract, "", "  ")
+	stateManifestJSON, _ := json.MarshalIndent(stateManifest, "", "  ")
 	return []chatMessage{
 		{
 			Role: "system",
@@ -110,7 +118,11 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 		},
 		{
 			Role:    "system",
-			Content: "self contract:\n" + string(manifestJSON),
+			Content: "self contract:\n" + string(selfContractJSON),
+		},
+		{
+			Role:    "user",
+			Content: "state manifest:\n" + string(stateManifestJSON),
 		},
 		{
 			Role: "user",
