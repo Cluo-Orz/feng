@@ -19,6 +19,15 @@ func TestCompileGrowMessagesIncludesDynamicWorkspaceContext(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "docs", "architecture-note.md"), []byte("note\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "identity.md"), []byte("Custom feng identity\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "review.md"), []byte("# Review skill\nUse tests.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "world", "car.md"), []byte("sensor notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	appendEvent(dir, "custom_progress", map[string]any{"message": strings.Repeat("p", 800), "snippets": []string{"should-not-enter"}})
 	if _, err := writeArtifact(dir, "test-log", "unit", strings.Repeat("x", 3000), "large log", "test context refs", "txt", []string{strings.Repeat("s", 900)}); err != nil {
 		t.Fatal(err)
@@ -30,6 +39,18 @@ func TestCompileGrowMessagesIncludesDynamicWorkspaceContext(t *testing.T) {
 	}
 	if strings.Contains(messages[1].Content, "workspace_file_index") {
 		t.Fatalf("dynamic workspace index leaked into stable self contract: %s", messages[1].Content)
+	}
+	selfContract := parseSelfContract(t, messages[1].Content)
+	if selfContract["identity"] != "Custom feng identity\n" {
+		t.Fatalf("self contract did not include identity excerpt: %+v", selfContract)
+	}
+	skills, _ := selfContract["skill_catalog"].([]any)
+	if !containsAnyString(skills, "Review skill") {
+		t.Fatalf("self contract did not include skill catalog: %+v", skills)
+	}
+	world, _ := selfContract["world_index"].([]any)
+	if !containsAnyString(world, "world/car.md") {
+		t.Fatalf("self contract did not include world index: %+v", world)
 	}
 	stateManifest := parseStateManifest(t, messages[2].Content)
 	files, _ := stateManifest["workspace_file_index"].([]any)
@@ -80,6 +101,16 @@ func parseStateManifest(t *testing.T, content string) map[string]any {
 	var value map[string]any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		t.Fatalf("state manifest is not JSON: %v\n%s", err, content)
+	}
+	return value
+}
+
+func parseSelfContract(t *testing.T, content string) map[string]any {
+	t.Helper()
+	raw := strings.TrimPrefix(content, "self contract:\n")
+	var value map[string]any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		t.Fatalf("self contract is not JSON: %v\n%s", err, content)
 	}
 	return value
 }

@@ -209,8 +209,12 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 	state, _ := loadState(workspace)
 	selfCommit := currentHead(workspace)
 	selfContract := map[string]any{
-		"self_commit": selfCommit,
-		"self_files":  selfFileIndex(workspace),
+		"self_commit":   selfCommit,
+		"self_files":    selfFileIndex(workspace),
+		"identity":      fileTextExcerpt(workspace, "identity.md", 2000),
+		"goal":          fileTextExcerpt(workspace, "goal.md", 2000),
+		"skill_catalog": skillCatalog(workspace, 80),
+		"world_index":   worldIndex(workspace, 200),
 	}
 	stateManifest := map[string]any{
 		"mode":                 state.Mode,
@@ -591,6 +595,76 @@ func selfFileIndex(workspace string) []string {
 		return names[:200]
 	}
 	return names
+}
+
+func skillCatalog(workspace string, limit int) []map[string]string {
+	root := filepath.Join(workspace, "skills")
+	if !exists(root) {
+		return nil
+	}
+	limit = clampInt(limit, 1, 500)
+	var items []map[string]string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(strings.ToLower(path), ".md") || strings.EqualFold(filepath.Base(path), "README.md") {
+			return nil
+		}
+		text, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		items = append(items, map[string]string{
+			"path":        relPath(workspace, path),
+			"description": firstMarkdownLine(string(text), filepath.Base(path)),
+		})
+		if len(items) >= limit {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return items
+}
+
+func worldIndex(workspace string, limit int) []string {
+	root := filepath.Join(workspace, "world")
+	if !exists(root) {
+		return nil
+	}
+	limit = clampInt(limit, 1, 1000)
+	var paths []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		paths = append(paths, relPath(workspace, path))
+		if len(paths) >= limit {
+			paths = append(paths, "[truncated]")
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	sort.Strings(paths)
+	return paths
+}
+
+func fileTextExcerpt(workspace, rel string, limit int) string {
+	data, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(rel)))
+	if err != nil {
+		return ""
+	}
+	return truncateString(string(data), limit)
+}
+
+func firstMarkdownLine(content, fallback string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(strings.TrimLeft(line, "#"))
+		if line != "" {
+			return truncateString(line, 200)
+		}
+	}
+	return fallback
 }
 
 func estimateMessageTokens(messages []chatMessage) int {
