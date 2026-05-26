@@ -323,8 +323,14 @@ func runCheck(workspace string) CheckReport {
 
 	content, _ := json.MarshalIndent(report, "", "  ")
 	artifact, _ := writeArtifact(workspace, "check-report", "feng-check", string(content), ternary(report.OK, "check passed", "check failed"), "check validates candidate self before hatch", "json", nil)
+	artifacts := []Artifact{artifact}
+	if !report.OK {
+		if diffArtifact, ok := writeDiffSummaryArtifact(workspace); ok {
+			artifacts = append(artifacts, diffArtifact)
+		}
+	}
 	state, _ = loadState(workspace)
-	state.LastArtifacts = []Artifact{artifact}
+	state.LastArtifacts = artifacts
 	if report.OK {
 		state.Mode = "ready"
 		state.CandidateStatus = "validated"
@@ -336,6 +342,30 @@ func runCheck(workspace string) CheckReport {
 	saveState(workspace, state)
 	appendEvent(workspace, ternary(report.OK, "check_passed", "check_failed"), map[string]any{"ok": report.OK, "problems": report.Problems, "validated_commit": report.ValidatedCommit})
 	return report
+}
+
+func writeDiffSummaryArtifact(workspace string) (Artifact, bool) {
+	status, _ := runGit(workspace, "status", "--short")
+	stat, _ := runGit(workspace, "diff", "--stat")
+	names, _ := runGit(workspace, "diff", "--name-only")
+	content := strings.TrimSpace("git status --short:\n" + status + "\n\ngit diff --stat:\n" + stat + "\n\ngit diff --name-only:\n" + names)
+	if content == "" || content == "git status --short:\n\n\ngit diff --stat:\n\n\ngit diff --name-only:" {
+		return Artifact{}, false
+	}
+	artifact, err := writeArtifact(
+		workspace,
+		"diff",
+		"git",
+		content,
+		"candidate diff summary",
+		"check failed; diff summary helps the next grow repair the candidate without embedding full file contents",
+		"txt",
+		compactLines(content, 20),
+	)
+	if err != nil {
+		return Artifact{}, false
+	}
+	return artifact, true
 }
 
 func bootstrap(workspace, goal string, seedSelf string) (bool, error) {

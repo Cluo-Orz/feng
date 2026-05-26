@@ -210,6 +210,13 @@ func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	if !containsProblem(report.Problems, "tool command denied") {
 		t.Fatalf("expected denied tool problem, got %+v", report.Problems)
 	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasArtifactType(state.LastArtifacts, "diff") {
+		t.Fatalf("expected failed check to expose diff artifact, got %+v", state.LastArtifacts)
+	}
 }
 
 func TestCheckRunsCommandEvals(t *testing.T) {
@@ -245,6 +252,15 @@ func hasTool(tools []Tool, name string) bool {
 func containsProblem(problems []string, needle string) bool {
 	for _, problem := range problems {
 		if strings.Contains(problem, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasArtifactType(artifacts []Artifact, artifactType string) bool {
+	for _, artifact := range artifacts {
+		if artifact.Type == artifactType {
 			return true
 		}
 	}
