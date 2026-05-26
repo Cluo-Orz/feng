@@ -146,7 +146,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		RequiredEnv:              []string{"DEEPSEEK_API_KEY"},
 		Entrypoints:              entrypoints,
 		Interface: map[string]any{
-			"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts"},
+			"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui"},
 		},
 		Excludes: []string{"API keys", "local provider profile", ".feng/cache", ".feng/runs", "unvalidated candidate"},
 	}

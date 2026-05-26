@@ -88,3 +88,36 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	secretLike := "sk-" + "thisshouldberedacted123456"
+	if code := Run([]string{"grow", "observe " + secretLike, "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	code := Run([]string{"gui"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("gui exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	path := strings.TrimSpace(out.String())
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(data)
+	for _, needle := range []string{"Running", "Progress", "Artifacts", "missing DEEPSEEK_API_KEY", "This page is read-only"} {
+		if !strings.Contains(html, needle) {
+			t.Fatalf("dashboard missing %q:\n%s", needle, html)
+		}
+	}
+	if strings.Contains(html, secretLike) {
+		t.Fatal("dashboard leaked secret-looking value")
+	}
+	if !strings.Contains(html, "[redacted-secret]") {
+		t.Fatal("dashboard did not redact secret-looking value")
+	}
+}

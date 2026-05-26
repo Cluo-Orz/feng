@@ -69,6 +69,7 @@ var (
 		".feng/lock",
 		".feng/provider.yaml",
 		".feng/provider.json",
+		".feng/gui.html",
 		".feng/state.yaml",
 		".feng/events.jsonl",
 		".feng/artifacts/",
@@ -145,6 +146,8 @@ func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 		return cmdArtifacts(cwd, stdout, stderr)
 	case "hatch":
 		return cmdHatch(args[1:], cwd, stdout, stderr)
+	case "gui":
+		return cmdGUI(args[1:], cwd, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printHelp(stderr)
@@ -153,7 +156,7 @@ func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts} ...")
+	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui} ...")
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
