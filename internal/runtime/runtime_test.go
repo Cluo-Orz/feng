@@ -74,6 +74,11 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	out.Reset()
 	errOut.Reset()
+	if code := Run([]string{"tag", "sample-v1"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("tag exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
 	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 0 {
 		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
@@ -86,6 +91,43 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(packagePath, "checksums.json")); err != nil {
 		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(packagePath, "feng-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"self_tag": "sample-v1"`) || !strings.Contains(string(manifest), `"tag"`) {
+		t.Fatalf("hatch manifest did not include tag metadata: %s", string(manifest))
+	}
+}
+
+func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "make a taggable agent", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"tag", "too-early"}, dir, &out, &errOut); code != 1 {
+		t.Fatalf("tag before check should fail, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs", "dirty.md"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"tag", "dirty-v1"}, dir, &out, &errOut); code != 1 {
+		t.Fatalf("tag on dirty tree should fail, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
 }
 

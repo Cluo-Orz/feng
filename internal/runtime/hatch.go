@@ -32,6 +32,7 @@ type HatchManifest struct {
 	Name                     string         `json:"name"`
 	Portable                 bool           `json:"portable"`
 	SelfCommit               string         `json:"self_commit"`
+	SelfTag                  string         `json:"self_tag,omitempty"`
 	RunnerVersion            string         `json:"runner_version"`
 	RequiredProviderProfiles []string       `json:"required_provider_profiles"`
 	RequiredEnv              []string       `json:"required_env"`
@@ -141,12 +142,13 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		Name:                     cleanName,
 		Portable:                 portable,
 		SelfCommit:               state.ValidatedCommit,
+		SelfTag:                  currentValidatedTag(workspace, state.ValidatedCommit),
 		RunnerVersion:            "0.1.0-go",
 		RequiredProviderProfiles: []string{"deepseek"},
 		RequiredEnv:              []string{"DEEPSEEK_API_KEY"},
 		Entrypoints:              entrypoints,
 		Interface: map[string]any{
-			"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui"},
+			"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag"},
 		},
 		Excludes: []string{"API keys", "local provider profile", ".feng/cache", ".feng/runs", "unvalidated candidate"},
 	}

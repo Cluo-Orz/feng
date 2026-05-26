@@ -148,6 +148,8 @@ func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 		return cmdHatch(args[1:], cwd, stdout, stderr)
 	case "gui":
 		return cmdGUI(args[1:], cwd, stdout, stderr)
+	case "tag":
+		return cmdTag(args[1:], cwd, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printHelp(stderr)
@@ -156,7 +158,7 @@ func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui} ...")
+	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag} ...")
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
