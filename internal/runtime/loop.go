@@ -24,7 +24,8 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 			"tool_schema_tokens":     estimateJSONTokens(toolSchemas),
 			"active_tool_pack_hash":  shaJSON(toolSchemas),
 		})
-		assistant, err := callOpenAIChat(profile, messages, toolSchemas)
+		assistant, updatedMessages, err := callProviderWithRecovery(workspace, profile, messages, toolSchemas)
+		messages = updatedMessages
 		if err != nil {
 			return handleLLMError(workspace, err, stdout)
 		}
