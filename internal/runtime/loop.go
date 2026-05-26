@@ -58,6 +58,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 		for _, call := range assistant.ToolCalls {
 			args := parseToolArguments(call.Function.Arguments)
 			result := executeTool(workspace, tools, call.Function.Name, args)
+			recordToolResult(workspace, call.Function.Name, result)
 			messages = append(messages, chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)})
 			latestEvent = "tool " + call.Function.Name + " returned: " + truncateString(result.Content, 500)
 		}
@@ -70,6 +71,20 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func recordToolResult(workspace, name string, result ToolResult) {
+	data := map[string]any{
+		"tool":     name,
+		"is_error": result.IsError,
+	}
+	if result.Artifact != nil {
+		data["artifact"] = result.Artifact.Path
+	}
+	if result.IsError {
+		data["content"] = truncateString(result.Content, 500)
+	}
+	appendEvent(workspace, "tool_result", data)
 }
 
 func updateUsageMetrics(workspace string, usage map[string]any) {

@@ -106,6 +106,9 @@ func TestGrowRunsOpenAIToolCallLoop(t *testing.T) {
 	if !messageCompiledSelectedTool(dir, "write_file") {
 		t.Fatalf("message_compiled event did not expose selected tools: %+v", tailEvents(dir, 20))
 	}
+	if !hasToolResultEvent(dir, "write_file", false) {
+		t.Fatalf("tool_result event did not record successful tool call: %+v", tailEvents(dir, 20))
+	}
 }
 
 func TestGrowRefreshesActiveToolPackAfterToolGrowth(t *testing.T) {
@@ -172,6 +175,47 @@ func TestGrowRefreshesActiveToolPackAfterToolGrowth(t *testing.T) {
 	}
 }
 
+func TestGrowRecordsUnknownToolResult(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestNumber := requests.Add(1)
+		if requestNumber == 1 {
+			writeChatResponse(w, map[string]any{
+				"role": "assistant",
+				"tool_calls": []map[string]any{
+					{
+						"id":   "call_1",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "missing_tool",
+							"arguments": `{}`,
+						},
+					},
+				},
+			})
+			return
+		}
+		writeChatResponse(w, map[string]any{
+			"role":    "assistant",
+			"content": "done",
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "record unknown tool", "--max-turns", "3"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !hasToolResultEvent(dir, "missing_tool", true) {
+		t.Fatalf("missing tool was not observable in events: %+v", tailEvents(dir, 20))
+	}
+}
+
 func hasToolMessage(messages []chatMessage) bool {
 	for _, message := range messages {
 		if message.Role == "tool" {
@@ -194,6 +238,18 @@ func requestHasTool(tools []map[string]any, name string) bool {
 	for _, tool := range tools {
 		function, _ := tool["function"].(map[string]any)
 		if function["name"] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasToolResultEvent(workspace, name string, isError bool) bool {
+	for _, event := range tailEvents(workspace, 20) {
+		if event.Type != "tool_result" {
+			continue
+		}
+		if event.Data["tool"] == name && event.Data["is_error"] == isError {
 			return true
 		}
 	}

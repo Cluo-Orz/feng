@@ -77,6 +77,12 @@ def grow(workspace: Path, goal: str, max_turns: int = 12) -> dict[str, Any]:
             return {"ok": True, "turns": turn + 1, "message": assistant.get("content", "")}
         for call in calls:
             result = execute_tool(workspace, tools, call["name"], call["arguments"])
+            event_data: dict[str, Any] = {"tool": call["name"], "is_error": bool(result.get("is_error"))}
+            if result.get("artifact"):
+                event_data["artifact"] = result["artifact"].get("path")
+            if result.get("is_error"):
+                event_data["content"] = str(result.get("content", ""))[:500]
+            append_event(workspace, "tool_result", event_data)
             conversation.append(_tool_result_message(call["id"], result))
             latest_event = f"Tool {call['name']} returned: {str(result.get('content', ''))[:500]}"
     state = load_state(workspace)
