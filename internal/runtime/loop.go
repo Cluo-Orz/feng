@@ -29,6 +29,10 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 		if turn > 0 {
 			refreshToolPack()
 		}
+		if compacted, changed := compactMessagesForBudget(workspace, messages, toolSchemas); changed {
+			messages = compacted
+			updateContextMetrics(workspace, messages, toolSchemas)
+		}
 		appendEvent(workspace, "message_compiled", map[string]any{
 			"turn":                   turn,
 			"estimated_input_tokens": estimateMessageTokens(messages),
@@ -139,6 +143,9 @@ func updateContextMetrics(workspace string, messages []chatMessage, toolSchemas 
 	}
 	state.ActiveToolPackHash = shaJSON(toolSchemas)
 	state.StablePrefixHash = shaJSON(messages[:minInt(2, len(messages))])
+	if maxTokens := maxInputTokensFromState(state); maxTokens > 0 {
+		state.ContextBudget["max_input_tokens"] = maxTokens
+	}
 	state.ContextBudget["estimated_input_tokens"] = estimateMessageTokens(messages) + estimateJSONTokens(toolSchemas)
 	state.ContextBudget["dynamic_suffix_tokens"] = estimateMessageTokens(messages[minInt(2, len(messages)):])
 	saveState(workspace, state)

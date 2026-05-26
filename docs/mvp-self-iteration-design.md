@@ -502,6 +502,9 @@ max_tokens
 prompt_too_long
   先 artifact 化大内容，再 reactive compact，重试一次；仍失败则 mode: blocked。
 
+max_input_tokens
+  如果 state 或 env 设置了输入预算，调用 provider 前先压缩动态后缀；压缩事件写入 events。
+
 429 / 500 / 503
   退避重试；超过上限写 provider-error artifact。
 

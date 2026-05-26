@@ -34,6 +34,7 @@ artifact refs
 处理顺序：
 
 ```text
+0. 如果 state/env 设置 max_input_tokens，调用 provider 前先压缩动态后缀。
 1. 大 tool output 写 artifact。
 2. 旧 tool result 占位。
 3. 历史压缩成 summary。

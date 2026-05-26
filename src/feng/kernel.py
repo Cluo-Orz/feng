@@ -61,6 +61,8 @@ def grow(workspace: Path, goal: str, max_turns: int = 12) -> dict[str, Any]:
     for turn in range(max_turns):
         tools = active_tool_pack(workspace, "grow", latest_event)
         messages, metrics = compile_messages(workspace, latest_event, tools, conversation)
+        if metrics.get("context_compacted"):
+            append_event(workspace, "context_compacted", {"reason": "context_budget"})
         append_event(workspace, "message_compiled", {"turn": turn, **metrics})
         try:
             response = call_llm(workspace, messages, [tool.schema_for_provider() for tool in tools])

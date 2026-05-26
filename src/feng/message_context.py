@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,9 @@ def compile_messages(
     messages.append({"role": "user", "content": latest_event})
     stable_prefix = stable_json(messages[:2])
     dynamic_suffix = stable_json(messages[2:])
+    messages, compacted = _compact_messages_for_budget(state, messages, tool_schemas)
+    stable_prefix = stable_json(messages[:2])
+    dynamic_suffix = stable_json(messages[2:])
     metrics = {
         "active_tool_pack_hash": active_tool_pack_hash,
         "stable_prefix_hash": sha256_text(stable_prefix),
@@ -85,9 +89,48 @@ def compile_messages(
         "tool_schema_tokens": estimate_tokens(stable_json(tool_schemas)),
         "selected_tools": [tool.name for tool in tools],
     }
+    if compacted:
+        metrics["context_compacted"] = True
     state["active_tool_pack_hash"] = metrics["active_tool_pack_hash"]
     state["stable_prefix_hash"] = metrics["stable_prefix_hash"]
+    max_tokens = _max_input_tokens(state)
+    if max_tokens > 0:
+        state["context_budget"]["max_input_tokens"] = max_tokens
     state["context_budget"]["estimated_input_tokens"] = metrics["estimated_input_tokens"]
     state["context_budget"]["dynamic_suffix_tokens"] = metrics["dynamic_suffix_tokens"]
     save_state(workspace, state)
     return messages, metrics
+
+
+def _max_input_tokens(state: dict[str, Any]) -> int:
+    raw = os.environ.get("FENG_MAX_INPUT_TOKENS", "").strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            return 0
+    return int((state.get("context_budget") or {}).get("max_input_tokens") or 0)
+
+
+def _compact_messages_for_budget(
+    state: dict[str, Any],
+    messages: list[dict[str, Any]],
+    tool_schemas: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], bool]:
+    max_tokens = _max_input_tokens(state)
+    if max_tokens <= 0:
+        return messages, False
+    current = estimate_tokens(stable_json(messages) + stable_json(tool_schemas))
+    if current <= max_tokens:
+        return messages, False
+    compacted = [dict(message) for message in messages]
+    changed = False
+    for message in compacted:
+        content = str(message.get("content", ""))
+        if message.get("role") == "tool" and len(content) > 1000:
+            message["content"] = '{"content":"[compacted large tool result; use artifact refs or targeted reads if needed]","is_error":false}'
+            changed = True
+        elif message.get("role") != "system" and len(content) > 4000:
+            message["content"] = content[:4000] + "...[truncated]"
+            changed = True
+    return (compacted, changed)

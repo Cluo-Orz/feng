@@ -49,11 +49,56 @@ func callProviderWithRecovery(workspace string, profile ProviderProfile, message
 	return AssistantTurn{}, messages, lastErr
 }
 
+func compactMessagesForBudget(workspace string, messages []chatMessage, toolSchemas []map[string]any) ([]chatMessage, bool) {
+	maxTokens := maxInputTokens(workspace)
+	if maxTokens <= 0 {
+		return messages, false
+	}
+	before := estimateMessageTokens(messages) + estimateJSONTokens(toolSchemas)
+	if before <= maxTokens {
+		return messages, false
+	}
+	compacted, changed := compactMessagesForRetry(messages)
+	if !changed {
+		return messages, false
+	}
+	after := estimateMessageTokens(compacted) + estimateJSONTokens(toolSchemas)
+	appendEvent(workspace, "context_compacted", map[string]any{
+		"reason":        "context_budget",
+		"max_tokens":    maxTokens,
+		"before_tokens": before,
+		"after_tokens":  after,
+	})
+	return compacted, true
+}
+
 func asLLMError(err error) LLMError {
 	if llmErr, ok := err.(LLMError); ok {
 		return llmErr
 	}
 	return LLMError{Kind: "provider_error", Message: err.Error()}
+}
+
+func maxInputTokens(workspace string) int {
+	state, err := loadState(workspace)
+	if err != nil {
+		return maxInputTokensFromState(defaultState(""))
+	}
+	return maxInputTokensFromState(state)
+}
+
+func maxInputTokensFromState(state State) int {
+	if raw := strings.TrimSpace(os.Getenv("FENG_MAX_INPUT_TOKENS")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err == nil && parsed > 0 {
+			return parsed
+		}
+		return 0
+	}
+	if state.ContextBudget == nil {
+		return 0
+	}
+	return state.ContextBudget["max_input_tokens"]
 }
 
 func providerRetryAttempts() int {
