@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -98,6 +99,40 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest), `"self_tag": "sample-v1"`) || !strings.Contains(string(manifest), `"tag"`) {
 		t.Fatalf("hatch manifest did not include tag metadata: %s", string(manifest))
+	}
+}
+
+func TestGoRuntimeHatchBuildsRunnerFromWorkspaceSource(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "build source runner", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if err := writeText(filepath.Join(dir, "go.mod"), "module hatchsource\n\ngo 1.26\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(dir, "cmd", "feng", "main.go"), "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"built-from-source\") }\n"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	packagePath := strings.TrimSpace(out.String())
+	exePath := filepath.Join(packagePath, runnerEntrypointName("sample"))
+	output, err := exec.Command(exePath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("built runner failed: %v output=%s", err, string(output))
+	}
+	if strings.TrimSpace(string(output)) != "built-from-source" {
+		t.Fatalf("hatch did not build runner from workspace source: %s", string(output))
 	}
 }
 

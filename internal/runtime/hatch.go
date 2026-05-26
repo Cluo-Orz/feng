@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -131,7 +132,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err := copySelf(workspace, filepath.Join(output, "self")); err != nil {
 		return "", err
 	}
-	entrypoints, err := copyRunner(output, cleanName)
+	entrypoints, err := buildOrCopyRunner(workspace, output, cleanName)
 	if err != nil {
 		return "", err
 	}
@@ -196,20 +197,26 @@ func copySelf(workspace, dst string) error {
 	return nil
 }
 
-func copyRunner(output, cleanName string) ([]string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return nil, err
+func buildOrCopyRunner(workspace, output, cleanName string) ([]string, error) {
+	if hasGoRunnerSource(workspace) {
+		return buildRunnerFromSource(workspace, output, cleanName)
 	}
-	var entrypoints []string
-	entryName := cleanName
+	return copyRunner(output, cleanName)
+}
+
+func hasGoRunnerSource(workspace string) bool {
+	return exists(filepath.Join(workspace, "go.mod")) && exists(filepath.Join(workspace, "cmd", "feng"))
+}
+
+func runnerEntrypointName(cleanName string) string {
 	if runtime.GOOS == "windows" {
-		entryName += ".exe"
+		return cleanName + ".exe"
 	}
-	if err := copyFile(exe, filepath.Join(output, entryName)); err != nil {
-		return nil, err
-	}
-	entrypoints = append(entrypoints, entryName)
+	return cleanName
+}
+
+func writeWindowsCommandShim(output, cleanName string) ([]string, error) {
+	var entrypoints []string
 	if runtime.GOOS == "windows" {
 		cmdName := cleanName + ".cmd"
 		content := fmt.Sprintf("@echo off\r\n\"%%~dp0%s.exe\" %%*\r\n", cleanName)
@@ -218,6 +225,67 @@ func copyRunner(output, cleanName string) ([]string, error) {
 		}
 		entrypoints = append(entrypoints, cmdName)
 	}
+	return entrypoints, nil
+}
+
+func buildRunnerFromSource(workspace, output, cleanName string) ([]string, error) {
+	entryName := runnerEntrypointName(cleanName)
+	target := filepath.Join(output, entryName)
+	goExe, err := goExecutable()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(goExe, "build", "-o", target, "./cmd/feng")
+	cmd.Dir = workspace
+	combined, err := cmd.CombinedOutput()
+	if err != nil {
+		output := strings.TrimSpace(string(combined))
+		if output == "" {
+			return nil, fmt.Errorf("go build runner failed: %w", err)
+		}
+		return nil, fmt.Errorf("go build runner failed: %w: %s", err, output)
+	}
+	entrypoints := []string{entryName}
+	shims, err := writeWindowsCommandShim(output, cleanName)
+	if err != nil {
+		return nil, err
+	}
+	entrypoints = append(entrypoints, shims...)
+	return entrypoints, nil
+}
+
+func goExecutable() (string, error) {
+	if path, err := exec.LookPath("go"); err == nil {
+		return path, nil
+	}
+	if runtime.GOOS == "windows" {
+		for _, candidate := range []string{
+			`C:\Program Files\Go\bin\go.exe`,
+			`C:\Program Files (x86)\Go\bin\go.exe`,
+		} {
+			if exists(candidate) {
+				return candidate, nil
+			}
+		}
+	}
+	return "", errors.New("go executable not found; install Go or add it to PATH before hatching a Go-source runner")
+}
+
+func copyRunner(output, cleanName string) ([]string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	entryName := runnerEntrypointName(cleanName)
+	if err := copyFile(exe, filepath.Join(output, entryName)); err != nil {
+		return nil, err
+	}
+	entrypoints := []string{entryName}
+	shims, err := writeWindowsCommandShim(output, cleanName)
+	if err != nil {
+		return nil, err
+	}
+	entrypoints = append(entrypoints, shims...)
 	return entrypoints, nil
 }
 
