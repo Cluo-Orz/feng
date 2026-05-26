@@ -41,13 +41,15 @@ var (
 			"files": map[string]any{
 				"read": []any{"**"},
 				"write": []any{
-					"identity.md", "goal.md", "feng.yaml", "hooks.yaml", "permissions.yaml",
+					".gitignore", "identity.md", "goal.md", "feng.yaml", "hooks.yaml", "permissions.yaml",
 					"interface.yaml", "config.schema.yaml", "skills/**", "tools/**",
 					"world/**", "evals/**", "docs/**", "src/**", "tests/**",
+					"cmd/**", "internal/**", "pkg/**", "scripts/**",
+					"go.mod", "go.sum", "go.work", "go.work.sum",
 				},
 			},
 			"commands": map[string]any{
-				"allow": []any{"git status", "git diff", "git log", "rg", "python -m", "python", "pytest", "go test"},
+				"allow": []any{"git status", "git diff", "git log", "rg", "python -m", "python", "pytest", "go test", "go vet", "go build"},
 				"deny":  []any{"git reset --hard", "git push", "rm -rf", "Remove-Item -Recurse", "del /s"},
 			},
 		},

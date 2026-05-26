@@ -22,6 +22,7 @@ SELF_FILES = {
         "files": {
             "read": ["**"],
             "write": [
+                ".gitignore",
                 "identity.md",
                 "goal.md",
                 "feng.yaml",
@@ -36,6 +37,14 @@ SELF_FILES = {
                 "docs/**",
                 "src/**",
                 "tests/**",
+                "cmd/**",
+                "internal/**",
+                "pkg/**",
+                "scripts/**",
+                "go.mod",
+                "go.sum",
+                "go.work",
+                "go.work.sum",
             ],
         },
         "commands": {
@@ -47,6 +56,9 @@ SELF_FILES = {
                 "python -m",
                 "python",
                 "pytest",
+                "go test",
+                "go vet",
+                "go build",
             ],
             "deny": [
                 "git reset --hard",

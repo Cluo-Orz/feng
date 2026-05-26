@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 
+from feng.permissions import check_command, check_file_write
 from feng.tools import active_tool_pack
 
 
@@ -76,6 +77,24 @@ class MvpKernelTest(unittest.TestCase):
             artifacts = run_feng(work, "artifacts")
             self.assertEqual(artifacts.returncode, 0, artifacts.stderr)
             self.assertIn("check-report", artifacts.stdout)
+
+    def test_default_permissions_allow_self_runtime_growth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "make self editable", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            for rel in ["internal/runtime/next.go", "cmd/feng/next.go", "go.mod", "scripts/check.ps1"]:
+                path = check_file_write(work, rel)
+                self.assertTrue(str(path).endswith(rel.replace("/", os.sep)))
+            for command in ["go test ./...", "go vet ./...", "go build ./cmd/feng"]:
+                check_command(work, command)
 
     def test_grow_missing_config_keeps_state_observable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -83,6 +83,33 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	}
 }
 
+func TestDefaultPermissionsAllowSelfRuntimeGrowth(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "self runtime permission test", ""); err != nil {
+		t.Fatal(err)
+	}
+	tools := bootstrapTools()
+	for _, item := range []struct {
+		path    string
+		content string
+	}{
+		{"internal/runtime/next.go", "package runtime\n"},
+		{"cmd/feng/next.go", "package main\n"},
+		{"go.mod", "module candidate\n"},
+		{"scripts/check.ps1", "Write-Output ok\n"},
+	} {
+		result := executeTool(dir, tools, "write_file", map[string]any{"path": item.path, "content": item.content})
+		if result.IsError {
+			t.Fatalf("expected write to %s to be allowed: %s", item.path, result.Content)
+		}
+	}
+	for _, command := range []string{"go test ./...", "go vet ./...", "go build ./cmd/feng"} {
+		if err := checkCommand(dir, command); err != nil {
+			t.Fatalf("expected command %q to be allowed: %v", command, err)
+		}
+	}
+}
+
 func TestLongToolOutputBecomesArtifact(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "artifact test", ""); err != nil {
