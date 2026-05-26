@@ -154,3 +154,99 @@ func TestRunCommandUsesWorkspace(t *testing.T) {
 		t.Fatalf("command did not run in workspace: %s", result.Content)
 	}
 }
+
+func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "self tool test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "hello.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "hello_tool",
+		"description": "Use a self-defined command tool.",
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "evals", "smoke.eval.yaml"), map[string]any{
+		"type":    "command",
+		"command": "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := activeToolPack(dir, "check", "")
+	if !hasTool(tools, "hello_tool") {
+		t.Fatalf("self repo tool was not loaded: %+v", tools)
+	}
+	result := executeTool(dir, tools, "hello_tool", map[string]any{})
+	if result.IsError || !strings.Contains(result.Content, "exit_code=0") {
+		t.Fatalf("self repo tool failed: %+v", result)
+	}
+
+	report := runCheck(dir)
+	if !report.OK {
+		t.Fatalf("check failed: %+v", report.Problems)
+	}
+}
+
+func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "bad tool test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "bad.tool.yaml"), map[string]any{
+		"type":    "command",
+		"name":    "bad_tool",
+		"command": "git reset --hard",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject denied tool command")
+	}
+	if !containsProblem(report.Problems, "tool command denied") {
+		t.Fatalf("expected denied tool problem, got %+v", report.Problems)
+	}
+}
+
+func TestCheckRunsCommandEvals(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "eval test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "evals", "bad.eval.yaml"), map[string]any{
+		"type":    "command",
+		"command": "git status --definitely-not-a-real-option",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected failing eval to fail check")
+	}
+	if !containsProblem(report.Problems, "eval failed") {
+		t.Fatalf("expected eval failure, got %+v", report.Problems)
+	}
+}
+
+func hasTool(tools []Tool, name string) bool {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func containsProblem(problems []string, needle string) bool {
+	for _, problem := range problems {
+		if strings.Contains(problem, needle) {
+			return true
+		}
+	}
+	return false
+}

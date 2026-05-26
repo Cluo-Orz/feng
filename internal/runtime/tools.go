@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 )
 
 const maxInlineToolResult = 8000
+
+var toolNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
 type Tool struct {
 	Name        string
@@ -85,8 +88,8 @@ func bootstrapTools() []Tool {
 	}
 }
 
-func activeToolPack(_workspace, _mode, _latestEvent string) []Tool {
-	return bootstrapTools()
+func activeToolPack(workspace, _mode, _latestEvent string) []Tool {
+	return append(bootstrapTools(), selfRepoTools(workspace)...)
 }
 
 func executeTool(workspace string, tools []Tool, name string, args map[string]any) ToolResult {
@@ -180,7 +183,16 @@ func runRunCommand(workspace string, args map[string]any) ToolResult {
 		appendEvent(workspace, "tool_denied", map[string]any{"tool": "run_command", "reason": err.Error()})
 		return ToolResult{Content: err.Error(), IsError: true}
 	}
-	timeout := time.Duration(clampInt(argInt(args, "timeout", 60), 1, 600)) * time.Second
+	timeout := clampInt(argInt(args, "timeout", 60), 1, 600)
+	exitCode, output := runShellCommand(workspace, command, timeout)
+	appendEvent(workspace, "tool_called", map[string]any{"tool": "run_command", "command": command, "exit_code": exitCode})
+	result := maybeArtifact(workspace, "run_command:"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), "run_command output")
+	result.IsError = exitCode != 0
+	return result
+}
+
+func runShellCommand(workspace, command string, timeoutSeconds int) (int, string) {
+	timeout := time.Duration(clampInt(timeoutSeconds, 1, 600)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var cmd *exec.Cmd
@@ -201,10 +213,94 @@ func runRunCommand(workspace string, args map[string]any) ToolResult {
 			exitCode = 124
 		}
 	}
-	appendEvent(workspace, "tool_called", map[string]any{"tool": "run_command", "command": command, "exit_code": exitCode})
-	result := maybeArtifact(workspace, "run_command:"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, string(output)), "run_command output")
-	result.IsError = exitCode != 0
-	return result
+	return exitCode, string(output)
+}
+
+func selfRepoTools(workspace string) []Tool {
+	toolsDir := filepath.Join(workspace, "tools")
+	if !exists(toolsDir) {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, tool := range bootstrapTools() {
+		seen[tool.Name] = true
+	}
+	var loaded []Tool
+	_ = filepath.WalkDir(toolsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !isToolFile(path) {
+			return nil
+		}
+		tool := commandTool(workspace, path)
+		if tool == nil || seen[tool.Name] {
+			return nil
+		}
+		seen[tool.Name] = true
+		loaded = append(loaded, *tool)
+		return nil
+	})
+	return loaded
+}
+
+func commandTool(workspace, path string) *Tool {
+	data, err := readJSONFile(path)
+	if err != nil {
+		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(workspace, path), "reason": err.Error()})
+		return nil
+	}
+	raw, _ := data.(map[string]any)
+	if raw["type"] != "command" {
+		return nil
+	}
+	name := strings.TrimSpace(argString(raw, "name"))
+	if name == "" {
+		name = defaultToolName(path)
+	}
+	command := strings.TrimSpace(argString(raw, "command"))
+	if !validToolName(name) || command == "" {
+		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(workspace, path), "reason": "invalid name or command"})
+		return nil
+	}
+	description := argString(raw, "description")
+	if description == "" {
+		description = "Run the self-defined command tool " + name + "."
+	}
+	inputSchema, ok := raw["input_schema"].(map[string]any)
+	if !ok || inputSchema == nil {
+		inputSchema = map[string]any{"type": "object", "properties": map[string]any{}, "required": []any{}}
+	}
+	timeout := clampInt(argInt(raw, "timeout", 60), 1, 600)
+
+	return &Tool{
+		Name:        name,
+		Description: description[:minInt(len(description), 500)],
+		Parameters:  inputSchema,
+		Handler: func(toolWorkspace string, _args map[string]any) ToolResult {
+			if err := checkCommand(toolWorkspace, command); err != nil {
+				appendEvent(toolWorkspace, "tool_denied", map[string]any{"tool": name, "reason": err.Error()})
+				return ToolResult{Content: err.Error(), IsError: true}
+			}
+			exitCode, output := runShellCommand(toolWorkspace, command, timeout)
+			appendEvent(toolWorkspace, "tool_called", map[string]any{"tool": name, "command": command, "exit_code": exitCode})
+			result := maybeArtifact(toolWorkspace, name+":"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), name+" output")
+			result.IsError = exitCode != 0
+			return result
+		},
+	}
+}
+
+func isToolFile(path string) bool {
+	return strings.HasSuffix(path, ".tool.yaml") || strings.HasSuffix(path, ".tool.json")
+}
+
+func validToolName(name string) bool {
+	return toolNamePattern.MatchString(name)
+}
+
+func defaultToolName(path string) string {
+	name := filepath.Base(path)
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	name = strings.TrimSuffix(name, ".tool")
+	return name
 }
 
 func maybeArtifact(workspace, source, content, summary string) ToolResult {

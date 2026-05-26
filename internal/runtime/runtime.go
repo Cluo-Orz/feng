@@ -302,6 +302,10 @@ func runCheck(workspace string) CheckReport {
 		}
 	}
 	problems = append(problems, scanSecrets(workspace)...)
+	problems = append(problems, checkNoSpecialRuntime(workspace)...)
+	problems = append(problems, checkSelfRepoTools(workspace)...)
+	problems = append(problems, checkMessageCompiler(workspace)...)
+	problems = append(problems, runCommandEvals(workspace)...)
 
 	report := CheckReport{OK: len(problems) == 0, Problems: problems, ValidatedCommit: state.ValidatedCommit}
 	if report.OK {
