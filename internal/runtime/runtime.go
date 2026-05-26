@@ -66,6 +66,7 @@ var (
 	}
 
 	runtimeGitignore = []string{
+		".feng/lock",
 		".feng/state.yaml",
 		".feng/events.jsonl",
 		".feng/artifacts/",
@@ -164,6 +165,12 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	release, err := acquireWorkspaceLock(workspace, "grow")
+	if err != nil {
+		printJSON(stdout, map[string]any{"ok": false, "reason": "workspace_locked", "message": err.Error()})
+		return 2
+	}
+	defer release()
 	state, _ := loadState(workspace)
 	state.Mode = "growing"
 	state.CurrentGoal = goal
@@ -224,6 +231,12 @@ func cmdCheck(cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "not a feng workspace; run feng grow first")
 		return 1
 	}
+	release, err := acquireWorkspaceLock(workspace, "check")
+	if err != nil {
+		printJSON(stdout, map[string]any{"ok": false, "reason": "workspace_locked", "message": err.Error()})
+		return 2
+	}
+	defer release()
 	report := runCheck(workspace)
 	printJSON(stdout, report)
 	if !report.OK {

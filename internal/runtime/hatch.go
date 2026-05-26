@@ -51,6 +51,12 @@ func cmdHatch(args []string, cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "not a feng workspace; run feng grow first")
 		return 1
 	}
+	release, err := acquireWorkspaceLock(workspace, "hatch")
+	if err != nil {
+		printJSON(stdout, map[string]any{"ok": false, "reason": "workspace_locked", "message": err.Error()})
+		return 2
+	}
+	defer release()
 	output, err := hatch(workspace, name, outDir, portable)
 	if err != nil {
 		fmt.Fprintf(stderr, "hatch failed: %v\n", err)
