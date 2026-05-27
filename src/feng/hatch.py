@@ -8,7 +8,7 @@ from .artifacts import write_artifact
 from .events import append_event
 from .git_utils import current_head, status_short
 from .state import load_state
-from .utils import ensure_dir, sha256_text, slugify, write_text
+from .utils import ensure_dir, read_jsonish, sha256_text, slugify, write_text
 
 
 SELF_NAMES = [
@@ -175,6 +175,7 @@ def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: boo
         "self_commit": validated_commit,
         "runner_version": "0.1.0",
         "entrypoints": [f"{clean_name}.py", f"{clean_name}.ps1", f"{clean_name}.cmd"],
+        "interface": read_jsonish(workspace / "interface.yaml", {}),
         "excludes": ["API keys", ".feng/cache", ".feng/runs", "unvalidated candidate"],
     }
     write_text(output / "feng-release.yaml", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")

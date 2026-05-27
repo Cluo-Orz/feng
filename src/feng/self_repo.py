@@ -9,6 +9,10 @@ from .state import default_state, save_state
 from .utils import ensure_dir, read_jsonish, write_jsonish, write_text
 
 
+DEFAULT_INTERFACE = {
+    "commands": ["grow", "check", "hatch", "status", "watch", "artifacts"],
+}
+
 SELF_FILES = {
     "identity.md": "This is a feng self.\n\nIt starts without project-specific skills. Stable capabilities must grow through candidate files and pass check before becoming validated self.\n",
     "goal.md": "",
@@ -69,7 +73,7 @@ SELF_FILES = {
             ],
         },
     },
-    "interface.yaml": {"commands": [{"name": "run", "args": ["prompt"]}]},
+    "interface.yaml": DEFAULT_INTERFACE,
     "config.schema.yaml": {
         "provider_profiles": ["deepseek"],
         "env": ["DEEPSEEK_API_KEY"],

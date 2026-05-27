@@ -147,6 +147,45 @@ func checkProviderProfile(workspace string) []string {
 	return nil
 }
 
+func loadInterfaceConfig(workspace string) (map[string]any, error) {
+	data, err := readJSONFile(filepath.Join(workspace, "interface.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	config, ok := data.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("interface.yaml must be an object")
+	}
+	return config, nil
+}
+
+func checkInterfaceConfig(workspace string) []string {
+	config, err := loadInterfaceConfig(workspace)
+	if err != nil {
+		return []string{"interface parse failed: " + err.Error()}
+	}
+	commands, ok := config["commands"].([]any)
+	if !ok || len(commands) == 0 {
+		return []string{"interface.yaml commands must be a non-empty list"}
+	}
+	var problems []string
+	for i, command := range commands {
+		switch typed := command.(type) {
+		case string:
+			if strings.TrimSpace(typed) == "" {
+				problems = append(problems, fmt.Sprintf("interface.yaml command %d is empty", i))
+			}
+		case map[string]any:
+			if strings.TrimSpace(argString(typed, "name")) == "" {
+				problems = append(problems, fmt.Sprintf("interface.yaml command %d missing name", i))
+			}
+		default:
+			problems = append(problems, fmt.Sprintf("interface.yaml command %d must be a string or object", i))
+		}
+	}
+	return problems
+}
+
 func checkNoSpecialRuntime(workspace string) []string {
 	var problems []string
 	for _, rootName := range []string{"cmd", "internal", "src"} {

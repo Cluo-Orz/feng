@@ -53,7 +53,7 @@ var (
 				"deny":  []any{"git reset --hard", "git push", "rm -rf", "Remove-Item -Recurse", "del /s"},
 			},
 		},
-		"interface.yaml": map[string]any{"commands": []any{map[string]any{"name": "run", "args": []any{"prompt"}}}},
+		"interface.yaml": defaultInterfaceConfig(),
 		"config.schema.yaml": map[string]any{
 			"provider_profiles": []any{"deepseek"},
 			"env":               []any{"DEEPSEEK_API_KEY"},
@@ -82,6 +82,12 @@ var (
 
 	secretPattern = regexp.MustCompile(`sk-[A-Za-z0-9_-]{16,}`)
 )
+
+func defaultInterfaceConfig() map[string]any {
+	return map[string]any{
+		"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag"},
+	}
+}
 
 type State struct {
 	Version            int               `json:"version"`
@@ -317,6 +323,7 @@ func runCheck(workspace string) CheckReport {
 	}
 	problems = append(problems, scanSecrets(workspace)...)
 	problems = append(problems, checkNoSpecialRuntime(workspace)...)
+	problems = append(problems, checkInterfaceConfig(workspace)...)
 	problems = append(problems, checkSelfRepoTools(workspace)...)
 	problems = append(problems, checkMessageCompiler(workspace)...)
 	problems = append(problems, checkProviderProfile(workspace)...)

@@ -637,6 +637,8 @@ interface:
     - artifacts
 ```
 
+`interface` 来自 self repo 的 `interface.yaml`。check 必须确认 `commands` 是非空列表；hatch 只把通过 check 的 interface 写入 manifest。默认 feng self 的 interface 暴露 grow/check/hatch/status/watch/artifacts，后续普通目标 agent 可以通过 grow 修改 interface。
+
 Hatch 不包含：
 
 ```text

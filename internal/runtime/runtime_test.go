@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,13 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "skills", "README.md")); err != nil {
 		t.Fatal(err)
+	}
+	interfaceData, err := os.ReadFile(filepath.Join(dir, "interface.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(interfaceData), `"grow"`) || !strings.Contains(string(interfaceData), `"hatch"`) {
+		t.Fatalf("default interface did not expose feng kernel commands: %s", string(interfaceData))
 	}
 
 	out.Reset()
@@ -127,6 +135,40 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest), `"self_tag": "sample-v1"`) || !strings.Contains(string(manifest), `"tag"`) {
 		t.Fatalf("hatch manifest did not include tag metadata: %s", string(manifest))
+	}
+}
+
+func TestGoRuntimeHatchManifestUsesInterfaceFile(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "make a custom interface package", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if err := writeJSONFile(filepath.Join(dir, "interface.yaml"), map[string]any{"commands": []any{"review"}}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "custom", "--portable"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	manifestData, err := os.ReadFile(filepath.Join(strings.TrimSpace(out.String()), "feng-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest HatchManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	commands, _ := manifest.Interface["commands"].([]any)
+	if len(commands) != 1 || commands[0] != "review" {
+		t.Fatalf("hatch manifest did not use interface.yaml: %+v", manifest.Interface)
 	}
 }
 

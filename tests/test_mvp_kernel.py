@@ -51,6 +51,9 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((work / ".feng" / "state.yaml").exists())
             self.assertTrue((work / "skills" / "README.md").exists())
             self.assertTrue((work / ".gitignore").exists())
+            interface = json.loads((work / "interface.yaml").read_text(encoding="utf-8"))
+            self.assertIn("grow", interface["commands"])
+            self.assertIn("hatch", interface["commands"])
             (work / "tools" / "hello.tool.yaml").write_text(
                 json.dumps(
                     {
@@ -140,6 +143,23 @@ class MvpKernelTest(unittest.TestCase):
             for path in (work / ".feng").rglob("*"):
                 if path.is_file():
                     self.assertNotIn(secret_like, path.read_text(encoding="utf-8", errors="replace"))
+
+    def test_check_rejects_invalid_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed invalid interface", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            (work / "interface.yaml").write_text(json.dumps({"commands": [""]}), encoding="utf-8")
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 1)
+            self.assertIn("interface.yaml command 0 is empty", check.stdout)
 
     def test_active_tool_pack_selects_relevant_self_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -373,6 +393,8 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((package / "sample.py").exists())
             self.assertTrue((package / "self" / "identity.md").exists())
             self.assertEqual((package / "self" / "docs" / "design.md").read_text(encoding="utf-8"), "portable design notes\n")
+            manifest = json.loads((package / "feng-release.yaml").read_text(encoding="utf-8"))
+            self.assertIn("grow", manifest["interface"]["commands"])
             self.assertIn("anthropic_messages", (package / "provider-examples" / "deepseek-anthropic.yaml").read_text(encoding="utf-8"))
 
             user_work = Path(tmp) / "user"

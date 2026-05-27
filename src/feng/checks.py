@@ -38,6 +38,28 @@ def _check_jsonish(workspace: Path, problems: list[str]) -> None:
             problems.append(str(exc))
 
 
+def _check_interface(workspace: Path, problems: list[str]) -> None:
+    try:
+        config = read_jsonish(workspace / "interface.yaml", {}) or {}
+    except FengError as exc:
+        problems.append(f"interface parse failed: {exc}")
+        return
+    commands = config.get("commands")
+    if not isinstance(commands, list) or not commands:
+        problems.append("interface.yaml commands must be a non-empty list")
+        return
+    for index, command in enumerate(commands):
+        if isinstance(command, str):
+            if not command.strip():
+                problems.append(f"interface.yaml command {index} is empty")
+            continue
+        if isinstance(command, dict):
+            if not str(command.get("name", "")).strip():
+                problems.append(f"interface.yaml command {index} missing name")
+            continue
+        problems.append(f"interface.yaml command {index} must be a string or object")
+
+
 def _check_no_secrets(workspace: Path, problems: list[str]) -> None:
     roots = [
         *[workspace / name for name in SELF_FILES],
@@ -204,6 +226,7 @@ def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
     save_state(workspace, state)
     _check_required_files(workspace, problems)
     _check_jsonish(workspace, problems)
+    _check_interface(workspace, problems)
     _check_no_secrets(workspace, problems)
     _check_no_special_runtime(workspace, problems)
     _check_tool_files(workspace, problems)

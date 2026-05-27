@@ -353,6 +353,24 @@ func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsInvalidInterface(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "bad interface test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "interface.yaml"), map[string]any{"commands": []any{""}}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject invalid interface")
+	}
+	if !containsProblem(report.Problems, "interface.yaml command 0 is empty") {
+		t.Fatalf("expected invalid interface problem, got %+v", report.Problems)
+	}
+}
+
 func TestCheckScansPackagedSourceRootsForSecrets(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "secret scan roots test", ""); err != nil {

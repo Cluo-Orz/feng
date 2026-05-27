@@ -152,6 +152,10 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err := writeProviderExample(output); err != nil {
 		return "", err
 	}
+	interfaceConfig, err := loadInterfaceConfig(workspace)
+	if err != nil {
+		return "", err
+	}
 	manifest := HatchManifest{
 		Name:                     cleanName,
 		Portable:                 portable,
@@ -161,10 +165,8 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		RequiredProviderProfiles: []string{"deepseek"},
 		RequiredEnv:              []string{"DEEPSEEK_API_KEY"},
 		Entrypoints:              entrypoints,
-		Interface: map[string]any{
-			"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag"},
-		},
-		Excludes: []string{"API keys", "local provider profile", ".feng/cache", ".feng/runs", "unvalidated candidate"},
+		Interface:                interfaceConfig,
+		Excludes:                 []string{"API keys", "local provider profile", ".feng/cache", ".feng/runs", "unvalidated candidate"},
 	}
 	if err := writeJSONFile(filepath.Join(output, "feng-release.yaml"), manifest); err != nil {
 		return "", err

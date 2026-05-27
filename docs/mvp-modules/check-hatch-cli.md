@@ -7,6 +7,7 @@ check 只回答：
 ```text
 self 能不能加载
 schema 能不能解析
+interface.yaml 是否声明了非空 commands
 tool/permission 是否可用
 message compiler 是否可编译
 provider profile 是否配置正确
@@ -51,6 +52,8 @@ named entry command
 如果 hatch 输出路径位于当前 workspace 内，必须落在 `dist/` 下；workspace 外的显式输出路径可以使用。这样 hatch 可以清理自己的 package 目录，但不能误删 `docs/`、`skills/`、`tools/` 或其他 candidate 内容。
 
 hatch 只能覆盖空目录或已有 feng package 目录；如果目标目录已有普通用户内容且没有 package manifest/marker，必须拒绝覆盖。
+
+hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts。
 
 产品级 hatch 的 runner 目标是 Go binary。Python runner 只作为当前行为原型存在，不能成为长期使用者体验的前提。
 
