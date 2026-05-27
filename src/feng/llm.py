@@ -13,9 +13,10 @@ from .utils import read_jsonish
 
 
 class LLMError(RuntimeError):
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, partial: dict[str, Any] | None = None):
         super().__init__(message)
         self.kind = kind
+        self.partial = partial
 
 
 @dataclass
@@ -164,7 +165,9 @@ def call_openai_chat(
         raise _normalize_http_error(exc) from exc
     except urllib.error.URLError as exc:
         raise LLMError("transient", str(exc)) from exc
-    _raise_if_openai_output_truncated(raw)
+    reason = _openai_output_truncation_reason(raw)
+    if reason:
+        raise LLMError("output_truncated", f"provider stopped because finish_reason={reason}", partial=raw)
     return raw
 
 
@@ -258,18 +261,26 @@ def call_anthropic_messages(
         raise _normalize_http_error(exc) from exc
     except urllib.error.URLError as exc:
         raise LLMError("transient", str(exc)) from exc
+    converted = _openai_like_from_anthropic(raw)
     if raw.get("stop_reason") == "max_tokens":
-        raise LLMError("output_truncated", "provider stopped because stop_reason=max_tokens")
-    return _openai_like_from_anthropic(raw)
+        raise LLMError("output_truncated", "provider stopped because stop_reason=max_tokens", partial=converted)
+    return converted
 
 
 def _raise_if_openai_output_truncated(response: dict[str, Any]) -> None:
+    reason = _openai_output_truncation_reason(response)
+    if reason:
+        raise LLMError("output_truncated", f"provider stopped because finish_reason={reason}", partial=response)
+
+
+def _openai_output_truncation_reason(response: dict[str, Any]) -> str:
     choices = response.get("choices") or []
     if not choices:
-        return
+        return ""
     reason = str(choices[0].get("finish_reason") or "").strip().lower()
     if reason in {"length", "max_tokens"}:
-        raise LLMError("output_truncated", f"provider stopped because finish_reason={reason}")
+        return reason
+    return ""
 
 
 def _openai_like_from_anthropic(response: dict[str, Any]) -> dict[str, Any]:
@@ -322,6 +333,7 @@ def call_llm(
     if profile.protocol not in {"openai_chat", "anthropic_messages"}:
         raise LLMError("request_error", f"unsupported protocol in MVP: {profile.protocol}")
     last: LLMError | None = None
+    recovered_truncation = False
     for attempt in range(retries):
         try:
             if profile.protocol == "anthropic_messages":
@@ -329,11 +341,33 @@ def call_llm(
             return call_openai_chat(profile, messages, tool_schemas)
         except LLMError as exc:
             last = exc
+            if exc.kind == "output_truncated" and not recovered_truncation:
+                messages = _messages_with_output_continuation(messages, exc)
+                recovered_truncation = True
+                continue
             if exc.kind != "transient":
                 raise
             time.sleep(min(2**attempt, 8))
     assert last is not None
     raise last
+
+
+def _messages_with_output_continuation(messages: list[dict[str, Any]], exc: LLMError) -> list[dict[str, Any]]:
+    recovered = [dict(message) for message in messages]
+    if exc.partial:
+        assistant = extract_assistant_message(exc.partial)
+        if str(assistant.get("content", "")).strip() and not assistant.get("tool_calls"):
+            recovered.append(assistant)
+    recovered.append(
+        {
+            "role": "user",
+            "content": (
+                "The provider truncated the previous assistant output. Continue from the last complete point. "
+                "Be concise, prefer valid tool calls when action is needed, and do not repeat already completed text."
+            ),
+        }
+    )
+    return recovered
 
 
 def extract_assistant_message(response: dict[str, Any]) -> dict[str, Any]:

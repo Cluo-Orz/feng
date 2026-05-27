@@ -286,9 +286,26 @@ func TestGrowRunsAnthropicToolCallLoop(t *testing.T) {
 	}
 }
 
-func TestGrowBlocksOnOpenAIOutputTruncation(t *testing.T) {
+func TestGrowRecoversFromOpenAIOutputTruncation(t *testing.T) {
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeChatResponseWithFinishReason(w, map[string]any{"role": "assistant", "content": "partial"}, "length")
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requestNumber := requests.Add(1)
+		if requestNumber == 1 {
+			writeChatResponseWithFinishReason(w, map[string]any{"role": "assistant", "content": "partial"}, "length")
+			return
+		}
+		if !strings.Contains(request.Messages[len(request.Messages)-1].Content, "truncated") {
+			t.Errorf("retry did not ask for continuation: %+v", request.Messages)
+			http.Error(w, "missing continuation", http.StatusBadRequest)
+			return
+		}
+		writeChatResponseWithFinishReason(w, map[string]any{"role": "assistant", "content": "done"}, "stop")
 	}))
 	defer server.Close()
 
@@ -301,26 +318,44 @@ func TestGrowBlocksOnOpenAIOutputTruncation(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := Run([]string{"grow", "trigger truncation", "--max-turns", "1"}, dir, &out, &errOut)
-	if code != 1 {
+	if code != 0 {
 		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
-	if !strings.Contains(out.String(), "output_truncated") {
-		t.Fatalf("grow did not report output_truncated: %s", out.String())
+	if !strings.Contains(out.String(), `"ok": true`) {
+		t.Fatalf("grow did not recover from output truncation: %s", out.String())
 	}
 	state, err := loadState(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Mode != "blocked" || state.LastRecovery["type"] != "output_truncated" {
-		t.Fatalf("output truncation was not recorded as blocked recovery: %+v", state)
+	if state.Mode != "ready" || state.LastRecovery["type"] != "" {
+		t.Fatalf("recovered output truncation should leave ready state: %+v", state)
 	}
-	if !artifactTypeExists(dir, "provider-error") {
-		t.Fatalf("provider-error artifact missing: %+v", listArtifacts(dir))
+	if !eventTypeExists(dir, "provider_recovered") {
+		t.Fatalf("provider_recovered event missing: %+v", tailEvents(dir, 20))
 	}
 }
 
-func TestGrowBlocksOnAnthropicOutputTruncation(t *testing.T) {
+func TestGrowRecoversFromAnthropicOutputTruncation(t *testing.T) {
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestNumber := requests.Add(1)
+		if requestNumber > 1 {
+			var request anthropicRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode request: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			last := request.Messages[len(request.Messages)-1]
+			if len(last.Content) == 0 || !strings.Contains(last.Content[len(last.Content)-1].Text, "truncated") {
+				t.Errorf("retry did not ask for continuation: %+v", request.Messages)
+				http.Error(w, "missing continuation", http.StatusBadRequest)
+				return
+			}
+			writeAnthropicResponse(w, []map[string]any{{"type": "text", "text": "done"}}, nil)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"type":        "message",
@@ -348,11 +383,11 @@ func TestGrowBlocksOnAnthropicOutputTruncation(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := Run([]string{"grow", "trigger anthropic truncation", "--max-turns", "1"}, dir, &out, &errOut)
-	if code != 1 {
+	if code != 0 {
 		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
-	if !strings.Contains(out.String(), "output_truncated") {
-		t.Fatalf("grow did not report output_truncated: %s", out.String())
+	if !strings.Contains(out.String(), `"ok": true`) {
+		t.Fatalf("grow did not recover from anthropic output truncation: %s", out.String())
 	}
 }
 
@@ -371,6 +406,15 @@ func anthropicRequestHasToolResult(request anthropicRequest, toolUseID string) b
 			if block.Type == "tool_result" && block.ToolUseID == toolUseID {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func eventTypeExists(workspace, eventType string) bool {
+	for _, event := range tailEvents(workspace, 20) {
+		if event.Type == eventType {
+			return true
 		}
 	}
 	return false

@@ -24,6 +24,7 @@ type ProviderProfile struct {
 type LLMError struct {
 	Kind    string
 	Message string
+	Partial *AssistantTurn
 }
 
 func (e LLMError) Error() string {
@@ -328,18 +329,15 @@ func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map
 		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "provider response has no choices"}
 	}
 	choice := parsed.Choices[0]
-	if isOpenAIOutputTruncated(choice.FinishReason) {
-		return AssistantTurn{}, LLMError{Kind: "output_truncated", Message: "provider stopped because finish_reason=" + choice.FinishReason}
-	}
 	message := choice.Message
 	turn := AssistantTurn{ToolCalls: message.ToolCalls, Usage: normalizeUsage(parsed.Usage)}
 	if strings.TrimSpace(message.Content) != "" {
 		turn.Content = message.Content
-		return turn, nil
-	}
-	if strings.TrimSpace(message.ReasoningContent) != "" {
+	} else if strings.TrimSpace(message.ReasoningContent) != "" {
 		turn.Content = message.ReasoningContent
-		return turn, nil
+	}
+	if isOpenAIOutputTruncated(choice.FinishReason) {
+		return AssistantTurn{}, LLMError{Kind: "output_truncated", Message: "provider stopped because finish_reason=" + choice.FinishReason, Partial: &turn}
 	}
 	return turn, nil
 }
@@ -387,9 +385,6 @@ func callAnthropicMessages(profile ProviderProfile, messages []chatMessage, tool
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "invalid provider response: " + err.Error()}
 	}
-	if parsed.StopReason == "max_tokens" {
-		return AssistantTurn{}, LLMError{Kind: "output_truncated", Message: "provider stopped because stop_reason=max_tokens"}
-	}
 	turn := AssistantTurn{Usage: normalizeAnthropicUsage(parsed.Usage)}
 	var text []string
 	for _, block := range parsed.Content {
@@ -414,6 +409,9 @@ func callAnthropicMessages(profile ProviderProfile, messages []chatMessage, tool
 		}
 	}
 	turn.Content = strings.Join(text, "\n")
+	if parsed.StopReason == "max_tokens" {
+		return AssistantTurn{}, LLMError{Kind: "output_truncated", Message: "provider stopped because stop_reason=max_tokens", Partial: &turn}
+	}
 	return turn, nil
 }
 

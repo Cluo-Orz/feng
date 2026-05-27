@@ -35,6 +35,22 @@ func callProviderWithRecovery(workspace string, profile ProviderProfile, message
 			}
 			return AssistantTurn{}, messages, retryErr
 		}
+		if llmErr.Kind == "output_truncated" {
+			recoveredMessages := messagesWithOutputContinuation(messages, llmErr)
+			appendEvent(workspace, "provider_recovery", map[string]any{
+				"reason":        "output_truncated",
+				"before_tokens": estimateMessageTokens(messages),
+				"after_tokens":  estimateMessageTokens(recoveredMessages),
+			})
+			turn, retryErr := callProvider(profile, recoveredMessages, tools)
+			if retryErr == nil {
+				appendEvent(workspace, "provider_recovered", map[string]any{
+					"reason": "output_truncated",
+				})
+				return turn, recoveredMessages, nil
+			}
+			return AssistantTurn{}, recoveredMessages, retryErr
+		}
 		if llmErr.Kind != "transient" || attempt+1 >= attempts {
 			return AssistantTurn{}, messages, err
 		}
@@ -47,6 +63,20 @@ func callProviderWithRecovery(workspace string, profile ProviderProfile, message
 		time.Sleep(providerRetryDelay())
 	}
 	return AssistantTurn{}, messages, lastErr
+}
+
+func messagesWithOutputContinuation(messages []chatMessage, llmErr LLMError) []chatMessage {
+	recovered := make([]chatMessage, 0, len(messages)+2)
+	recovered = append(recovered, messages...)
+	if llmErr.Partial != nil && strings.TrimSpace(llmErr.Partial.Content) != "" && len(llmErr.Partial.ToolCalls) == 0 {
+		recovered = append(recovered, chatMessage{Role: "assistant", Content: llmErr.Partial.Content})
+	}
+	recovered = append(recovered, chatMessage{
+		Role: "user",
+		Content: "The provider truncated the previous assistant output. Continue from the last complete point. " +
+			"Be concise, prefer valid tool calls when action is needed, and do not repeat already completed text.",
+	})
+	return recovered
 }
 
 func compactMessagesForBudget(workspace string, messages []chatMessage, toolSchemas []map[string]any) ([]chatMessage, bool) {

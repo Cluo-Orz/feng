@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +18,7 @@ TEST_FENG_HOME = Path(tempfile.mkdtemp(prefix="feng-test-home-"))
 ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "FENG_HOME": str(TEST_FENG_HOME)}
 
 from feng.permissions import check_command, check_file_write
-from feng.llm import LLMError, _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, _raise_if_openai_output_truncated, load_provider_profile
+from feng.llm import LLMError, _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, _raise_if_openai_output_truncated, call_llm, load_provider_profile
 from feng.lock import acquire_workspace_lock
 from feng.events import append_event, tail_events
 from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
@@ -433,6 +434,29 @@ class MvpKernelTest(unittest.TestCase):
         with self.assertRaises(LLMError) as raised:
             _raise_if_openai_output_truncated({"choices": [{"finish_reason": "length"}]})
         self.assertEqual(raised.exception.kind, "output_truncated")
+
+    def test_call_llm_retries_once_after_output_truncation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            seen: list[list[dict[str, Any]]] = []
+
+            def fake_call(_profile: Any, messages: list[dict[str, Any]], _tools: list[dict[str, Any]]) -> dict[str, Any]:
+                seen.append(messages)
+                if len(seen) == 1:
+                    raise LLMError(
+                        "output_truncated",
+                        "provider stopped because finish_reason=length",
+                        partial={"choices": [{"message": {"role": "assistant", "content": "partial"}}]},
+                    )
+                return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
+
+            with patch("feng.llm.call_openai_chat", side_effect=fake_call):
+                response = call_llm(work, [{"role": "user", "content": "start"}], [], retries=2)
+
+            self.assertEqual(response["choices"][0]["message"]["content"], "done")
+            self.assertEqual(len(seen), 2)
+            self.assertEqual(seen[1][-2]["content"], "partial")
+            self.assertIn("truncated", seen[1][-1]["content"])
 
     def test_provider_profile_can_load_from_feng_home(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
