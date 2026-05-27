@@ -17,6 +17,14 @@ type Permissions struct {
 	} `json:"commands"`
 }
 
+var builtInDeniedCommands = []string{
+	"git reset --hard",
+	"git push",
+	"rm -rf",
+	"remove-item -recurse",
+	"del /s",
+}
+
 func loadPermissions(workspace string) Permissions {
 	var permissions Permissions
 	data, err := readJSONFile(filepath.Join(workspace, "permissions.yaml"))
@@ -64,9 +72,14 @@ func checkFileWrite(workspace, rawPath string) (string, error) {
 
 func checkCommand(workspace, command string) error {
 	permissions := loadPermissions(workspace)
-	lowered := strings.ToLower(command)
+	lowered := normalizedCommand(command)
+	for _, pattern := range builtInDeniedCommands {
+		if strings.Contains(lowered, normalizedCommand(pattern)) {
+			return permissionDenied(workspace, "run_command", command, "command denied by built-in rule: "+pattern, "dangerous command matched built-in deny rule")
+		}
+	}
 	for _, pattern := range permissions.Commands.Deny {
-		if strings.Contains(lowered, strings.ToLower(pattern)) {
+		if strings.Contains(lowered, normalizedCommand(pattern)) {
 			return permissionDenied(workspace, "run_command", command, "command denied by rule: "+pattern, "dangerous command matched deny rule")
 		}
 	}
@@ -79,6 +92,10 @@ func checkCommand(workspace, command string) error {
 		}
 	}
 	return permissionDenied(workspace, "run_command", command, "command is not in allow list: "+command, "command did not match permissions.yaml allow list")
+}
+
+func normalizedCommand(command string) string {
+	return strings.Join(strings.Fields(strings.ToLower(command)), " ")
 }
 
 func permissionDenied(workspace, source, attempted, message, whyRelevant string) error {

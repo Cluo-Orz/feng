@@ -155,6 +155,17 @@ class MvpKernelTest(unittest.TestCase):
                 self.assertTrue(str(path).endswith(rel.replace("/", os.sep)))
             for command in ["go test ./...", "go vet ./...", "go build ./cmd/feng"]:
                 check_command(work, command)
+            (work / "permissions.yaml").write_text(
+                json.dumps(
+                    {
+                        "files": {"read": ["**"], "write": ["**"]},
+                        "commands": {"allow": ["git"], "deny": []},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(Exception, "command denied by built-in rule"):
+                check_command(work, "git reset   --hard")
 
     def test_permission_denial_artifacts_are_redacted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,6 +10,15 @@ class PermissionDenied(FengError):
     pass
 
 
+BUILT_IN_DENIED_COMMANDS = [
+    "git reset --hard",
+    "git push",
+    "rm -rf",
+    "remove-item -recurse",
+    "del /s",
+]
+
+
 def load_permissions(workspace: Path) -> dict:
     return read_jsonish(workspace / "permissions.yaml", {}) or {}
 
@@ -44,12 +53,25 @@ def check_command(workspace: Path, command: str) -> None:
     perms = load_permissions(workspace).get("commands", {})
     deny = perms.get("deny", [])
     allow = perms.get("allow", [])
-    lowered = command.lower()
+    lowered = _normalized_command(command)
+    for pattern in BUILT_IN_DENIED_COMMANDS:
+        if _normalized_command(pattern) in lowered:
+            _deny(
+                workspace,
+                "run_command",
+                command,
+                f"command denied by built-in rule: {pattern}",
+                "dangerous command matched built-in deny rule",
+            )
     for pattern in deny:
-        if pattern.lower() in lowered:
+        if _normalized_command(str(pattern)) in lowered:
             _deny(workspace, "run_command", command, f"command denied by rule: {pattern}", "dangerous command matched deny rule")
     if allow and not any(command == item or command.startswith(f"{item} ") for item in allow):
         _deny(workspace, "run_command", command, f"command is not in allow list: {command}", "command did not match permissions.yaml allow list")
+
+
+def _normalized_command(command: str) -> str:
+    return " ".join(command.lower().split())
 
 
 def _deny(workspace: Path, source: str, attempted: str, message: str, why_relevant: str) -> None:

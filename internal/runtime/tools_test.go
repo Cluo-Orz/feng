@@ -67,8 +67,24 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	}
 
 	deniedCommand := executeTool(dir, tools, "run_command", map[string]any{"command": "git reset --hard"})
-	if !deniedCommand.IsError || !strings.Contains(deniedCommand.Content, "command denied by rule") {
+	if !deniedCommand.IsError || !strings.Contains(deniedCommand.Content, "command denied") {
 		t.Fatalf("expected command denial, got %+v", deniedCommand)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git"},
+			"deny":  []any{},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	deniedByBuiltInRule := executeTool(dir, tools, "run_command", map[string]any{"command": "git reset   --hard"})
+	if !deniedByBuiltInRule.IsError || !strings.Contains(deniedByBuiltInRule.Content, "command denied by built-in rule") {
+		t.Fatalf("expected built-in command denial, got %+v", deniedByBuiltInRule)
 	}
 
 	foundArtifact := false
