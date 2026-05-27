@@ -30,6 +30,8 @@ lock:
 
 Go runtime 和 Python 行为原型使用同一个 `.feng/lock` 文件格式。`grow`、`check`、`hatch` 这类会修改 workspace 的命令必须先拿锁；`status/watch/artifacts/gui` 只读命令不需要拿锁。
 
+`last_recovery` 表示当前需要用户或下一轮 grow 关注的最近恢复状态。成功的 grow 或 check 会清空它；`recovery_count` 保留为累计计数，避免 status/gui 在 ready 状态下继续展示旧错误。
+
 ## Events
 
 `.feng/events.jsonl` 是 append-only：

@@ -355,6 +355,7 @@ func runCheck(workspace string) CheckReport {
 		state.Mode = "ready"
 		state.CandidateStatus = "validated"
 		state.ValidatedCommit = report.ValidatedCommit
+		state.LastRecovery = emptyRecovery()
 	} else {
 		state.Mode = "blocked"
 		state.CandidateStatus = "failed"
@@ -531,10 +532,14 @@ func defaultState(goal string) State {
 			"estimated_input_tokens": 0,
 			"dynamic_suffix_tokens":  0,
 		},
-		LastRecovery:  map[string]string{"type": "", "artifact": ""},
+		LastRecovery:  emptyRecovery(),
 		LastArtifacts: []Artifact{},
 		Lock:          map[string]string{"owner": "", "heartbeat": ""},
 	}
+}
+
+func emptyRecovery() map[string]string {
+	return map[string]string{"type": "", "artifact": ""}
 }
 
 func loadState(workspace string) (State, error) {
@@ -552,7 +557,7 @@ func loadState(workspace string) (State, error) {
 		state.ContextBudget = defaultState("").ContextBudget
 	}
 	if state.LastRecovery == nil {
-		state.LastRecovery = defaultState("").LastRecovery
+		state.LastRecovery = emptyRecovery()
 	}
 	if state.Lock == nil {
 		state.Lock = defaultState("").Lock

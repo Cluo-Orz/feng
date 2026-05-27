@@ -52,6 +52,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 		if len(assistant.ToolCalls) == 0 {
 			state, _ := loadState(workspace)
 			state.Mode = "ready"
+			state.LastRecovery = emptyRecovery()
 			saveState(workspace, state)
 			appendEvent(workspace, "run_stopped", map[string]any{"turn": turn, "reason": "assistant_done"})
 			printJSON(stdout, map[string]any{"ok": true, "turns": turn + 1, "message": assistant.Content})

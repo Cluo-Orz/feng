@@ -306,6 +306,8 @@ def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
         state["validated_commit"] = report["validated_commit"]
     state["mode"] = "ready" if ok else "blocked"
     state["candidate_status"] = "validated" if ok else "failed"
+    if ok:
+        state["last_recovery"] = {"type": "", "artifact": ""}
     save_state(workspace, state)
     append_event(workspace, "check_passed" if ok else "check_failed", report)
     return report

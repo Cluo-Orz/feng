@@ -96,6 +96,8 @@ class MvpKernelTest(unittest.TestCase):
             status = run_feng(work, "status")
             self.assertEqual(status.returncode, 0, status.stderr)
             self.assertIn('"candidate_status": "validated"', status.stdout)
+            status_json = json.loads(status.stdout)
+            self.assertEqual(status_json["last_recovery"], {"type": "", "artifact": ""})
 
             tag = run_feng(work, "tag", "sample-v1")
             self.assertEqual(tag.returncode, 0, tag.stderr + tag.stdout)

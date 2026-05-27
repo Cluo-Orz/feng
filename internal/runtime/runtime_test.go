@@ -71,6 +71,13 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	if !strings.Contains(out.String(), `"validated_commit": "`) {
 		t.Fatalf("check did not report validated commit: %s", out.String())
 	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastRecovery["type"] != "" || state.LastRecovery["artifact"] != "" {
+		t.Fatalf("successful check should clear stale recovery state: %+v", state.LastRecovery)
+	}
 }
 
 func TestGoRuntimeCheckDoesNotCommitUnrelatedUntrackedFiles(t *testing.T) {

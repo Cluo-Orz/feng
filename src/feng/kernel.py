@@ -79,6 +79,7 @@ def grow(workspace: Path, goal: str, max_turns: int = 12) -> dict[str, Any]:
             if not calls:
                 state = load_state(workspace)
                 state["mode"] = "ready"
+                state["last_recovery"] = {"type": "", "artifact": ""}
                 save_state(workspace, state)
                 append_event(workspace, "run_stopped", {"turn": turn, "reason": "assistant_done"})
                 return {"ok": True, "turns": turn + 1, "message": assistant.get("content", "")}
