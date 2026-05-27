@@ -49,10 +49,18 @@ func TestGrowRunsOpenAIToolCallLoop(t *testing.T) {
 				http.Error(w, "bad tool result", http.StatusBadRequest)
 				return
 			}
-			writeChatResponse(w, map[string]any{
-				"role":    "assistant",
-				"content": "done",
-			})
+			writeChatResponseWithUsage(
+				w,
+				map[string]any{
+					"role":    "assistant",
+					"content": "done",
+				},
+				map[string]any{
+					"prompt_tokens":           120,
+					"completion_tokens":       12,
+					"prompt_cache_hit_tokens": 80,
+				},
+			)
 			return
 		}
 		writeChatResponse(w, map[string]any{
@@ -102,6 +110,9 @@ func TestGrowRunsOpenAIToolCallLoop(t *testing.T) {
 	}
 	if state.ContextBudget["estimated_input_tokens"] == 0 || state.ActiveToolPackHash == "" {
 		t.Fatalf("context metrics were not recorded: %+v", state)
+	}
+	if state.ContextBudget["last_prompt_cache_hit_tokens"] != 80 {
+		t.Fatalf("openai-compatible cache usage was not recorded: %+v", state.ContextBudget)
 	}
 	if !messageCompiledSelectedTool(dir, "write_file") {
 		t.Fatalf("message_compiled event did not expose selected tools: %+v", tailEvents(dir, 20))
