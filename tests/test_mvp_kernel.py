@@ -19,6 +19,7 @@ ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "FENG_HOME": str(TEST_FENG
 from feng.permissions import check_command, check_file_write
 from feng.llm import LLMError, _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, _raise_if_openai_output_truncated, load_provider_profile
 from feng.lock import acquire_workspace_lock
+from feng.events import append_event, tail_events
 from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
 
 
@@ -530,6 +531,24 @@ class MvpKernelTest(unittest.TestCase):
             self.assertIn('"provider_config_paths"', status.stdout)
             self.assertIn('"provider_examples"', status.stdout)
             self.assertIn('"suggested_provider_profile"', status.stdout)
+
+    def test_event_ids_are_unique_for_observability(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed events", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            first = append_event(work, "unit_event", {"n": 1})
+            second = append_event(work, "unit_event", {"n": 2})
+            self.assertNotEqual(first["id"], second["id"])
+            events = tail_events(work, 2)
+            self.assertEqual(len({event["id"] for event in events}), 2)
 
     def test_bootstrap_is_not_a_public_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

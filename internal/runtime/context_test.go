@@ -153,6 +153,22 @@ func TestAppendEventUpdatesObservableLastEventID(t *testing.T) {
 	}
 }
 
+func TestAppendEventUsesUniqueObservableIDs(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "event id test", ""); err != nil {
+		t.Fatal(err)
+	}
+	first := appendEvent(dir, "unit_event", map[string]any{"n": 1})
+	second := appendEvent(dir, "unit_event", map[string]any{"n": 2})
+	if first.ID == second.ID {
+		t.Fatalf("rapid events reused id: %s", first.ID)
+	}
+	events := tailEvents(dir, 2)
+	if len(events) != 2 || events[0].ID == events[1].ID {
+		t.Fatalf("tail events did not preserve unique ids: %+v", events)
+	}
+}
+
 func parseStateManifest(t *testing.T, content string) map[string]any {
 	t.Helper()
 	raw := strings.TrimPrefix(content, "state manifest:\n")

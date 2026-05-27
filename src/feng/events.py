@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
 from typing import Any
 
 from .utils import ensure_dir, redact_secret_value, utc_ms
+
+_EVENT_SEQUENCE = itertools.count(1)
 
 
 def events_path(workspace: Path) -> Path:
@@ -12,9 +15,10 @@ def events_path(workspace: Path) -> Path:
 
 
 def append_event(workspace: Path, event_type: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    ts = utc_ms()
     event = {
-        "id": f"evt_{utc_ms()}",
-        "ts": utc_ms(),
+        "id": f"evt_{ts}_{next(_EVENT_SEQUENCE):06d}",
+        "ts": ts,
         "type": event_type,
         "data": redact_secret_value(data or {}),
     }

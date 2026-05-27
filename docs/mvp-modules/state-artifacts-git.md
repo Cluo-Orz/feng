@@ -51,6 +51,8 @@ hatch_created
 blocked
 ```
 
+每条 event 必须有唯一 `id`，用于 `status/watch/gui` 把 running、progress 和 artifact 变化串起来。MVP 使用时间戳加进程内序号即可，不需要引入外部事件系统。
+
 ## Artifacts
 
 大内容写入 `.feng/artifacts/`：

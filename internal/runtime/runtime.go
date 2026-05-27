@@ -16,12 +16,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 const stateVersion = 1
 
 var (
+	eventSequence atomic.Uint64
+
 	selfFiles = map[string]any{
 		"identity.md": "This is a feng self.\n\nIt starts without project-specific skills. Stable capabilities must grow through candidate files and pass check before becoming validated self.\n",
 		"goal.md":     "",
@@ -590,8 +593,9 @@ func saveState(workspace string, state State) error {
 
 func appendEvent(workspace, eventType string, data map[string]any) Event {
 	ts := time.Now().UnixMilli()
+	sequence := eventSequence.Add(1)
 	data = redactEventData(data)
-	event := Event{ID: fmt.Sprintf("evt_%d", ts), TS: ts, Type: eventType, Data: data}
+	event := Event{ID: fmt.Sprintf("evt_%d_%06d", ts, sequence), TS: ts, Type: eventType, Data: data}
 	path := filepath.Join(workspace, ".feng", "events.jsonl")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
