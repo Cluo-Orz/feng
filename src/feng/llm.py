@@ -43,9 +43,9 @@ def load_provider_profile(workspace: Path) -> ProviderProfile:
     if explicit:
         candidates.append(Path(explicit))
     candidates.extend([workspace / ".feng" / "provider.yaml", workspace / ".feng" / "provider.json"])
-    feng_home = os.environ.get("FENG_HOME", "").strip()
-    if feng_home:
-        candidates.extend([Path(feng_home) / "provider.yaml", Path(feng_home) / "provider.json"])
+    feng_home = provider_home_dir()
+    if feng_home is not None:
+        candidates.extend([feng_home / "provider.yaml", feng_home / "provider.json"])
     for path in candidates:
         if path.exists():
             data = read_jsonish(path, {})
@@ -57,6 +57,16 @@ def load_provider_profile(workspace: Path) -> ProviderProfile:
                 default_model=data.get("default_model", data.get("model", "")),
             ))
     return _apply_provider_env_overrides(default_deepseek_profile())
+
+
+def provider_home_dir() -> Path | None:
+    raw = os.environ.get("FENG_HOME", "").strip()
+    if raw:
+        return Path(raw)
+    try:
+        return Path.home() / ".feng"
+    except RuntimeError:
+        return None
 
 
 def _apply_provider_env_overrides(profile: ProviderProfile) -> ProviderProfile:

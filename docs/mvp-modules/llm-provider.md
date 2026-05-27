@@ -47,10 +47,11 @@ default_model: deepseek-chat
 FENG_PROVIDER_CONFIG
 workspace/.feng/provider.yaml|json
 FENG_HOME/provider.yaml|json
+~/.feng/provider.yaml|json
 default deepseek profile
 ```
 
-`FENG_HOME` 是用户级配置目录，用来让 hatch 出来的命名命令在任意 workspace 复用同一份本机 provider profile。
+用户级配置目录用来让 hatch 出来的命名命令在任意 workspace 复用同一份本机 provider profile；`FENG_HOME` 可覆盖默认 `~/.feng`。
 
 ## Recovery
 

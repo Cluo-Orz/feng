@@ -70,6 +70,35 @@ func TestLoadProviderProfileFromFengHome(t *testing.T) {
 	}
 }
 
+func TestLoadProviderProfileFromDefaultUserHome(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "provider default home test", ""); err != nil {
+		t.Fatal(err)
+	}
+	userHome := t.TempDir()
+	t.Setenv("FENG_HOME", "")
+	t.Setenv("HOME", userHome)
+	t.Setenv("USERPROFILE", userHome)
+	providerDir := filepath.Join(userHome, ".feng")
+	if err := writeJSONFile(filepath.Join(providerDir, "provider.yaml"), map[string]any{
+		"id":            "default-home",
+		"protocol":      "openai_chat",
+		"base_url":      "http://127.0.0.1:6666",
+		"api_key_env":   "DEFAULT_HOME_LLM_KEY",
+		"default_model": "default-home-model",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	profile, err := loadProviderProfile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.ID != "default-home" || profile.APIKeyEnv != "DEFAULT_HOME_LLM_KEY" || profile.Model != "default-home-model" {
+		t.Fatalf("unexpected provider profile from default user home: %+v", profile)
+	}
+}
+
 func TestProviderProfileEnvOverrides(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "provider override test", ""); err != nil {

@@ -161,13 +161,24 @@ func providerProfileCandidates(workspace string) []string {
 		filepath.Join(workspace, ".feng", "provider.yaml"),
 		filepath.Join(workspace, ".feng", "provider.json"),
 	)
-	if root := strings.TrimSpace(os.Getenv("FENG_HOME")); root != "" {
+	if root := providerHomeDir(); root != "" {
 		candidates = append(candidates,
 			filepath.Join(root, "provider.yaml"),
 			filepath.Join(root, "provider.json"),
 		)
 	}
 	return candidates
+}
+
+func providerHomeDir() string {
+	if root := strings.TrimSpace(os.Getenv("FENG_HOME")); root != "" {
+		return root
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	return filepath.Join(home, ".feng")
 }
 
 func applyProviderEnvOverrides(profile ProviderProfile) ProviderProfile {
