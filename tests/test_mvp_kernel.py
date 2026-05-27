@@ -166,6 +166,8 @@ class MvpKernelTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(Exception, "command denied by built-in rule"):
                 check_command(work, "git reset   --hard")
+            with self.assertRaisesRegex(Exception, "writing .feng is denied"):
+                check_file_write(work, ".feng/state.yaml")
 
     def test_permission_denial_artifacts_are_redacted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

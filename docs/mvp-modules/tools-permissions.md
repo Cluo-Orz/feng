@@ -73,12 +73,12 @@ artifact logging on deny
 
 permission deny 必须生成 `permission-denied` artifact 和 `tool_denied` event；tool result、event、artifact、check report 和 stdout/stderr 写入前先做 secret-like redaction，避免把 API key 变成恢复材料。
 
-`permissions.yaml` 可以收窄或扩展普通 allow/deny 规则，但不能关闭 runtime 的内建危险命令 deny。`git reset --hard`、`git push`、`rm -rf`、`Remove-Item -Recurse`、`del /s` 这类破坏性命令必须始终被拒绝。
+`permissions.yaml` 可以收窄或扩展普通 allow/deny 规则，但不能关闭 runtime 的内建边界。`.git/` 和 `.feng/` 是 kernel-owned 路径，工具不能直接写入；`git reset --hard`、`git push`、`rm -rf`、`Remove-Item -Recurse`、`del /s` 这类破坏性命令也必须始终被拒绝。
 
 ## 不变量
 
 ```text
-LLM 不能通过 run_command 任意 git reset/push/delete。
+LLM 不能通过 write_file 直接改 .git/.feng，也不能通过 run_command 任意 git reset/push/delete。
 Git validated commit/tag 由 kernel 在 check/hatch 后推进。
 GUI 不提供 CLI 没有的工具能力。
 工具长说明留在 tools/ 文件，active schema 保持短。

@@ -61,6 +61,14 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 		t.Fatalf("expected .git write denial, got %+v", gitWrite)
 	}
 
+	fengWrite := executeTool(dir, tools, "write_file", map[string]any{
+		"path":    ".feng/state.yaml",
+		"content": "{}",
+	})
+	if !fengWrite.IsError || !strings.Contains(fengWrite.Content, "writing .feng is denied") {
+		t.Fatalf("expected .feng write denial, got %+v", fengWrite)
+	}
+
 	outsideRead := executeTool(dir, tools, "read_file", map[string]any{"path": "../outside.txt"})
 	if !outsideRead.IsError || !strings.Contains(outsideRead.Content, "path escapes workspace") {
 		t.Fatalf("expected escaped path denial, got %+v", outsideRead)
@@ -85,6 +93,13 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	deniedByBuiltInRule := executeTool(dir, tools, "run_command", map[string]any{"command": "git reset   --hard"})
 	if !deniedByBuiltInRule.IsError || !strings.Contains(deniedByBuiltInRule.Content, "command denied by built-in rule") {
 		t.Fatalf("expected built-in command denial, got %+v", deniedByBuiltInRule)
+	}
+	deniedFengByBuiltInRule := executeTool(dir, tools, "write_file", map[string]any{
+		"path":    ".feng/state.yaml",
+		"content": "{}",
+	})
+	if !deniedFengByBuiltInRule.IsError || !strings.Contains(deniedFengByBuiltInRule.Content, "writing .feng is denied") {
+		t.Fatalf("expected built-in .feng write denial, got %+v", deniedFengByBuiltInRule)
 	}
 
 	foundArtifact := false

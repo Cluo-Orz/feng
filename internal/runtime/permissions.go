@@ -64,6 +64,9 @@ func checkFileWrite(workspace, rawPath string) (string, error) {
 	if rel == ".git" || strings.HasPrefix(rel, ".git/") {
 		return "", permissionDenied(workspace, "file_write", rel, "writing .git is denied", "runtime owns Git metadata; tools cannot write .git directly")
 	}
+	if rel == ".feng" || strings.HasPrefix(rel, ".feng/") {
+		return "", permissionDenied(workspace, "file_write", rel, "writing .feng is denied", "runtime owns .feng state/events/artifacts; tools cannot write .feng directly")
+	}
 	if !matchesAny(rel, loadPermissions(workspace).Files.Write) {
 		return "", permissionDenied(workspace, "file_write", rel, "file write denied: "+rel, "file write path did not match permissions.yaml")
 	}

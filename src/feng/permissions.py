@@ -43,6 +43,8 @@ def check_file_write(workspace: Path, raw_path: str) -> Path:
     rel = rel_path(workspace, target)
     if rel.startswith(".git/") or rel == ".git":
         _deny(workspace, "file_write", rel, "writing .git is denied", "runtime owns Git metadata; tools cannot write .git directly")
+    if rel.startswith(".feng/") or rel == ".feng":
+        _deny(workspace, "file_write", rel, "writing .feng is denied", "runtime owns .feng state/events/artifacts; tools cannot write .feng directly")
     patterns = load_permissions(workspace).get("files", {}).get("write", [])
     if not matches_any(rel, patterns):
         _deny(workspace, "file_write", rel, f"file write denied: {rel}", "file write path did not match permissions.yaml")
