@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -535,6 +536,7 @@ class MvpKernelTest(unittest.TestCase):
             docs = work / "docs"
             docs.mkdir(exist_ok=True)
             (docs / "design.md").write_text("portable design notes\n", encoding="utf-8")
+            (docs / "blob.bin").write_bytes(b"\x00feng-package-bytes\xff\n")
             source = work / "src" / "feng" / "cli.py"
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text("print('seed source')\n", encoding="utf-8")
@@ -552,6 +554,12 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((package / "sample.py").exists())
             self.assertTrue((package / "self" / "identity.md").exists())
             self.assertEqual((package / "self" / "docs" / "design.md").read_text(encoding="utf-8"), "portable design notes\n")
+            checksums = json.loads((package / "checksums.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                checksums["self/docs/blob.bin"],
+                hashlib.sha256((package / "self" / "docs" / "blob.bin").read_bytes()).hexdigest(),
+            )
+            self.assertNotIn("checksums.json", checksums)
             self.assertFalse((package / "self" / "outside-world" / "keep.txt").exists())
             self.assertEqual(git_stdout(work, "ls-files", "--", "outside-world/keep.txt").strip(), "")
             manifest = json.loads((package / "feng-release.yaml").read_text(encoding="utf-8"))

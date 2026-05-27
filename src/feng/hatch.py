@@ -8,7 +8,7 @@ from .artifacts import write_artifact
 from .events import append_event
 from .git_utils import SELF_GIT_ROOTS, current_head, self_status_short
 from .state import load_state
-from .utils import ensure_dir, read_jsonish, sha256_text, slugify, write_text
+from .utils import ensure_dir, read_jsonish, sha256_bytes, slugify, write_text
 
 
 SELF_NAMES = SELF_GIT_ROOTS
@@ -157,8 +157,9 @@ def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: boo
     write_text(output / "feng-release.yaml", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     checksums = {}
     for path in sorted(output.rglob("*")):
-        if path.is_file():
-            checksums[path.relative_to(output).as_posix()] = sha256_text(path.read_text(encoding="utf-8", errors="ignore"))
+        rel = path.relative_to(output).as_posix()
+        if path.is_file() and rel != "checksums.json":
+            checksums[rel] = sha256_bytes(path.read_bytes())
     write_text(output / "checksums.json", json.dumps(checksums, indent=2, sort_keys=True) + "\n")
     artifact = write_artifact(
         workspace,

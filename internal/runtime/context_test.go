@@ -118,6 +118,26 @@ func TestWorkspaceFileIndexPrioritizesSelfRootsOverUnrelatedNoise(t *testing.T) 
 	}
 }
 
+func TestGitContextDoesNotReportCleanStatusAsTruncated(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "clean git context test", ""); err != nil {
+		t.Fatal(err)
+	}
+	report := runCheck(dir)
+	if !report.OK {
+		t.Fatalf("check failed: %+v", report.Problems)
+	}
+
+	context := gitContext(dir)
+	if truncated, _ := context["status_truncated"].(bool); truncated {
+		t.Fatalf("clean git status was marked truncated: %+v", context)
+	}
+	statusLines, _ := context["status_short"].([]string)
+	if len(statusLines) != 0 {
+		t.Fatalf("clean git status should have no lines: %+v", context)
+	}
+}
+
 func TestAppendEventUpdatesObservableLastEventID(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "event state test", ""); err != nil {

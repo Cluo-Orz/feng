@@ -15,8 +15,16 @@ func gitContext(workspace string) map[string]any {
 	return map[string]any{
 		"head":             currentHead(workspace),
 		"status_short":     lines,
-		"status_truncated": len(strings.Split(strings.TrimSpace(status), "\n")) > len(lines),
+		"status_truncated": lineCount(status) > len(lines),
 	}
+}
+
+func lineCount(text string) int {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return 0
+	}
+	return len(strings.Split(trimmed, "\n"))
 }
 
 func workspaceFileIndex(workspace string, limit int) []string {
