@@ -578,10 +578,13 @@ func handleLLMError(workspace string, err error, stdout io.Writer) int {
 	state.LastArtifacts = []Artifact{artifact}
 	saveState(workspace, state)
 	appendEvent(workspace, "blocked", map[string]any{"reason": llmErr.Kind, "message": llmErr.Message})
-	printJSON(stdout, map[string]any{"ok": false, "reason": llmErr.Kind, "message": llmErr.Message})
+	response := map[string]any{"ok": false, "reason": llmErr.Kind, "message": llmErr.Message}
 	if llmErr.Kind == "missing_config" {
+		response["provider"] = providerStatus(workspace)
+		printJSON(stdout, response)
 		return 2
 	}
+	printJSON(stdout, response)
 	return 1
 }
 

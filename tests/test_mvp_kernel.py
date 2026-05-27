@@ -311,11 +311,17 @@ class MvpKernelTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn("missing_config", result.stdout)
+            self.assertIn('"provider_config_paths"', result.stdout)
+            self.assertIn('"provider_examples"', result.stdout)
+            self.assertIn('"required_env"', result.stdout)
             status = run_feng(work, "status")
             self.assertIn('"mode": "missing_config"', status.stdout)
             self.assertIn('"provider"', status.stdout)
             self.assertIn('"api_key_env": "DEEPSEEK_API_KEY"', status.stdout)
             self.assertIn('"missing_config": true', status.stdout)
+            self.assertIn('"provider_config_paths"', status.stdout)
+            self.assertIn('"provider_examples"', status.stdout)
+            self.assertIn('"suggested_provider_profile"', status.stdout)
 
     def test_bootstrap_is_not_a_public_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

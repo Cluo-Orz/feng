@@ -21,6 +21,11 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	if !strings.Contains(out.String(), "missing_config") {
 		t.Fatalf("grow did not report missing_config: %s", out.String())
 	}
+	if !strings.Contains(out.String(), `"provider_config_paths"`) ||
+		!strings.Contains(out.String(), `"provider_examples"`) ||
+		!strings.Contains(out.String(), `"required_env"`) {
+		t.Fatalf("grow did not expose provider setup hints: %s", out.String())
+	}
 	if _, err := os.Stat(filepath.Join(dir, ".feng", "state.yaml")); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +44,10 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"provider":`) ||
 		!strings.Contains(out.String(), `"api_key_env": "DEEPSEEK_API_KEY"`) ||
-		!strings.Contains(out.String(), `"missing_config": true`) {
+		!strings.Contains(out.String(), `"missing_config": true`) ||
+		!strings.Contains(out.String(), `"provider_config_paths"`) ||
+		!strings.Contains(out.String(), `"provider_examples"`) ||
+		!strings.Contains(out.String(), `"suggested_provider_profile"`) {
 		t.Fatalf("status did not expose provider configuration hint: %s", out.String())
 	}
 

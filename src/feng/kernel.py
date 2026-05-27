@@ -7,7 +7,7 @@ from typing import Any
 
 from .artifacts import write_artifact
 from .events import append_event
-from .llm import LLMError, call_llm, extract_assistant_message, normalize_tool_calls
+from .llm import LLMError, call_llm, extract_assistant_message, normalize_tool_calls, provider_status
 from .message_context import compile_messages
 from .self_repo import bootstrap
 from .state import load_state, save_state
@@ -43,7 +43,10 @@ def _handle_llm_error(workspace: Path, exc: LLMError) -> dict[str, Any]:
     state["last_artifacts"] = [artifact]
     save_state(workspace, state)
     append_event(workspace, "blocked", {"reason": exc.kind, "message": str(exc)})
-    return {"ok": False, "reason": exc.kind, "message": str(exc)}
+    response: dict[str, Any] = {"ok": False, "reason": exc.kind, "message": str(exc)}
+    if exc.kind == "missing_config":
+        response["provider"] = provider_status(workspace)
+    return response
 
 
 def grow(workspace: Path, goal: str, max_turns: int = 12) -> dict[str, Any]:

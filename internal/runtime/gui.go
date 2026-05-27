@@ -69,20 +69,67 @@ func writeGUIDashboard(workspace, outPath string) (string, error) {
 }
 
 func providerStatus(workspace string) map[string]any {
+	paths := providerProfileCandidates(workspace)
+	examples := providerExamplePaths()
 	profile, err := loadProviderProfile(workspace)
 	if err != nil {
-		return map[string]any{"ok": false, "error": err.Error()}
+		return map[string]any{
+			"ok":                    false,
+			"error":                 err.Error(),
+			"provider_config_paths": paths,
+			"provider_examples":     examples,
+		}
 	}
 	missing := os.Getenv(profile.APIKeyEnv) == ""
 	return map[string]any{
-		"ok":             !missing,
-		"id":             profile.ID,
-		"protocol":       profile.Protocol,
-		"base_url":       profile.BaseURL,
-		"api_key_env":    profile.APIKeyEnv,
-		"model":          profile.Model,
-		"missing_config": missing,
+		"ok":                    !missing,
+		"id":                    profile.ID,
+		"protocol":              profile.Protocol,
+		"base_url":              profile.BaseURL,
+		"api_key_env":           profile.APIKeyEnv,
+		"model":                 profile.Model,
+		"missing_config":        missing,
+		"required_env":          []string{profile.APIKeyEnv},
+		"provider_config_paths": paths,
+		"provider_examples":     examples,
+		"suggested_provider_profile": map[string]any{
+			"id":            profile.ID,
+			"protocol":      profile.Protocol,
+			"base_url":      profile.BaseURL,
+			"api_key_env":   profile.APIKeyEnv,
+			"default_model": profile.Model,
+		},
 	}
+}
+
+func providerExamplePaths() []string {
+	names := []string{
+		filepath.Join("provider-examples", "deepseek.yaml"),
+		filepath.Join("provider-examples", "deepseek-anthropic.yaml"),
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return slashPaths(names)
+	}
+	dir := filepath.Dir(exe)
+	var paths []string
+	for _, name := range names {
+		full := filepath.Join(dir, name)
+		if exists(full) {
+			paths = append(paths, filepath.ToSlash(full))
+		} else {
+			paths = append(paths, filepath.ToSlash(name))
+		}
+	}
+	return paths
+}
+
+func slashPaths(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		out = append(out, filepath.ToSlash(path))
+	}
+	return out
 }
 
 func renderGUIDashboard(state State, events []Event, artifacts []Artifact, provider map[string]any) string {

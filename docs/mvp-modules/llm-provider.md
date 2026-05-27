@@ -53,6 +53,17 @@ default deepseek profile
 
 用户级配置目录用来让 hatch 出来的命名命令在任意 workspace 复用同一份本机 provider profile；`FENG_HOME` 可覆盖默认 `~/.feng`。
 
+缺少 API key 或本机配置时，`grow/status` 必须输出：
+
+```text
+required_env
+provider_config_paths
+provider_examples
+suggested_provider_profile
+```
+
+这些提示只包含 env 名、路径和无 key 示例，不包含真实 API key。
+
 ## Recovery
 
 ```text

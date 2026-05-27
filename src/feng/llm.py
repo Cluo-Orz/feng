@@ -38,15 +38,7 @@ def default_deepseek_profile() -> ProviderProfile:
 
 
 def load_provider_profile(workspace: Path) -> ProviderProfile:
-    explicit = os.environ.get("FENG_PROVIDER_CONFIG")
-    candidates: list[Path] = []
-    if explicit:
-        candidates.append(Path(explicit))
-    candidates.extend([workspace / ".feng" / "provider.yaml", workspace / ".feng" / "provider.json"])
-    feng_home = provider_home_dir()
-    if feng_home is not None:
-        candidates.extend([feng_home / "provider.yaml", feng_home / "provider.json"])
-    for path in candidates:
+    for path in provider_config_paths(workspace):
         if path.exists():
             data = read_jsonish(path, {})
             return _apply_provider_env_overrides(ProviderProfile(
@@ -78,10 +70,12 @@ def _apply_provider_env_overrides(profile: ProviderProfile) -> ProviderProfile:
 
 
 def provider_status(workspace: Path) -> dict[str, Any]:
+    paths = [path.as_posix() for path in provider_config_paths(workspace)]
+    examples = [path.as_posix() for path in provider_example_paths()]
     try:
         profile = load_provider_profile(workspace)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": str(exc), "provider_config_paths": paths, "provider_examples": examples}
     missing = not os.environ.get(profile.api_key_env, "")
     return {
         "ok": not missing,
@@ -91,7 +85,38 @@ def provider_status(workspace: Path) -> dict[str, Any]:
         "api_key_env": profile.api_key_env,
         "model": profile.default_model,
         "missing_config": missing,
+        "required_env": [profile.api_key_env],
+        "provider_config_paths": paths,
+        "provider_examples": examples,
+        "suggested_provider_profile": {
+            "id": profile.id,
+            "protocol": profile.protocol,
+            "base_url": profile.base_url,
+            "api_key_env": profile.api_key_env,
+            "default_model": profile.default_model,
+        },
     }
+
+
+def provider_config_paths(workspace: Path) -> list[Path]:
+    paths: list[Path] = []
+    explicit = os.environ.get("FENG_PROVIDER_CONFIG", "").strip()
+    if explicit:
+        paths.append(Path(explicit))
+    paths.extend([workspace / ".feng" / "provider.yaml", workspace / ".feng" / "provider.json"])
+    home = provider_home_dir()
+    if home is not None:
+        paths.extend([home / "provider.yaml", home / "provider.json"])
+    return paths
+
+
+def provider_example_paths() -> list[Path]:
+    base = Path(__file__).resolve().parents[2]
+    packaged = base / "provider-examples"
+    names = [Path("provider-examples") / "deepseek.yaml", Path("provider-examples") / "deepseek-anthropic.yaml"]
+    if packaged.exists():
+        return [packaged / "deepseek.yaml", packaged / "deepseek-anthropic.yaml"]
+    return names
 
 
 def _normalize_http_error(exc: urllib.error.HTTPError) -> LLMError:
