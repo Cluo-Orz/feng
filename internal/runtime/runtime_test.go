@@ -191,6 +191,12 @@ func TestGoRuntimeHatchBuildsRunnerFromWorkspaceSource(t *testing.T) {
 	if strings.TrimSpace(string(output)) != "built-from-source" {
 		t.Fatalf("hatch did not build runner from workspace source: %s", string(output))
 	}
+	if _, err := os.Stat(filepath.Join(packagePath, "self", "go.mod")); err != nil {
+		t.Fatalf("hatch package did not preserve Go module source: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(packagePath, "self", "cmd", "feng", "main.go")); err != nil {
+		t.Fatalf("hatch package did not preserve runner source: %v", err)
+	}
 }
 
 func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {

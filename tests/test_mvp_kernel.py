@@ -362,6 +362,9 @@ class MvpKernelTest(unittest.TestCase):
                 timeout=30,
             )
             self.assertEqual(grow.returncode, 2)
+            docs = work / "docs"
+            docs.mkdir(exist_ok=True)
+            (docs / "design.md").write_text("portable design notes\n", encoding="utf-8")
             check = run_feng(work, "check")
             self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
             hatch = run_feng(work, "hatch", "--name", "sample", "--portable")
@@ -369,6 +372,7 @@ class MvpKernelTest(unittest.TestCase):
             package = Path(hatch.stdout.strip())
             self.assertTrue((package / "sample.py").exists())
             self.assertTrue((package / "self" / "identity.md").exists())
+            self.assertEqual((package / "self" / "docs" / "design.md").read_text(encoding="utf-8"), "portable design notes\n")
             self.assertIn("anthropic_messages", (package / "provider-examples" / "deepseek-anthropic.yaml").read_text(encoding="utf-8"))
 
             user_work = Path(tmp) / "user"

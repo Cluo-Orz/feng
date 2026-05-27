@@ -48,6 +48,13 @@ def _check_no_secrets(workspace: Path, problems: list[str]) -> None:
         workspace / "src",
         workspace / "tests",
         workspace / "docs",
+        workspace / "pkg",
+        workspace / "scripts",
+        workspace / ".gitignore",
+        workspace / "go.mod",
+        workspace / "go.sum",
+        workspace / "go.work",
+        workspace / "go.work.sum",
     ]
     seen: set[Path] = set()
     for root in roots:

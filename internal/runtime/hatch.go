@@ -27,6 +27,18 @@ var selfNames = []string{
 	"tools",
 	"world",
 	"evals",
+	".gitignore",
+	"docs",
+	"src",
+	"tests",
+	"cmd",
+	"internal",
+	"pkg",
+	"scripts",
+	"go.mod",
+	"go.sum",
+	"go.work",
+	"go.work.sum",
 }
 
 type HatchManifest struct {

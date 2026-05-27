@@ -686,7 +686,11 @@ func scanSecrets(workspace string) []string {
 	for name := range selfDirs {
 		roots = append(roots, name)
 	}
-	roots = append(roots, ".feng/artifacts", "cmd", "internal", "src", "tests", "docs")
+	roots = append(roots,
+		".feng/artifacts", ".gitignore",
+		"cmd", "internal", "src", "tests", "docs", "pkg", "scripts",
+		"go.mod", "go.sum", "go.work", "go.work.sum",
+	)
 	for _, root := range roots {
 		full := filepath.Join(workspace, filepath.FromSlash(root))
 		if !exists(full) || seen[full] {

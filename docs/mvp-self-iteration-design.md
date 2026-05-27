@@ -645,6 +645,8 @@ API key
 未通过 check 的 candidate
 ```
 
+对 `feng hatch --name feng --portable`，frozen self 还应携带已经长出来的 `docs/`、`src/`、`tests/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。它们必须先经过 check 和 secret scan，不能绕过 validated commit。这样下一代 feng 到新目录后仍能继续用通用 grow/check/hatch 迭代自己，而不是只剩一个不可成长的 binary。
+
 Hatch 可以包含 provider examples：
 
 ```text

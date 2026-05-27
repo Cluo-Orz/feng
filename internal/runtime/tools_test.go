@@ -353,6 +353,25 @@ func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	}
 }
 
+func TestCheckScansPackagedSourceRootsForSecrets(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "secret scan roots test", ""); err != nil {
+		t.Fatal(err)
+	}
+	secretLike := "sk-" + "sourcepackageroot1234567890"
+	if err := writeText(filepath.Join(dir, "scripts", "leak.ps1"), "Write-Output "+secretLike+"\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject secret-like value in packaged source root")
+	}
+	if !containsProblem(report.Problems, "possible secret in scripts/leak.ps1") {
+		t.Fatalf("expected script secret scan problem, got %+v", report.Problems)
+	}
+}
+
 func TestCheckRunsCommandEvals(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "eval test", ""); err != nil {

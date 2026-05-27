@@ -46,6 +46,8 @@ provider examples
 named entry command
 ```
 
+`frozen self` 包含最小 self repo，也包含当前 workspace 中已经长出来、并被 check 管住的可选根：`docs/`、`src/`、`tests/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。这样 `feng hatch --name feng --portable` 产出的下一代 feng 不会丢失继续自迭代需要的源码、文档和验证材料。
+
 如果 hatch 输出路径位于当前 workspace 内，必须落在 `dist/` 下；workspace 外的显式输出路径可以使用。这样 hatch 可以清理自己的 package 目录，但不能误删 `docs/`、`skills/`、`tools/` 或其他 candidate 内容。
 
 产品级 hatch 的 runner 目标是 Go binary。Python runner 只作为当前行为原型存在，不能成为长期使用者体验的前提。
