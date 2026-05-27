@@ -21,6 +21,7 @@ from feng.llm import LLMError, _anthropic_messages, _normalize_http_error, _open
 from feng.lock import acquire_workspace_lock
 from feng.events import append_event, tail_events
 from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
+from feng.artifacts import list_artifacts, write_artifact
 
 
 def env_without_llm_key() -> dict[str, str]:
@@ -562,6 +563,23 @@ class MvpKernelTest(unittest.TestCase):
             self.assertNotEqual(first["id"], second["id"])
             events = tail_events(work, 2)
             self.assertEqual(len({event["id"] for event in events}), 2)
+
+    def test_artifact_listing_skips_json_content_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed artifact list", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            written = write_artifact(work, "check-report", "unit", '{"ok": true}', "check passed", extension="json")
+            artifacts = list_artifacts(work)
+            self.assertEqual([item["path"] for item in artifacts if item["type"] == "check-report"], [written["path"]])
+            self.assertFalse(any("ok" in item and "type" not in item for item in artifacts))
 
     def test_bootstrap_is_not_a_public_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

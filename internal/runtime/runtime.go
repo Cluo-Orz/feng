@@ -708,7 +708,7 @@ func listArtifacts(workspace string) []Artifact {
 			continue
 		}
 		var artifact Artifact
-		if data, err := os.ReadFile(filepath.Join(dir, entry.Name())); err == nil && json.Unmarshal(data, &artifact) == nil {
+		if data, err := os.ReadFile(filepath.Join(dir, entry.Name())); err == nil && json.Unmarshal(data, &artifact) == nil && artifact.Type != "" && artifact.Path != "" && artifact.Hash != "" {
 			artifacts = append(artifacts, artifact)
 		}
 	}

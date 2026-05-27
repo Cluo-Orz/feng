@@ -52,7 +52,10 @@ def list_artifacts(workspace: Path) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for meta_path in sorted(directory.glob("*.json")):
         try:
-            items.append(json.loads(meta_path.read_text(encoding="utf-8")))
+            item = json.loads(meta_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             items.append({"type": "invalid_artifact", "path": str(meta_path)})
+            continue
+        if isinstance(item, dict) and item.get("type") and item.get("path") and item.get("hash"):
+            items.append(item)
     return items

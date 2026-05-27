@@ -592,3 +592,22 @@ func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {
 		t.Fatal("dashboard did not redact secret-looking value")
 	}
 }
+
+func TestListArtifactsSkipsJSONContentFiles(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "artifact metadata test", ""); err != nil {
+		t.Fatal(err)
+	}
+	written, err := writeArtifact(dir, "check-report", "unit", `{"ok":true}`, "check passed", "json content should not be listed as metadata", "json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	artifacts := listArtifacts(dir)
+	if len(artifacts) != 1 {
+		t.Fatalf("expected only metadata artifact, got %+v", artifacts)
+	}
+	if artifacts[0].Path != written.Path || artifacts[0].Type != "check-report" {
+		t.Fatalf("unexpected artifact listing: %+v written=%+v", artifacts, written)
+	}
+}

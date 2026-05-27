@@ -69,6 +69,8 @@ snippets: []
 
 events 和 artifacts 写盘前必须做 secret-like redaction。它们用于恢复和观测，不用于保存真实密钥。
 
+artifact 内容文件和 metadata 文件分开：内容文件保存原始摘要材料，metadata 文件保存 `type/path/hash/summary/why_relevant/snippets`。`feng artifacts`、GUI 和 context assembly 只读取合法 metadata，不能把内容 JSON 误当成 artifact 记录。
+
 ## Git 语义
 
 ```text
