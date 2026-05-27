@@ -180,9 +180,19 @@ def _command_tool(workspace: Path, path: Path) -> Tool | None:
     timeout = int(data.get("timeout", 60))
     source = rel_path(workspace, path)
 
-    def handler(tool_workspace: Path, _args: dict[str, Any]) -> dict[str, Any]:
+    def handler(tool_workspace: Path, args: dict[str, Any]) -> dict[str, Any]:
         check_command(tool_workspace, command)
-        code, output = run_process([command], cwd=tool_workspace, timeout=timeout, shell=True)
+        code, output = run_process(
+            [command],
+            cwd=tool_workspace,
+            timeout=timeout,
+            shell=True,
+            env={
+                "FENG_TOOL_ARGS": json.dumps(args, ensure_ascii=False),
+                "FENG_TOOL_NAME": name,
+                "FENG_TOOL_SOURCE": source,
+            },
+        )
         append_event(tool_workspace, "tool_called", {"tool": name, "command": command, "exit_code": code})
         result = _maybe_artifact(tool_workspace, f"{name}:{command}", f"exit_code={code}\n{output}", f"{name} output")
         result["is_error"] = code != 0

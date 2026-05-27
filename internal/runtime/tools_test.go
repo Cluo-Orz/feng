@@ -314,6 +314,28 @@ func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
 	if result.IsError || !strings.Contains(result.Content, "exit_code=0") {
 		t.Fatalf("self repo tool failed: %+v", result)
 	}
+	if err := writeText(filepath.Join(dir, "scripts", "echo_args.py"), "import json, os\nprint(json.loads(os.environ['FENG_TOOL_ARGS'])['subject'])\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "echo.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "echo_arg",
+		"description": "Echo a function-call argument.",
+		"keywords":    []any{"echo"},
+		"input_schema": map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"subject": map[string]any{"type": "string"}},
+			"required":   []any{"subject"},
+		},
+		"command": "python scripts/echo_args.py",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tools = activeToolPack(dir, "grow", "echo the subject")
+	result = executeTool(dir, tools, "echo_arg", map[string]any{"subject": "wind"})
+	if result.IsError || !strings.Contains(result.Content, "wind") {
+		t.Fatalf("self repo tool did not receive function-call args: %+v", result)
+	}
 
 	report := runCheck(dir)
 	if !report.OK {

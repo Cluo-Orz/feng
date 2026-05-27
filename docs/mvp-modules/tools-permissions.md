@@ -33,6 +33,8 @@ always
 
 这些字段只影响是否把 tool schema 暴露给 LLM，不授予额外权限。
 
+self repo 的 command tool 可以声明 `input_schema`。LLM tool call 传入的参数不会拼接到 shell 命令里，而是以 JSON 形式写入环境变量 `FENG_TOOL_ARGS`，并附带 `FENG_TOOL_NAME`、`FENG_TOOL_SOURCE`。这样工具可以读取参数，同时避免 runtime 做字符串模板替换。
+
 ## Active Tool Pack
 
 选择依据：

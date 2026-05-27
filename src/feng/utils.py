@@ -127,11 +127,13 @@ def run_process(
     cwd: Path,
     timeout: int = 60,
     shell: bool = False,
+    env: dict[str, str] | None = None,
 ) -> tuple[int, str]:
     try:
         proc = subprocess.run(
             args if not shell else " ".join(args),
             cwd=str(cwd),
+            env={**os.environ, **env} if env else None,
             capture_output=True,
             text=True,
             timeout=timeout,

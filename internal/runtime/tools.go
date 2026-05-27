@@ -254,6 +254,10 @@ func deniedToolResult(workspace, tool string, err error) ToolResult {
 }
 
 func runShellCommand(workspace, command string, timeoutSeconds int) (int, string) {
+	return runShellCommandWithEnv(workspace, command, timeoutSeconds, nil)
+}
+
+func runShellCommandWithEnv(workspace, command string, timeoutSeconds int, env map[string]string) (int, string) {
 	timeout := time.Duration(clampInt(timeoutSeconds, 1, 600)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -264,6 +268,17 @@ func runShellCommand(workspace, command string, timeoutSeconds int) (int, string
 		cmd = exec.CommandContext(ctx, "sh", "-c", command)
 	}
 	cmd.Dir = workspace
+	if len(env) > 0 {
+		cmd.Env = os.Environ()
+		keys := make([]string, 0, len(env))
+		for key := range env {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			cmd.Env = append(cmd.Env, key+"="+env[key])
+		}
+	}
 	output, err := cmd.CombinedOutput()
 	exitCode := 0
 	if err != nil {
@@ -340,12 +355,17 @@ func commandTool(workspace, path string) *Tool {
 		Source:         rel,
 		SelectionTerms: selectionTerms(name, rel, description, raw),
 		AlwaysActive:   boolFromAny(raw["always"]),
-		Handler: func(toolWorkspace string, _args map[string]any) ToolResult {
+		Handler: func(toolWorkspace string, args map[string]any) ToolResult {
 			if err := checkCommand(toolWorkspace, command); err != nil {
 				appendEvent(toolWorkspace, "tool_denied", map[string]any{"tool": name, "reason": err.Error()})
 				return ToolResult{Content: err.Error(), IsError: true}
 			}
-			exitCode, output := runShellCommand(toolWorkspace, command, timeout)
+			encodedArgs, _ := json.Marshal(args)
+			exitCode, output := runShellCommandWithEnv(toolWorkspace, command, timeout, map[string]string{
+				"FENG_TOOL_ARGS":   string(encodedArgs),
+				"FENG_TOOL_NAME":   name,
+				"FENG_TOOL_SOURCE": rel,
+			})
 			appendEvent(toolWorkspace, "tool_called", map[string]any{"tool": name, "command": command, "exit_code": exitCode})
 			result := maybeArtifact(toolWorkspace, name+":"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), name+" output")
 			result.IsError = exitCode != 0

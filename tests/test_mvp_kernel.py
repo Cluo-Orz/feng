@@ -290,11 +290,43 @@ class MvpKernelTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            echo_script = work / "scripts" / "echo_args.py"
+            echo_script.parent.mkdir()
+            echo_script.write_text(
+                "import json, os\nprint(json.loads(os.environ['FENG_TOOL_ARGS'])['subject'])\n",
+                encoding="utf-8",
+            )
+            (work / "tools" / "echo.tool.yaml").write_text(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "name": "echo_arg",
+                        "description": "Echo a function-call argument.",
+                        "keywords": ["api", "echo"],
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"subject": {"type": "string"}},
+                            "required": ["subject"],
+                        },
+                        "command": "python scripts/echo_args.py",
+                    }
+                ),
+                encoding="utf-8",
+            )
             selected = [tool.name for tool in active_tool_pack(work, "grow", "improve api contract checks")]
             self.assertIn("read_file", selected)
             self.assertIn("run_command", selected)
             self.assertIn("api_contract_check", selected)
+            self.assertIn("echo_arg", selected)
             self.assertNotIn("news_fetch", selected)
+            echoed = execute_tool(
+                work,
+                active_tool_pack(work, "grow", "echo api argument"),
+                "echo_arg",
+                {"subject": "wind"},
+            )
+            self.assertFalse(echoed["is_error"], echoed["content"])
+            self.assertIn("wind", echoed["content"])
             check_tools = [tool.name for tool in active_tool_pack(work, "check", "")]
             self.assertIn("api_contract_check", check_tools)
             self.assertIn("news_fetch", check_tools)
