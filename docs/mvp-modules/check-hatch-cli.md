@@ -50,6 +50,8 @@ named entry command
 
 如果 hatch 输出路径位于当前 workspace 内，必须落在 `dist/` 下；workspace 外的显式输出路径可以使用。这样 hatch 可以清理自己的 package 目录，但不能误删 `docs/`、`skills/`、`tools/` 或其他 candidate 内容。
 
+hatch 只能覆盖空目录或已有 feng package 目录；如果目标目录已有普通用户内容且没有 package manifest/marker，必须拒绝覆盖。
+
 产品级 hatch 的 runner 目标是 Go binary。Python runner 只作为当前行为原型存在，不能成为长期使用者体验的前提。
 
 不包含：

@@ -612,6 +612,8 @@ dist/feng/
 
 如果输出路径在当前 workspace 内，MVP 只允许写入 `dist/`。hatch 可以覆盖上一版 package，但不能把 workspace 中的 self repo、candidate 文件或 review artifact 当作输出目录清理掉。
 
+hatch 只能清理空目录或已有 feng package 目录。已有 package 通过 `feng-release.yaml` 或 package marker 识别；如果目标目录已有普通用户内容，hatch 必须拒绝覆盖，让用户显式处理。
+
 Python 行为原型可以暂时使用 `runner/ + self/` 目录结构；Go 产品 runtime 的目标是直接产出命名可执行文件，并携带或定位 frozen self bundle。
 
 manifest：

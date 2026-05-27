@@ -37,6 +37,8 @@ SELF_NAMES = [
     "go.work.sum",
 ]
 
+HATCH_PACKAGE_MARKER = ".feng-package-dir"
+
 
 def _copy_self(workspace: Path, dst: Path) -> None:
     ensure_dir(dst)
@@ -117,6 +119,18 @@ def _resolve_hatch_output(workspace: Path, clean_name: str, out_dir: Path | None
     raise RuntimeError(f"hatch output inside workspace must be under dist/: {rel_text}")
 
 
+def _prepare_hatch_output(output: Path) -> None:
+    if output.exists():
+        if not output.is_dir():
+            raise RuntimeError(f"hatch output exists and is not a directory: {output}")
+        has_package_marker = (output / "feng-release.yaml").exists() or (output / HATCH_PACKAGE_MARKER).exists()
+        if any(output.iterdir()) and not has_package_marker:
+            raise RuntimeError(f"hatch refuses to overwrite existing non-package output: {output}")
+        shutil.rmtree(output)
+    ensure_dir(output)
+    write_text(output / HATCH_PACKAGE_MARKER, "feng hatch package directory\n")
+
+
 def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: bool = True) -> Path:
     clean_name = slugify(name)
     state = load_state(workspace)
@@ -131,9 +145,7 @@ def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: boo
     if dirty:
         raise RuntimeError("hatch requires a clean working tree so the package maps to a validated commit")
     output = _resolve_hatch_output(workspace, clean_name, out_dir)
-    if output.exists():
-        shutil.rmtree(output)
-    ensure_dir(output)
+    _prepare_hatch_output(output)
     _copy_self(workspace, output / "self")
     _copy_runner(workspace, output / "runner")
     entry_py = output / f"{clean_name}.py"

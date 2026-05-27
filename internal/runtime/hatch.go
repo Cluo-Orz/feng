@@ -41,6 +41,8 @@ var selfNames = []string{
 	"go.work.sum",
 }
 
+const hatchPackageMarker = ".feng-package-dir"
+
 type HatchManifest struct {
 	Name                     string         `json:"name"`
 	Portable                 bool           `json:"portable"`
@@ -134,10 +136,10 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.RemoveAll(output); err != nil {
+	if err := prepareHatchOutput(output); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(output, 0o755); err != nil {
+	if err := writeText(filepath.Join(output, hatchPackageMarker), "feng hatch package directory\n"); err != nil {
 		return "", err
 	}
 	if err := copySelf(workspace, filepath.Join(output, "self")); err != nil {
@@ -210,6 +212,41 @@ func resolveHatchOutput(workspace, outDir, cleanName string) (string, error) {
 		relSlash = "<workspace>"
 	}
 	return "", fmt.Errorf("hatch output inside workspace must be under dist/: %s", relSlash)
+}
+
+func prepareHatchOutput(output string) error {
+	info, err := os.Stat(output)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.MkdirAll(output, 0o755)
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("hatch output exists and is not a directory: %s", output)
+	}
+	replaceable, err := replaceableHatchOutput(output)
+	if err != nil {
+		return err
+	}
+	if !replaceable {
+		return fmt.Errorf("hatch refuses to overwrite existing non-package output: %s", output)
+	}
+	if err := os.RemoveAll(output); err != nil {
+		return err
+	}
+	return os.MkdirAll(output, 0o755)
+}
+
+func replaceableHatchOutput(output string) (bool, error) {
+	entries, err := os.ReadDir(output)
+	if err != nil {
+		return false, err
+	}
+	if len(entries) == 0 {
+		return true, nil
+	}
+	return exists(filepath.Join(output, "feng-release.yaml")) || exists(filepath.Join(output, hatchPackageMarker)), nil
 }
 
 func copySelf(workspace, dst string) error {

@@ -389,6 +389,30 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((user_work / ".feng" / "state.yaml").exists())
             self.assertTrue((user_work / "identity.md").exists())
 
+    def test_hatch_rejects_existing_non_package_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "maker"
+            work.mkdir()
+            grow = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "make a portable agent", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(grow.returncode, 2)
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
+            output = work / "dist" / "sample"
+            output.mkdir(parents=True)
+            keep = output / "keep.txt"
+            keep.write_text("user content\n", encoding="utf-8")
+            hatch = run_feng(work, "hatch", "--name", "sample", "--portable")
+            self.assertEqual(hatch.returncode, 1)
+            self.assertIn("hatch refuses to overwrite existing non-package output", hatch.stderr)
+            self.assertEqual(keep.read_text(encoding="utf-8"), "user content\n")
+
     def test_hatch_rejects_workspace_output_outside_dist(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp) / "maker"

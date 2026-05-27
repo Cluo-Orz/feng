@@ -97,6 +97,14 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
 	packagePath := strings.TrimSpace(out.String())
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("second hatch should replace prior package, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != packagePath {
+		t.Fatalf("second hatch changed package path: %q != %q", strings.TrimSpace(out.String()), packagePath)
+	}
 	if _, err := os.Stat(filepath.Join(packagePath, "self", "identity.md")); err != nil {
 		t.Fatal(err)
 	}
@@ -119,6 +127,43 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest), `"self_tag": "sample-v1"`) || !strings.Contains(string(manifest), `"tag"`) {
 		t.Fatalf("hatch manifest did not include tag metadata: %s", string(manifest))
+	}
+}
+
+func TestGoRuntimeHatchRejectsExistingNonPackageOutput(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "make a portable agent", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	outputDir := filepath.Join(dir, "dist", "sample")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	keepPath := filepath.Join(outputDir, "keep.txt")
+	if err := os.WriteFile(keepPath, []byte("user content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 1 {
+		t.Fatalf("hatch should reject existing non-package output, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "hatch refuses to overwrite existing non-package output") {
+		t.Fatalf("hatch did not explain non-package output refusal: %s", errOut.String())
+	}
+	data, err := os.ReadFile(keepPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "user content\n" {
+		t.Fatalf("hatch modified existing output content: %q", string(data))
 	}
 }
 
