@@ -22,6 +22,9 @@ user: latest event
 skill/world index
   进入稳定 self contract，可缓存。
 
+workspace file index
+  进入动态 state manifest。self roots 优先，普通 world 文件后置；node_modules、vendor、target、build/cache 等生成或依赖目录默认不进入 index。
+
 skill/world body
   只在相关时进入 cached context pack 或动态后缀。
 

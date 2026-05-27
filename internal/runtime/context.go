@@ -3,7 +3,6 @@ package runtime
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -23,28 +22,82 @@ func gitContext(workspace string) map[string]any {
 func workspaceFileIndex(workspace string, limit int) []string {
 	limit = clampInt(limit, 1, 2000)
 	var files []string
-	_ = filepath.WalkDir(workspace, func(path string, d os.DirEntry, err error) error {
+	seen := map[string]bool{}
+	truncated := false
+
+	addFile := func(rel string) bool {
+		rel = filepath.ToSlash(rel)
+		if seen[rel] || shouldSkipContextFile(rel) {
+			return true
+		}
+		seen[rel] = true
+		files = append(files, rel)
+		if len(files) >= limit {
+			truncated = true
+			return false
+		}
+		return true
+	}
+
+	roots := selfGitPathspecs(workspace)
+	for _, root := range roots {
+		full := filepath.Join(workspace, filepath.FromSlash(root))
+		info, err := os.Stat(full)
 		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			if !addFile(root) {
+				break
+			}
+			continue
+		}
+		_ = filepath.WalkDir(full, func(path string, d os.DirEntry, err error) error {
+			if err != nil || truncated {
+				return filepath.SkipAll
+			}
+			rel := relPath(workspace, path)
+			if d.IsDir() {
+				if rel != root && shouldSkipContextDir(rel) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !addFile(rel) {
+				return filepath.SkipAll
+			}
 			return nil
+		})
+		if truncated {
+			break
+		}
+	}
+
+	_ = filepath.WalkDir(workspace, func(path string, d os.DirEntry, err error) error {
+		if err != nil || truncated {
+			return filepath.SkipAll
 		}
 		rel := relPath(workspace, path)
+		if rel != "." && pathUnderRoots(rel, roots) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
 			if shouldSkipContextDir(rel) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if shouldSkipContextFile(rel) {
-			return nil
-		}
-		files = append(files, rel)
-		if len(files) >= limit {
-			files = append(files, "[truncated]")
+		if !addFile(rel) {
 			return filepath.SkipAll
 		}
 		return nil
 	})
-	sort.Strings(files)
+	if truncated {
+		files = append(files, "[truncated]")
+	}
 	return files
 }
 
@@ -56,10 +109,20 @@ func shouldSkipContextDir(rel string) bool {
 	if rel == ".git" || rel == ".feng" {
 		return true
 	}
-	if rel == "dist" || rel == "bin" || rel == "__pycache__" || rel == ".pytest_cache" {
+	base := filepath.Base(rel)
+	if rel == "dist" || rel == "bin" || rel == "build" || rel == "out" || rel == "coverage" {
 		return true
 	}
-	return strings.HasSuffix(rel, "/__pycache__")
+	if base == "__pycache__" || base == "node_modules" || base == "vendor" || base == "target" {
+		return true
+	}
+	if base == ".pytest_cache" || base == ".mypy_cache" || base == ".ruff_cache" || base == ".tox" {
+		return true
+	}
+	if base == ".venv" || base == "venv" || base == ".next" || base == ".nuxt" || base == ".turbo" || base == ".cache" {
+		return true
+	}
+	return false
 }
 
 func shouldSkipContextFile(rel string) bool {

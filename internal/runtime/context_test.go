@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,6 +81,43 @@ func TestCompileGrowMessagesIncludesDynamicWorkspaceContext(t *testing.T) {
 	}
 }
 
+func TestWorkspaceFileIndexPrioritizesSelfRootsOverUnrelatedNoise(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "context priority test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "aaa-noise"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 150; i++ {
+		name := filepath.Join(dir, "aaa-noise", fmt.Sprintf("noise-%03d.txt", i))
+		if err := os.WriteFile(name, []byte("noise\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs", "important.md"), []byte("important\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nodeModules := filepath.Join(dir, "node_modules", "pkg")
+	if err := os.MkdirAll(nodeModules, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodeModules, "index.js"), []byte("generated\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files := workspaceFileIndex(dir, 40)
+	if !containsString(files, "docs/important.md") {
+		t.Fatalf("self docs were hidden by unrelated noise: %+v", files)
+	}
+	if containsString(files, "node_modules/pkg/index.js") {
+		t.Fatalf("generated dependency directory leaked into file index: %+v", files)
+	}
+}
+
 func TestAppendEventUpdatesObservableLastEventID(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "event state test", ""); err != nil {
@@ -118,6 +156,15 @@ func parseSelfContract(t *testing.T, content string) map[string]any {
 func containsAnyString(items []any, needle string) bool {
 	for _, item := range items {
 		if strings.Contains(strings.TrimSpace(toString(item)), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(items []string, needle string) bool {
+	for _, item := range items {
+		if strings.Contains(strings.TrimSpace(item), needle) {
 			return true
 		}
 	}
