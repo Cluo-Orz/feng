@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .events import append_event
 from .utils import read_jsonish
 
 
@@ -337,12 +338,26 @@ def call_llm(
     for attempt in range(retries):
         try:
             if profile.protocol == "anthropic_messages":
-                return call_anthropic_messages(profile, messages, tool_schemas)
-            return call_openai_chat(profile, messages, tool_schemas)
+                response = call_anthropic_messages(profile, messages, tool_schemas)
+            else:
+                response = call_openai_chat(profile, messages, tool_schemas)
+            if recovered_truncation:
+                append_event(workspace, "provider_recovered", {"reason": "output_truncated"})
+            return response
         except LLMError as exc:
             last = exc
             if exc.kind == "output_truncated" and not recovered_truncation:
+                before_tokens = _estimate_messages_tokens(messages)
                 messages = _messages_with_output_continuation(messages, exc)
+                append_event(
+                    workspace,
+                    "provider_recovery",
+                    {
+                        "reason": "output_truncated",
+                        "before_tokens": before_tokens,
+                        "after_tokens": _estimate_messages_tokens(messages),
+                    },
+                )
                 recovered_truncation = True
                 continue
             if exc.kind != "transient":
@@ -350,6 +365,11 @@ def call_llm(
             time.sleep(min(2**attempt, 8))
     assert last is not None
     raise last
+
+
+def _estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
+    text = "".join(str(message.get("role", "")) + str(message.get("content", "")) for message in messages)
+    return max(1, len(text) // 4)
 
 
 def _messages_with_output_continuation(messages: list[dict[str, Any]], exc: LLMError) -> list[dict[str, Any]]:

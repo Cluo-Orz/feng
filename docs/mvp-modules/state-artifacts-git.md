@@ -44,6 +44,7 @@ tool_called
 tool_denied
 artifact_written
 provider_recovered
+provider_recovery
 check_failed
 check_passed
 validated_commit_updated

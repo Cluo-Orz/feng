@@ -457,6 +457,9 @@ class MvpKernelTest(unittest.TestCase):
             self.assertEqual(len(seen), 2)
             self.assertEqual(seen[1][-2]["content"], "partial")
             self.assertIn("truncated", seen[1][-1]["content"])
+            event_types = [event["type"] for event in tail_events(work, 5)]
+            self.assertIn("provider_recovery", event_types)
+            self.assertIn("provider_recovered", event_types)
 
     def test_provider_profile_can_load_from_feng_home(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
