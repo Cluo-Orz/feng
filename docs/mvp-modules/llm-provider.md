@@ -68,7 +68,7 @@ suggested_provider_profile
 
 ```text
 max_tokens
-  返回 output_truncated，kernel 决定续写或提高预算。
+  返回 output_truncated；MVP 不把半截输出当成功，先写 provider-error artifact 并进入 blocked，下一轮 grow 可根据 artifact 继续修复。
 
 prompt_too_long
   返回 prompt_too_long，kernel 触发 context recovery。

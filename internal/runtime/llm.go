@@ -54,6 +54,7 @@ type chatResponse struct {
 			ReasoningContent string     `json:"reasoning_content"`
 			ToolCalls        []ToolCall `json:"tool_calls"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage map[string]any `json:"usage"`
 }
@@ -84,7 +85,8 @@ type anthropicContentBlock struct {
 }
 
 type anthropicResponse struct {
-	Content []struct {
+	StopReason string `json:"stop_reason"`
+	Content    []struct {
 		Type  string          `json:"type"`
 		Text  string          `json:"text"`
 		ID    string          `json:"id"`
@@ -324,7 +326,11 @@ func callOpenAIChat(profile ProviderProfile, messages []chatMessage, tools []map
 	if len(parsed.Choices) == 0 {
 		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "provider response has no choices"}
 	}
-	message := parsed.Choices[0].Message
+	choice := parsed.Choices[0]
+	if isOpenAIOutputTruncated(choice.FinishReason) {
+		return AssistantTurn{}, LLMError{Kind: "output_truncated", Message: "provider stopped because finish_reason=" + choice.FinishReason}
+	}
+	message := choice.Message
 	turn := AssistantTurn{ToolCalls: message.ToolCalls, Usage: normalizeUsage(parsed.Usage)}
 	if strings.TrimSpace(message.Content) != "" {
 		turn.Content = message.Content
@@ -379,6 +385,9 @@ func callAnthropicMessages(profile ProviderProfile, messages []chatMessage, tool
 	var parsed anthropicResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return AssistantTurn{}, LLMError{Kind: "provider_error", Message: "invalid provider response: " + err.Error()}
+	}
+	if parsed.StopReason == "max_tokens" {
+		return AssistantTurn{}, LLMError{Kind: "output_truncated", Message: "provider stopped because stop_reason=max_tokens"}
 	}
 	turn := AssistantTurn{Usage: normalizeAnthropicUsage(parsed.Usage)}
 	var text []string
@@ -559,6 +568,11 @@ func normalizeLLMHTTPError(status int, body string) LLMError {
 	default:
 		return LLMError{Kind: "provider_error", Message: trimmed}
 	}
+}
+
+func isOpenAIOutputTruncated(reason string) bool {
+	reason = strings.TrimSpace(strings.ToLower(reason))
+	return reason == "length" || reason == "max_tokens"
 }
 
 func handleLLMError(workspace string, err error, stdout io.Writer) int {

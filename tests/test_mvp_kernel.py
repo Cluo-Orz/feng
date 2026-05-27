@@ -16,7 +16,7 @@ TEST_FENG_HOME = Path(tempfile.mkdtemp(prefix="feng-test-home-"))
 ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "FENG_HOME": str(TEST_FENG_HOME)}
 
 from feng.permissions import check_command, check_file_write
-from feng.llm import _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, load_provider_profile
+from feng.llm import LLMError, _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, _raise_if_openai_output_truncated, load_provider_profile
 from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
 
 
@@ -210,6 +210,11 @@ class MvpKernelTest(unittest.TestCase):
                 return b"overloaded"
 
         self.assertEqual(_normalize_http_error(FakeHTTPError()).kind, "transient")
+
+    def test_openai_output_truncation_is_recoverable_error(self) -> None:
+        with self.assertRaises(LLMError) as raised:
+            _raise_if_openai_output_truncated({"choices": [{"finish_reason": "length"}]})
+        self.assertEqual(raised.exception.kind, "output_truncated")
 
     def test_provider_profile_can_load_from_feng_home(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:

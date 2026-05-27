@@ -286,6 +286,76 @@ func TestGrowRunsAnthropicToolCallLoop(t *testing.T) {
 	}
 }
 
+func TestGrowBlocksOnOpenAIOutputTruncation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeChatResponseWithFinishReason(w, map[string]any{"role": "assistant", "content": "partial"}, "length")
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "output truncation test", ""); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "trigger truncation", "--max-turns", "1"}, dir, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "output_truncated") {
+		t.Fatalf("grow did not report output_truncated: %s", out.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Mode != "blocked" || state.LastRecovery["type"] != "output_truncated" {
+		t.Fatalf("output truncation was not recorded as blocked recovery: %+v", state)
+	}
+	if !artifactTypeExists(dir, "provider-error") {
+		t.Fatalf("provider-error artifact missing: %+v", listArtifacts(dir))
+	}
+}
+
+func TestGrowBlocksOnAnthropicOutputTruncation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type":        "message",
+			"role":        "assistant",
+			"stop_reason": "max_tokens",
+			"content":     []map[string]any{{"type": "text", "text": "partial"}},
+		})
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "anthropic output truncation test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, ".feng", "provider.yaml"), map[string]any{
+		"id":            "anthropic-local",
+		"protocol":      "anthropic_messages",
+		"base_url":      server.URL,
+		"api_key_env":   "ANTHROPIC_TEST_KEY",
+		"default_model": "claude-test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTHROPIC_TEST_KEY", "fake-key")
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "trigger anthropic truncation", "--max-turns", "1"}, dir, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "output_truncated") {
+		t.Fatalf("grow did not report output_truncated: %s", out.String())
+	}
+}
+
 func TestNormalizeLLMHTTPErrorProviderSpecificStatus(t *testing.T) {
 	if normalizeLLMHTTPError(403, "forbidden").Kind != "config_error" {
 		t.Fatal("403 should be treated as provider configuration or permission error")
@@ -317,4 +387,14 @@ func writeAnthropicResponse(w http.ResponseWriter, content []map[string]any, usa
 		response["usage"] = usage
 	}
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func writeChatResponseWithFinishReason(w http.ResponseWriter, message map[string]any, finishReason string) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"choices": []map[string]any{{
+			"message":       message,
+			"finish_reason": finishReason,
+		}},
+	})
 }

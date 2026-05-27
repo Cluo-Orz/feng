@@ -159,11 +159,13 @@ def call_openai_chat(
     )
     try:
         with urllib.request.urlopen(req, timeout=120) as response:
-            return json.loads(response.read().decode("utf-8"))
+            raw = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raise _normalize_http_error(exc) from exc
     except urllib.error.URLError as exc:
         raise LLMError("transient", str(exc)) from exc
+    _raise_if_openai_output_truncated(raw)
+    return raw
 
 
 def _anthropic_tools(tool_schemas: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -256,7 +258,18 @@ def call_anthropic_messages(
         raise _normalize_http_error(exc) from exc
     except urllib.error.URLError as exc:
         raise LLMError("transient", str(exc)) from exc
+    if raw.get("stop_reason") == "max_tokens":
+        raise LLMError("output_truncated", "provider stopped because stop_reason=max_tokens")
     return _openai_like_from_anthropic(raw)
+
+
+def _raise_if_openai_output_truncated(response: dict[str, Any]) -> None:
+    choices = response.get("choices") or []
+    if not choices:
+        return
+    reason = str(choices[0].get("finish_reason") or "").strip().lower()
+    if reason in {"length", "max_tokens"}:
+        raise LLMError("output_truncated", f"provider stopped because finish_reason={reason}")
 
 
 def _openai_like_from_anthropic(response: dict[str, Any]) -> dict[str, Any]:
