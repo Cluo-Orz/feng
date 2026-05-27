@@ -365,9 +365,9 @@ func runCheck(workspace string) CheckReport {
 }
 
 func writeDiffSummaryArtifact(workspace string) (Artifact, bool) {
-	status, _ := runGit(workspace, "status", "--short")
-	stat, _ := runGit(workspace, "diff", "--stat")
-	names, _ := runGit(workspace, "diff", "--name-only")
+	status, _ := selfGitStatus(workspace)
+	stat, _ := runSelfGitPathspec(workspace, "diff", "--stat")
+	names, _ := runSelfGitPathspec(workspace, "diff", "--name-only")
 	content := strings.TrimSpace("git status --short:\n" + status + "\n\ngit diff --stat:\n" + stat + "\n\ngit diff --name-only:\n" + names)
 	if content == "" || content == "git status --short:\n\n\ngit diff --stat:\n\n\ngit diff --name-only:" {
 		return Artifact{}, false
@@ -737,10 +737,18 @@ func scanSecretsUnder(workspace, root string) []string {
 }
 
 func checkpointCommit(workspace, message string) (string, error) {
-	if _, err := runGit(workspace, "add", "-A"); err != nil {
+	roots := selfGitPathspecs(workspace)
+	if len(roots) == 0 {
+		return currentHead(workspace), nil
+	}
+	addArgs := append([]string{"add", "-A", "--"}, roots...)
+	if _, err := runGit(workspace, addArgs...); err != nil {
 		return "", err
 	}
-	status, err := runGit(workspace, "status", "--short")
+	if err := ensureNoStagedOutsideSelfRoots(workspace, roots); err != nil {
+		return "", err
+	}
+	status, err := selfGitStatus(workspace)
 	if err != nil {
 		return "", err
 	}
@@ -751,6 +759,76 @@ func checkpointCommit(workspace, message string) (string, error) {
 		return "", err
 	}
 	return currentHead(workspace), nil
+}
+
+func selfGitStatus(workspace string) (string, error) {
+	return runSelfGitPathspec(workspace, "status", "--short")
+}
+
+func runSelfGitPathspec(workspace string, args ...string) (string, error) {
+	roots := selfGitPathspecs(workspace)
+	if len(roots) == 0 {
+		return "", nil
+	}
+	fullArgs := append([]string{}, args...)
+	fullArgs = append(fullArgs, "--")
+	fullArgs = append(fullArgs, roots...)
+	return runGit(workspace, fullArgs...)
+}
+
+func selfGitPathspecs(workspace string) []string {
+	seen := map[string]bool{}
+	var roots []string
+	for _, name := range selfNames {
+		rel := filepath.ToSlash(name)
+		if rel == "" || rel == "." || strings.HasPrefix(rel, "../") || strings.Contains(rel, "/../") {
+			continue
+		}
+		if seen[rel] {
+			continue
+		}
+		if exists(filepath.Join(workspace, filepath.FromSlash(rel))) || gitHasTrackedPath(workspace, rel) {
+			seen[rel] = true
+			roots = append(roots, rel)
+		}
+	}
+	sort.Strings(roots)
+	return roots
+}
+
+func gitHasTrackedPath(workspace, rel string) bool {
+	output, err := runGit(workspace, "ls-files", "--", rel)
+	return err == nil && strings.TrimSpace(output) != ""
+}
+
+func ensureNoStagedOutsideSelfRoots(workspace string, roots []string) error {
+	output, err := runGit(workspace, "diff", "--cached", "--name-only")
+	if err != nil {
+		return err
+	}
+	var outside []string
+	for _, line := range strings.Split(output, "\n") {
+		path := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if path == "" || pathUnderRoots(path, roots) {
+			continue
+		}
+		outside = append(outside, path)
+	}
+	if len(outside) > 0 {
+		return fmt.Errorf("checkpoint refuses to commit staged files outside feng self roots: %s", strings.Join(outside, ", "))
+	}
+	return nil
+}
+
+func pathUnderRoots(path string, roots []string) bool {
+	path = strings.Trim(filepath.ToSlash(path), "/")
+	for _, root := range roots {
+		root = strings.Trim(filepath.ToSlash(root), "/")
+		if path == root || strings.HasPrefix(path, root+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func currentHead(workspace string) string {

@@ -389,9 +389,11 @@ Git 是 self repo 的成长介质，不只是回滚工具。
 
 ```text
 validated commit = 可以启动的一版 self
-working tree      = 正在孵化的 candidate self
+working tree      = candidate self + 当前 workspace 的其他可感知文件
 tag               = 被命名和固定的一版 self
 ```
+
+Git 管理的 promote 边界是 self roots，不是整个目录树。kernel 只把 self 文件、skills/tools/world/evals、可选源码/文档/测试根和 Go module 文件纳入 checkpoint/tag/hatch 的干净检查；无关数据、日志或目标环境文件可以留在 workspace 中，被需要时感知，但不能被误提交或阻塞 release。
 
 candidate 验证失败时，不自动丢弃。当前 agent 继续从上一版 validated commit 运行，同时修复 working tree 里的 candidate。失败报告、diff 和验证结果写入 `.feng/artifacts/`，下一轮通过 artifact refs 进入上下文。
 

@@ -55,12 +55,12 @@ func createValidatedTag(workspace, name string) (string, error) {
 	if currentHead(workspace) != state.ValidatedCommit {
 		return "", errors.New("tag requires HEAD to match the validated commit; run feng check first")
 	}
-	status, err := runGit(workspace, "status", "--short")
+	status, err := selfGitStatus(workspace)
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(status) != "" {
-		return "", errors.New("tag requires a clean working tree")
+		return "", errors.New("tag requires clean feng self roots")
 	}
 	if _, err := runGit(workspace, "rev-parse", "--verify", "refs/tags/"+name); err == nil {
 		return "", errors.New("tag already exists: " + name)

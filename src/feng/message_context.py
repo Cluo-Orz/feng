@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .git_utils import current_head, diff_summary, status_short
+from .git_utils import current_head, self_diff_summary, self_status_short
 from .self_repo import self_file_index
 from .state import load_state, save_state
 from .tools import Tool
@@ -64,8 +64,8 @@ def compile_messages(
     }
     state_manifest = {
         "state": state,
-        "git_status": status_short(workspace),
-        "git_diff_summary": diff_summary(workspace),
+        "git_status": self_status_short(workspace),
+        "git_diff_summary": self_diff_summary(workspace),
     }
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": KERNEL_CONTRACT},

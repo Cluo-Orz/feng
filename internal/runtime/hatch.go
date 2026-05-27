@@ -124,12 +124,12 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if currentHead(workspace) != state.ValidatedCommit {
 		return "", errors.New("hatch requires HEAD to match the validated commit; run feng check first")
 	}
-	status, err := runGit(workspace, "status", "--short")
+	status, err := selfGitStatus(workspace)
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(status) != "" {
-		return "", errors.New("hatch requires a clean working tree so the package maps to a validated commit")
+		return "", errors.New("hatch requires clean feng self roots so the package maps to a validated commit")
 	}
 
 	output, err := resolveHatchOutput(workspace, outDir, cleanName)

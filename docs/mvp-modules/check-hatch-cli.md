@@ -34,6 +34,8 @@ state.candidate_status = failed
 state.candidate_status = validated
 ```
 
+checkpoint commit 只纳入 feng self roots，不用 `git add -A` 扫整个 workspace。无关未跟踪目录继续留在原地，既不被提交，也不影响 self 的 validated 语义。
+
 ## Hatch Packager
 
 hatch 只能从 validated commit 打包：
@@ -52,6 +54,8 @@ named entry command
 如果 hatch 输出路径位于当前 workspace 内，必须落在 `dist/` 下；workspace 外的显式输出路径可以使用。这样 hatch 可以清理自己的 package 目录，但不能误删 `docs/`、`skills/`、`tools/` 或其他 candidate 内容。
 
 hatch 只能覆盖空目录或已有 feng package 目录；如果目标目录已有普通用户内容且没有 package manifest/marker，必须拒绝覆盖。
+
+hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 workspace 没有无关未跟踪文件。它打包的是 frozen self，不是把当前目录完整复制成发布物。
 
 hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts。
 

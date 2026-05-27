@@ -8,7 +8,7 @@ import (
 )
 
 func gitContext(workspace string) map[string]any {
-	status, err := runGit(workspace, "status", "--short")
+	status, err := selfGitStatus(workspace)
 	if err != nil {
 		return map[string]any{"head": currentHead(workspace), "status_error": err.Error()}
 	}

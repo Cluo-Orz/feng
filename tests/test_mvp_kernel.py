@@ -36,6 +36,20 @@ def run_feng(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def git_stdout(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        env=ENV,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr + result.stdout)
+    return result.stdout
+
+
 class MvpKernelTest(unittest.TestCase):
     def test_bootstrap_and_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -84,6 +98,26 @@ class MvpKernelTest(unittest.TestCase):
             artifacts = run_feng(work, "artifacts")
             self.assertEqual(artifacts.returncode, 0, artifacts.stderr)
             self.assertIn("check-report", artifacts.stdout)
+
+    def test_check_does_not_commit_unrelated_untracked_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "make a scoped checkpoint", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            outside = work / "outside-world"
+            outside.mkdir()
+            (outside / "keep.txt").write_text("not feng self\n", encoding="utf-8")
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
+            self.assertEqual(git_stdout(work, "ls-files", "--", "outside-world/keep.txt").strip(), "")
+            self.assertIn("outside-world/", git_stdout(work, "status", "--short"))
 
     def test_default_permissions_allow_self_runtime_growth(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -412,12 +446,17 @@ class MvpKernelTest(unittest.TestCase):
             (docs / "design.md").write_text("portable design notes\n", encoding="utf-8")
             check = run_feng(work, "check")
             self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
+            outside = work / "outside-world"
+            outside.mkdir()
+            (outside / "keep.txt").write_text("not packaged\n", encoding="utf-8")
             hatch = run_feng(work, "hatch", "--name", "sample", "--portable")
             self.assertEqual(hatch.returncode, 0, hatch.stderr + hatch.stdout)
             package = Path(hatch.stdout.strip())
             self.assertTrue((package / "sample.py").exists())
             self.assertTrue((package / "self" / "identity.md").exists())
             self.assertEqual((package / "self" / "docs" / "design.md").read_text(encoding="utf-8"), "portable design notes\n")
+            self.assertFalse((package / "self" / "outside-world" / "keep.txt").exists())
+            self.assertEqual(git_stdout(work, "ls-files", "--", "outside-world/keep.txt").strip(), "")
             manifest = json.loads((package / "feng-release.yaml").read_text(encoding="utf-8"))
             self.assertIn("grow", manifest["interface"]["commands"])
             self.assertIn("anthropic_messages", (package / "provider-examples" / "deepseek-anthropic.yaml").read_text(encoding="utf-8"))

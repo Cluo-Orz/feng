@@ -6,36 +6,12 @@ from pathlib import Path
 
 from .artifacts import write_artifact
 from .events import append_event
-from .git_utils import current_head, status_short
+from .git_utils import SELF_GIT_ROOTS, current_head, self_status_short
 from .state import load_state
 from .utils import ensure_dir, read_jsonish, sha256_text, slugify, write_text
 
 
-SELF_NAMES = [
-    "identity.md",
-    "goal.md",
-    "feng.yaml",
-    "hooks.yaml",
-    "permissions.yaml",
-    "interface.yaml",
-    "config.schema.yaml",
-    "skills",
-    "tools",
-    "world",
-    "evals",
-    ".gitignore",
-    "docs",
-    "src",
-    "tests",
-    "cmd",
-    "internal",
-    "pkg",
-    "scripts",
-    "go.mod",
-    "go.sum",
-    "go.work",
-    "go.work.sum",
-]
+SELF_NAMES = SELF_GIT_ROOTS
 
 HATCH_PACKAGE_MARKER = ".feng-package-dir"
 
@@ -141,9 +117,9 @@ def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: boo
         raise RuntimeError("hatch requires a validated commit; run feng check first")
     if current_head(workspace) != validated_commit:
         raise RuntimeError("hatch requires HEAD to match the validated commit; run feng check first")
-    dirty = status_short(workspace)
+    dirty = self_status_short(workspace)
     if dirty:
-        raise RuntimeError("hatch requires a clean working tree so the package maps to a validated commit")
+        raise RuntimeError("hatch requires clean feng self roots so the package maps to a validated commit")
     output = _resolve_hatch_output(workspace, clean_name, out_dir)
     _prepare_hatch_output(output)
     _copy_self(workspace, output / "self")

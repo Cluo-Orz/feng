@@ -526,7 +526,7 @@ validated commit
   上一次 check 通过的 self。
 
 working tree
-  当前 candidate。
+  当前 workspace，其中 self roots 表示 candidate self，其他文件只是可感知世界。
 
 tag
   可 hatch 的命名版本。
@@ -542,6 +542,8 @@ validated commit 仍是运行基线。
 ```
 
 只有 check 通过才可以更新 validated commit。
+
+checkpoint/tag/hatch 的 Git 干净检查只针对 self roots：最小 self 文件、skills/tools/world/evals、docs/src/tests/cmd/internal/pkg/scripts 和 Go module 文件。这样 feng 可以跑在一个真实 workspace 里，旁边存在数据、日志或目标环境文件，但 validated self 不会误提交这些内容，也不会被它们阻塞发布。
 
 LLM 修复 self 的方式是读取 Git 报告、diff 和失败 artifact，然后继续编辑 working tree。Git commit/tag 由 kernel 在验证通过后执行，避免把版本推进权交给一次普通 tool call。
 

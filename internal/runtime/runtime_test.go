@@ -73,6 +73,46 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeCheckDoesNotCommitUnrelatedUntrackedFiles(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "make a scoped checkpoint", "--max-turns", "1"}, dir, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	outsideDir := filepath.Join(dir, "outside-world")
+	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outsideFile := filepath.Join(outsideDir, "keep.txt")
+	if err := os.WriteFile(outsideFile, []byte("not feng self\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = Run([]string{"check"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	tracked, err := runGit(dir, "ls-files", "--", "outside-world/keep.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(tracked) != "" {
+		t.Fatalf("unrelated file was committed: %s", tracked)
+	}
+	status, err := runGit(dir, "status", "--short")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status, "outside-world/") {
+		t.Fatalf("unrelated file should remain untracked, status=%s", status)
+	}
+}
+
 func TestGoRuntimeNoBootstrapCommand(t *testing.T) {
 	dir := t.TempDir()
 	var out, errOut bytes.Buffer
@@ -93,6 +133,13 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	errOut.Reset()
 	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
 		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	outsideDir := filepath.Join(dir, "outside-world")
+	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideDir, "keep.txt"), []byte("not packaged\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	out.Reset()
 	errOut.Reset()
@@ -121,6 +168,16 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(packagePath, "checksums.json")); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(packagePath, "self", "outside-world", "keep.txt")); !os.IsNotExist(err) {
+		t.Fatalf("hatch copied unrelated workspace content: %v", err)
+	}
+	tracked, err := runGit(dir, "ls-files", "--", "outside-world/keep.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(tracked) != "" {
+		t.Fatalf("unrelated file was committed: %s", tracked)
 	}
 	anthropicExample, err := os.ReadFile(filepath.Join(packagePath, "provider-examples", "deepseek-anthropic.yaml"))
 	if err != nil {
