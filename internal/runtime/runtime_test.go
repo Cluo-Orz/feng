@@ -458,6 +458,29 @@ func TestGoRuntimeCheckRejectsBrokenGoSource(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeSourceHealthUsesConfiguredGoExecutableOutsidePATH(t *testing.T) {
+	goExe, err := goExecutable()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "source health path test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(dir, "go.mod"), "module sourcehealthpath\n\ngo 1.26\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(dir, "pkg", "ok", "ok.go"), "package ok\n\nfunc OK() bool { return true }\n"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_GO_EXECUTABLE", goExe)
+	t.Setenv("PATH", "")
+
+	if problems := runSourceHealthChecks(dir); len(problems) != 0 {
+		t.Fatalf("source health should use configured go executable outside PATH: %+v", problems)
+	}
+}
+
 func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

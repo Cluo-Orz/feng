@@ -18,6 +18,8 @@ eval 是否能运行
 
 Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项目专用 eval，也不要求空白 self 预置业务测试；它只防止明显坏掉的 Go runtime/source 被推进成 validated commit。
 
+source health 和 hatch 构建都通过同一套 Go 可执行发现逻辑：优先使用 `FENG_GO_EXECUTABLE`，然后查 PATH，Windows 下再查默认 Go 安装路径。这样 portable feng 在新目录里运行时，不会因为 Go 没写进 PATH 就误判 self 损坏。
+
 secret scan 只覆盖 self/source roots 中的人写内容，跳过 `__pycache__`、依赖目录、构建目录、`.feng/cache` 和 `.feng/runs` 这类生成或运行时内容。
 
 特殊 runtime 检查覆盖 `cmd/`、`internal/` 和 `src/` 中的 Go/Python 源码，避免把 feng 自举专用逻辑藏在产品 runner 里。

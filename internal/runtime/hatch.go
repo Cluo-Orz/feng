@@ -337,6 +337,15 @@ func buildRunnerFromSource(workspace, output, cleanName string) ([]string, error
 }
 
 func goExecutable() (string, error) {
+	if explicit := strings.TrimSpace(os.Getenv("FENG_GO_EXECUTABLE")); explicit != "" {
+		if exists(explicit) {
+			return explicit, nil
+		}
+		if path, err := exec.LookPath(explicit); err == nil {
+			return path, nil
+		}
+		return "", fmt.Errorf("configured FENG_GO_EXECUTABLE not found: %s", explicit)
+	}
 	if path, err := exec.LookPath("go"); err == nil {
 		return path, nil
 	}

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -185,7 +188,11 @@ def _run_source_health_checks(workspace: Path, problems: list[str]) -> None:
     except Exception as exc:
         problems.append(f"source health command denied: {exc}")
         return
-    code, output = run_process([command], cwd=workspace, timeout=240, shell=True)
+    go_exe = _go_executable()
+    if not go_exe:
+        code, output = 1, "go executable not found; install Go, add it to PATH, or set FENG_GO_EXECUTABLE"
+    else:
+        code, output = run_process([go_exe, "test", "./..."], cwd=workspace, timeout=240, shell=False)
     if code == 0:
         append_event(workspace, "source_health_passed", {"command": command})
         return
@@ -200,6 +207,23 @@ def _run_source_health_checks(workspace: Path, problems: list[str]) -> None:
         snippets=[output[:1000]],
     )
     problems.append(f"source health failed: {command} exit_code={code}; artifact={artifact['path']}")
+
+
+def _go_executable() -> str:
+    explicit = os.environ.get("FENG_GO_EXECUTABLE", "").strip()
+    if explicit:
+        if Path(explicit).exists():
+            return explicit
+        found = shutil.which(explicit)
+        return found or ""
+    found = shutil.which("go")
+    if found:
+        return found
+    if sys.platform == "win32":
+        for candidate in [r"C:\Program Files\Go\bin\go.exe", r"C:\Program Files (x86)\Go\bin\go.exe"]:
+            if Path(candidate).exists():
+                return candidate
+    return ""
 
 
 def _check_tool_files(workspace: Path, problems: list[str]) -> None:

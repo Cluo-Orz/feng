@@ -1,11 +1,14 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func checkSelfRepoTools(workspace string) []string {
@@ -106,7 +109,7 @@ func runSourceHealthChecks(workspace string) []string {
 	if err := checkCommand(workspace, command); err != nil {
 		return []string{"source health command denied: " + err.Error()}
 	}
-	exitCode, output := runShellCommand(workspace, command, 240)
+	exitCode, output := runGoSourceHealthCommand(workspace, 240)
 	if exitCode == 0 {
 		appendEvent(workspace, "source_health_passed", map[string]any{"command": command})
 		return nil
@@ -122,6 +125,30 @@ func runSourceHealthChecks(workspace string) []string {
 		[]string{output[:minInt(1000, len(output))]},
 	)
 	return []string{fmt.Sprintf("source health failed: %s exit_code=%d; artifact=%s", command, exitCode, artifact.Path)}
+}
+
+func runGoSourceHealthCommand(workspace string, timeoutSeconds int) (int, string) {
+	goExe, err := goExecutable()
+	if err != nil {
+		return 1, err.Error()
+	}
+	timeout := time.Duration(clampInt(timeoutSeconds, 1, 600)) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, goExe, "test", "./...")
+	cmd.Dir = workspace
+	output, err := cmd.CombinedOutput()
+	exitCode := 0
+	if err != nil {
+		exitCode = 1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+		if ctx.Err() != nil {
+			exitCode = 124
+		}
+	}
+	return exitCode, string(output)
 }
 
 func checkMessageCompiler(workspace string) []string {
