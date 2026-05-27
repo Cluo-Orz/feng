@@ -610,6 +610,8 @@ dist/feng/
   checksums.json
 ```
 
+如果输出路径在当前 workspace 内，MVP 只允许写入 `dist/`。hatch 可以覆盖上一版 package，但不能把 workspace 中的 self repo、candidate 文件或 review artifact 当作输出目录清理掉。
+
 Python 行为原型可以暂时使用 `runner/ + self/` 目录结构；Go 产品 runtime 的目标是直接产出命名可执行文件，并携带或定位 frozen self bundle。
 
 manifest：

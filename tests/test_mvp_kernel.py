@@ -369,6 +369,30 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((user_work / ".feng" / "state.yaml").exists())
             self.assertTrue((user_work / "identity.md").exists())
 
+    def test_hatch_rejects_workspace_output_outside_dist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "maker"
+            work.mkdir()
+            grow = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "make a portable agent", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(grow.returncode, 2)
+            docs = work / "docs"
+            docs.mkdir()
+            keep = docs / "keep.md"
+            keep.write_text("keep\n", encoding="utf-8")
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
+            hatch = run_feng(work, "hatch", "--name", "docs", "--out", ".", "--portable")
+            self.assertEqual(hatch.returncode, 1)
+            self.assertIn("hatch output inside workspace must be under dist/", hatch.stderr)
+            self.assertEqual(keep.read_text(encoding="utf-8"), "keep\n")
+
     def test_check_rejects_broken_go_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

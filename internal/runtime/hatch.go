@@ -118,11 +118,10 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		return "", errors.New("hatch requires a clean working tree so the package maps to a validated commit")
 	}
 
-	outputRoot := outDir
-	if outputRoot == "" {
-		outputRoot = filepath.Join(workspace, "dist")
+	output, err := resolveHatchOutput(workspace, outDir, cleanName)
+	if err != nil {
+		return "", err
 	}
-	output := filepath.Join(outputRoot, cleanName)
 	if err := os.RemoveAll(output); err != nil {
 		return "", err
 	}
@@ -167,6 +166,38 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	artifact, _ := writeArtifact(workspace, "hatch-preview", "feng-hatch", string(content), "hatch package created: "+output, "hatch packages a validated self into a named command", "json", nil)
 	appendEvent(workspace, "hatch_created", map[string]any{"path": output, "artifact": artifact})
 	return output, nil
+}
+
+func resolveHatchOutput(workspace, outDir, cleanName string) (string, error) {
+	absWorkspace, err := filepath.Abs(workspace)
+	if err != nil {
+		return "", err
+	}
+	outputRoot := outDir
+	if strings.TrimSpace(outputRoot) == "" {
+		outputRoot = filepath.Join(absWorkspace, "dist")
+	} else if !filepath.IsAbs(outputRoot) {
+		outputRoot = filepath.Join(absWorkspace, outputRoot)
+	}
+	output, err := filepath.Abs(filepath.Join(outputRoot, cleanName))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absWorkspace, output)
+	if err != nil {
+		return output, nil
+	}
+	relSlash := filepath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(relSlash, "../") {
+		return output, nil
+	}
+	if relSlash == "dist" || strings.HasPrefix(relSlash, "dist/") {
+		return output, nil
+	}
+	if relSlash == "." {
+		relSlash = "<workspace>"
+	}
+	return "", fmt.Errorf("hatch output inside workspace must be under dist/: %s", relSlash)
 }
 
 func copySelf(workspace, dst string) error {

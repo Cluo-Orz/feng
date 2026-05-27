@@ -122,6 +122,43 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeHatchRejectsWorkspaceOutputOutsideDist(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "make a portable agent", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	docsDir := filepath.Join(dir, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	keepPath := filepath.Join(docsDir, "keep.md")
+	if err := os.WriteFile(keepPath, []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "docs", "--out", ".", "--portable"}, dir, &out, &errOut); code != 1 {
+		t.Fatalf("hatch should reject workspace output, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "hatch output inside workspace must be under dist/") {
+		t.Fatalf("hatch did not explain output boundary: %s", errOut.String())
+	}
+	data, err := os.ReadFile(keepPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "keep\n" {
+		t.Fatalf("hatch modified workspace content: %q", string(data))
+	}
+}
+
 func TestGoRuntimeHatchBuildsRunnerFromWorkspaceSource(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

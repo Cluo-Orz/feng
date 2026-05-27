@@ -89,6 +89,22 @@ def _write_provider_examples(output: Path) -> None:
     )
 
 
+def _resolve_hatch_output(workspace: Path, clean_name: str, out_dir: Path | None) -> Path:
+    workspace = workspace.resolve()
+    output_root = out_dir or workspace / "dist"
+    if not output_root.is_absolute():
+        output_root = workspace / output_root
+    output = (output_root / clean_name).resolve()
+    try:
+        rel = output.relative_to(workspace)
+    except ValueError:
+        return output
+    if rel.parts and rel.parts[0] == "dist":
+        return output
+    rel_text = rel.as_posix() if rel.parts else "<workspace>"
+    raise RuntimeError(f"hatch output inside workspace must be under dist/: {rel_text}")
+
+
 def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: bool = True) -> Path:
     clean_name = slugify(name)
     state = load_state(workspace)
@@ -102,7 +118,7 @@ def hatch(workspace: Path, name: str, out_dir: Path | None = None, portable: boo
     dirty = status_short(workspace)
     if dirty:
         raise RuntimeError("hatch requires a clean working tree so the package maps to a validated commit")
-    output = (out_dir or workspace / "dist") / clean_name
+    output = _resolve_hatch_output(workspace, clean_name, out_dir)
     if output.exists():
         shutil.rmtree(output)
     ensure_dir(output)
