@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .artifacts import write_artifact
-from .utils import FengError, matches_any, read_jsonish, rel_path, safe_join
+from .utils import FengError, matches_any, read_jsonish, redact_secret_text, rel_path, safe_join
 
 
 class PermissionDenied(FengError):
@@ -54,4 +54,4 @@ def check_command(workspace: Path, command: str) -> None:
 
 def _deny(workspace: Path, source: str, attempted: str, message: str, why_relevant: str) -> None:
     write_artifact(workspace, "permission-denied", source, attempted, message, why_relevant)
-    raise PermissionDenied(message)
+    raise PermissionDenied(redact_secret_text(message))

@@ -83,7 +83,7 @@ func checkCommand(workspace, command string) error {
 
 func permissionDenied(workspace, source, attempted, message, whyRelevant string) error {
 	_, _ = writeArtifact(workspace, "permission-denied", source, attempted, message, whyRelevant, "txt", nil)
-	return errors.New(message)
+	return errors.New(redactSecretText(message))
 }
 
 func safeWorkspacePath(workspace, rawPath string) (string, string, error) {
