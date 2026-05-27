@@ -359,10 +359,47 @@ def _selection_match(query: str, term: str) -> bool:
     return len(term) >= 3 and bool(query) and term in query
 
 
+def _validate_tool_arguments(schema: dict[str, Any], arguments: dict[str, Any]) -> str | None:
+    if not schema:
+        return None
+    if schema.get("type", "object") != "object":
+        return "tool schema root must be object"
+    for name in schema.get("required") or []:
+        if str(name) not in arguments:
+            return f"missing required tool argument: {name}"
+    properties = schema.get("properties") or {}
+    for name, value in arguments.items():
+        spec = properties.get(name) or {}
+        expected = spec.get("type") if isinstance(spec, dict) else ""
+        if expected and not _argument_matches_type(value, str(expected)):
+            return f"tool argument {name} must be {expected}"
+    return None
+
+
+def _argument_matches_type(value: Any, expected: str) -> bool:
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    return True
+
+
 def execute_tool(workspace: Path, tools: list[Tool], name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     tool = next((item for item in tools if item.name == name), None)
     if tool is None:
         return _result(f"unknown tool: {name}", is_error=True)
+    validation_error = _validate_tool_arguments(tool.input_schema, arguments)
+    if validation_error:
+        append_event(workspace, "tool_argument_invalid", {"tool": name, "reason": validation_error})
+        return _result(validation_error, is_error=True)
     try:
         return tool.handler(workspace, arguments)
     except PermissionDenied as exc:

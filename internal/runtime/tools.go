@@ -133,10 +133,84 @@ func activeToolPackReport(workspace, mode, latestEvent string) ActiveToolPackRep
 func executeTool(workspace string, tools []Tool, name string, args map[string]any) ToolResult {
 	for _, tool := range tools {
 		if tool.Name == name {
+			if err := validateToolArguments(tool.Parameters, args); err != nil {
+				appendEvent(workspace, "tool_argument_invalid", map[string]any{"tool": name, "reason": err.Error()})
+				return ToolResult{Content: err.Error(), IsError: true}
+			}
 			return tool.Handler(workspace, args)
 		}
 	}
 	return ToolResult{Content: "unknown tool: " + name, IsError: true}
+}
+
+func validateToolArguments(schema map[string]any, args map[string]any) error {
+	if len(schema) == 0 {
+		return nil
+	}
+	if schemaType, ok := schema["type"].(string); ok && schemaType != "" && schemaType != "object" {
+		return fmt.Errorf("tool schema root must be object")
+	}
+	for _, required := range stringListFromAny(schema["required"]) {
+		if _, ok := args[required]; !ok {
+			return fmt.Errorf("missing required tool argument: %s", required)
+		}
+	}
+	properties, _ := schema["properties"].(map[string]any)
+	for name, value := range args {
+		rawProperty, ok := properties[name]
+		if !ok {
+			continue
+		}
+		property, _ := rawProperty.(map[string]any)
+		expected := argString(property, "type")
+		if expected == "" || argumentMatchesType(value, expected) {
+			continue
+		}
+		return fmt.Errorf("tool argument %s must be %s", name, expected)
+	}
+	return nil
+}
+
+func argumentMatchesType(value any, expected string) bool {
+	switch expected {
+	case "string":
+		_, ok := value.(string)
+		return ok
+	case "integer":
+		switch typed := value.(type) {
+		case int, int64:
+			return true
+		case float64:
+			return typed == float64(int64(typed))
+		case json.Number:
+			_, err := typed.Int64()
+			return err == nil
+		default:
+			return false
+		}
+	case "number":
+		switch value.(type) {
+		case int, int64, float64, json.Number:
+			return true
+		default:
+			return false
+		}
+	case "boolean":
+		_, ok := value.(bool)
+		return ok
+	case "object":
+		_, ok := value.(map[string]any)
+		return ok
+	case "array":
+		switch value.(type) {
+		case []any, []string:
+			return true
+		default:
+			return false
+		}
+	default:
+		return true
+	}
 }
 
 func runReadFile(workspace string, args map[string]any) ToolResult {

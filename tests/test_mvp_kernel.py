@@ -327,6 +327,17 @@ class MvpKernelTest(unittest.TestCase):
             )
             self.assertFalse(echoed["is_error"], echoed["content"])
             self.assertIn("wind", echoed["content"])
+            missing = execute_tool(work, active_tool_pack(work, "grow", "echo api argument"), "echo_arg", {})
+            self.assertTrue(missing["is_error"])
+            self.assertIn("missing required tool argument: subject", missing["content"])
+            wrong_type = execute_tool(
+                work,
+                active_tool_pack(work, "grow", "echo api argument"),
+                "echo_arg",
+                {"subject": 42},
+            )
+            self.assertTrue(wrong_type["is_error"])
+            self.assertIn("tool argument subject must be string", wrong_type["content"])
             check_tools = [tool.name for tool in active_tool_pack(work, "check", "")]
             self.assertIn("api_contract_check", check_tools)
             self.assertIn("news_fetch", check_tools)

@@ -336,6 +336,14 @@ func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
 	if result.IsError || !strings.Contains(result.Content, "wind") {
 		t.Fatalf("self repo tool did not receive function-call args: %+v", result)
 	}
+	result = executeTool(dir, tools, "echo_arg", map[string]any{})
+	if !result.IsError || !strings.Contains(result.Content, "missing required tool argument: subject") {
+		t.Fatalf("expected missing required arg to fail before command execution: %+v", result)
+	}
+	result = executeTool(dir, tools, "echo_arg", map[string]any{"subject": 42})
+	if !result.IsError || !strings.Contains(result.Content, "tool argument subject must be string") {
+		t.Fatalf("expected wrong arg type to fail before command execution: %+v", result)
+	}
 
 	report := runCheck(dir)
 	if !report.OK {
