@@ -200,7 +200,7 @@ func TestDefaultPermissionsAllowSelfRuntimeGrowth(t *testing.T) {
 			t.Fatalf("expected write to %s to be allowed: %s", item.path, result.Content)
 		}
 	}
-	for _, command := range []string{"go test ./...", "go vet ./...", "go build ./cmd/feng"} {
+	for _, command := range []string{"go run ./cmd/feng --help", "go test ./...", "go vet ./...", "go build ./cmd/feng"} {
 		if err := checkCommand(dir, command); err != nil {
 			t.Fatalf("expected command %q to be allowed: %v", command, err)
 		}
@@ -345,7 +345,7 @@ func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
 	if result.IsError || !strings.Contains(result.Content, "exit_code=0") {
 		t.Fatalf("self repo tool failed: %+v", result)
 	}
-	if err := writeText(filepath.Join(dir, "scripts", "echo_args.py"), "import json, os\nprint(json.loads(os.environ['FENG_TOOL_ARGS'])['subject'])\n"); err != nil {
+	if err := writeText(filepath.Join(dir, "scripts", "echo_args.go"), "package main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tvar args map[string]any\n\t_ = json.Unmarshal([]byte(os.Getenv(\"FENG_TOOL_ARGS\")), &args)\n\tfmt.Println(args[\"subject\"])\n}\n"); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeJSONFile(filepath.Join(dir, "tools", "echo.tool.yaml"), map[string]any{
@@ -358,7 +358,7 @@ func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
 			"properties": map[string]any{"subject": map[string]any{"type": "string"}},
 			"required":   []any{"subject"},
 		},
-		"command": "python scripts/echo_args.py",
+		"command": "go run scripts/echo_args.go",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +495,7 @@ func TestCheckIgnoresGeneratedSecretLikeFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	secretLike := "sk-" + "generatedcache1234567890"
-	generated := filepath.Join(dir, "tests", "__pycache__", "test.cpython-314.pyc")
+	generated := filepath.Join(dir, "docs", ".cache", "generated.bin")
 	if err := os.MkdirAll(filepath.Dir(generated), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -46,13 +46,13 @@ var (
 				"write": []any{
 					".gitignore", "identity.md", "goal.md", "feng.yaml", "hooks.yaml", "permissions.yaml",
 					"interface.yaml", "config.schema.yaml", "skills/**", "tools/**",
-					"world/**", "evals/**", "docs/**", "src/**", "tests/**",
+					"world/**", "evals/**", "docs/**",
 					"cmd/**", "internal/**", "pkg/**", "scripts/**",
 					"go.mod", "go.sum", "go.work", "go.work.sum",
 				},
 			},
 			"commands": map[string]any{
-				"allow": []any{"git status", "git diff", "git log", "rg", "python -m", "python", "pytest", "go test", "go vet", "go build"},
+				"allow": []any{"git status", "git diff", "git log", "rg", "go run", "go test", "go vet", "go build"},
 				"deny":  []any{"git reset --hard", "git push", "rm -rf", "Remove-Item -Recurse", "del /s"},
 			},
 		},
@@ -756,7 +756,7 @@ func scanSecrets(workspace string) []string {
 	}
 	roots = append(roots,
 		".feng/artifacts", ".gitignore",
-		"cmd", "internal", "src", "tests", "docs", "pkg", "scripts",
+		"cmd", "internal", "docs", "pkg", "scripts",
 		"go.mod", "go.sum", "go.work", "go.work.sum",
 	)
 	for _, root := range roots {

@@ -39,7 +39,7 @@ large source file
 
 ```text
 type: test-log | diff | build-output | source
-source: pytest / npm test / git diff / file path
+source: test log / git diff / file path
 path
 hash
 summary

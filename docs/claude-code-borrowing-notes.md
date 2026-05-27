@@ -47,13 +47,13 @@ Git 表达 self 的代际成长。
 
 - 能力简介：工具定义给模型看，handler 在 kernel 里执行；新增工具不改变 loop。
 - 能给 feng 带来什么帮助：feng 的 bootstrap tools 和 grow 出来的领域 tools 都应进入统一 Tool Registry，再由 message compiler 选择 active tool pack。
-- 目标位置：`learn-claude-code/s02_tool_use/README.md:28`、`learn-claude-code/s02_tool_use/README.md:101`、`learn-claude-code/s02_tool_use/code.py:120`、`learn-claude-code/s02_tool_use/code.py:138`。
+- 目标位置：`learn-claude-code/s02_tool_use/README.md:28`、`learn-claude-code/s02_tool_use/README.md:101`、该章节源码示例的 tool handler 片段。
 
 ## 4. Tool Boundary 先于 Prompt 约束
 
 - 能力简介：每次工具调用前经过权限检查，deny/ask/allow 是执行边界，不靠 prompt 劝模型守规矩。
 - 能给 feng 带来什么帮助：permissions.yaml 必须是 tool call 边界；hatch 产物也必须用同一套 permission check，不允许 GUI 或脚本绕过。
-- 目标位置：`learn-claude-code/s03_permission/README.md:24`、`learn-claude-code/s03_permission/README.md:93`、`learn-claude-code/s03_permission/README.md:174`、`learn-claude-code/s03_permission/code.py:184`。
+- 目标位置：`learn-claude-code/s03_permission/README.md:24`、`learn-claude-code/s03_permission/README.md:93`、`learn-claude-code/s03_permission/README.md:174`、该章节源码示例的 permission check 片段。
 
 ## 5. Hooks 是 Loop 周围的少量插口
 
@@ -71,7 +71,7 @@ Git 表达 self 的代际成长。
 
 - 能力简介：子 agent 使用 fresh messages，执行子问题后只返回最终结论；fork 模式还能保持 cache-friendly 前缀。
 - 能给 feng 带来什么帮助：feng 不应在 MVP 做多 agent，但可以借鉴“隔离 noisy exploration”的思想：大型阅读、review、搜索可以落 artifact，只把结论和引用回到主 context。
-- 目标位置：`learn-claude-code/s06_subagent/README.md:35`、`learn-claude-code/s06_subagent/README.md:149`、`learn-claude-code/s06_subagent/README.md:155`、`learn-claude-code/s06_subagent/code.py:189`。
+- 目标位置：`learn-claude-code/s06_subagent/README.md:35`、`learn-claude-code/s06_subagent/README.md:149`、`learn-claude-code/s06_subagent/README.md:155`、该章节源码示例的 subagent 调用片段。
 
 ## 8. Skill 两级加载
 
@@ -95,7 +95,7 @@ Git 表达 self 的代际成长。
 
 - 能力简介：system prompt 由稳定 section 和按需 section 组装，并用真实状态决定是否加载 memory/skill/tool 等内容。
 - 能给 feng 带来什么帮助：feng 的 prompt 不应是用户维护的散乱 prompt blocks；message compiler 根据 self repo、state、Git、latest event 编译 messages，并保持稳定前缀。
-- 目标位置：`learn-claude-code/s10_system_prompt/README.md:39`、`learn-claude-code/s10_system_prompt/README.md:79`、`learn-claude-code/s10_system_prompt/README.md:121`、`learn-claude-code/s10_system_prompt/code.py:50`。
+- 目标位置：`learn-claude-code/s10_system_prompt/README.md:39`、`learn-claude-code/s10_system_prompt/README.md:79`、`learn-claude-code/s10_system_prompt/README.md:121`、该章节源码示例的 system prompt 组装片段。
 
 ## 12. LLM 错误恢复是长任务基础能力
 
@@ -113,7 +113,7 @@ Git 表达 self 的代际成长。
 
 - 能力简介：慢命令先返回 placeholder tool_result，完成后以 task_notification 注入后续 turn。
 - 能给 feng 带来什么帮助：feng 的 run_command 要能处理长命令，不阻塞整个 grow；MVP 可先记录 running artifact，后续把后台命令作为 `.feng/runs/` 生命周期补齐。
-- 目标位置：`learn-claude-code/s13_background_tasks/README.md:36`、`learn-claude-code/s13_background_tasks/README.md:103`、`learn-claude-code/s13_background_tasks/README.md:126`、`learn-claude-code/s13_background_tasks/code.py:329`。
+- 目标位置：`learn-claude-code/s13_background_tasks/README.md:36`、`learn-claude-code/s13_background_tasks/README.md:103`、`learn-claude-code/s13_background_tasks/README.md:126`、该章节源码示例的后台任务片段。
 
 ## 15. Cron/调度应被视为触发器，不是核心 loop
 
@@ -155,7 +155,7 @@ Git 表达 self 的代际成长。
 
 - 能力简介：连接 MCP 后工具池改变，旧 prompt/tool cache 失效；Claude Code 对内置和 MCP 工具排序以保护缓存断点。
 - 能给 feng 带来什么帮助：feng 的 cache key 必须包含 active_tool_pack_hash；tool growth 后不能误用旧缓存，也不能每轮全量暴露工具。
-- 目标位置：`learn-claude-code/s19_mcp_plugin/README.md:117`、`learn-claude-code/s19_mcp_plugin/README.md:131`、`learn-claude-code/s19_mcp_plugin/README.md:215`、`learn-claude-code/s19_mcp_plugin/code.py:754`。
+- 目标位置：`learn-claude-code/s19_mcp_plugin/README.md:117`、`learn-claude-code/s19_mcp_plugin/README.md:131`、`learn-claude-code/s19_mcp_plugin/README.md:215`、该章节源码示例的动态 tool pool 片段。
 
 ## 22. 所有机制最后必须回到同一个 Loop
 

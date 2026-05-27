@@ -121,10 +121,7 @@ func shouldSkipContextDir(rel string) bool {
 	if rel == "dist" || rel == "bin" || rel == "build" || rel == "out" || rel == "coverage" {
 		return true
 	}
-	if base == "__pycache__" || base == "node_modules" || base == "vendor" || base == "target" {
-		return true
-	}
-	if base == ".pytest_cache" || base == ".mypy_cache" || base == ".ruff_cache" || base == ".tox" {
+	if base == "node_modules" || base == "vendor" || base == "target" {
 		return true
 	}
 	if base == ".venv" || base == "venv" || base == ".next" || base == ".nuxt" || base == ".turbo" || base == ".cache" {
@@ -135,7 +132,7 @@ func shouldSkipContextDir(rel string) bool {
 
 func shouldSkipContextFile(rel string) bool {
 	base := filepath.Base(rel)
-	if strings.HasSuffix(base, ".pyc") || strings.HasSuffix(base, ".test") || strings.HasSuffix(base, ".exe") {
+	if strings.HasSuffix(base, ".test") || strings.HasSuffix(base, ".exe") {
 		return true
 	}
 	return false

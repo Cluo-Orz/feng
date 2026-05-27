@@ -20,9 +20,9 @@ Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项
 
 source health 和 hatch 构建都通过同一套 Go 可执行发现逻辑：优先使用 `FENG_GO_EXECUTABLE`，然后查 PATH，Windows 下再查默认 Go 安装路径。这样 portable feng 在新目录里运行时，不会因为 Go 没写进 PATH 就误判 self 损坏。
 
-secret scan 只覆盖 self/source roots 中的人写内容，跳过 `__pycache__`、依赖目录、构建目录、`.feng/cache` 和 `.feng/runs` 这类生成或运行时内容。
+secret scan 只覆盖 self/source roots 中的人写内容，跳过依赖目录、构建目录、`.feng/cache` 和 `.feng/runs` 这类生成或运行时内容。
 
-特殊 runtime 检查覆盖 `cmd/`、`internal/` 和 `src/` 中的 Go/Python 源码，避免把 feng 自举专用逻辑藏在产品 runner 里。
+特殊 runtime 检查覆盖 `cmd/`、`internal/` 和 `pkg/` 中的 Go 源码，避免把 feng 自举专用逻辑藏在产品 runner 里。
 
 失败：
 
@@ -56,7 +56,7 @@ provider examples
 named entry command
 ```
 
-`frozen self` 包含最小 self repo，也包含当前 workspace 中已经长出来、并被 check 管住的可选根：`docs/`、`src/`、`tests/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。这样 `feng hatch --name feng --portable` 产出的下一代 feng 不会丢失继续自迭代需要的源码、文档和验证材料。
+`frozen self` 包含最小 self repo，也包含当前 workspace 中已经长出来、并被 check 管住的可选根：`docs/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。这样 `feng hatch --name feng --portable` 产出的下一代 feng 不会丢失继续自迭代需要的源码、文档和验证材料。
 
 如果 hatch 输出路径位于当前 workspace 内，必须落在 `dist/` 下；workspace 外的显式输出路径可以使用。这样 hatch 可以清理自己的 package 目录，但不能误删 `docs/`、`skills/`、`tools/` 或其他 candidate 内容。
 
@@ -66,7 +66,7 @@ hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 w
 
 hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts/gui/tag。
 
-产品级 hatch 的 runner 目标是 Go binary。Python runner 只作为当前行为原型存在，不能成为长期使用者体验的前提。
+产品级 hatch 的 runner 目标是 Go binary。hatch 不引入第二套 runner。
 
 不包含：
 

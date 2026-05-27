@@ -29,8 +29,6 @@ var selfNames = []string{
 	"evals",
 	".gitignore",
 	"docs",
-	"src",
-	"tests",
 	"cmd",
 	"internal",
 	"pkg",

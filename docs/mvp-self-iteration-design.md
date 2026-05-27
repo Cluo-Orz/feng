@@ -57,9 +57,9 @@ MVP 也不做 feng 专用逻辑：
 
 ## 2.1 Runtime 语言边界
 
-MVP 的架构不绑定语言，但产品级 runtime 目标是 Go。
+MVP 的架构不绑定语言，但当前产品级 runtime、CLI、check、hatch 和 portable runner 统一用 Go 实现。
 
-当前 Python runtime 可以作为行为原型，用来验证：
+Go runtime 需要覆盖完整 MVP 语义：
 
 ```text
 grow loop
@@ -70,7 +70,7 @@ check checkpoint
 hatch package
 ```
 
-正式 hatch 体验不应该长期要求用户安装 Python 或理解虚拟环境。Go runtime 应成为下一阶段实现目标，因为它更容易产出跨平台命名命令。
+正式 hatch 体验不要求用户安装解释器或理解语言包管理。Go binary 是命名命令和跨平台分发的默认形态。
 
 语言迁移不能改变 MVP 的核心约束：
 
@@ -147,7 +147,7 @@ MVP workspace：
   .git/
 ```
 
-对 feng 自举来说，当前 `docs/`、未来 `src/`、测试和构建脚本属于被感知的 world 和可修改目标。它们不是特殊 runtime。
+对 feng 自举来说，当前 `docs/`、Go 源码、测试和构建脚本属于被感知的 world 和可修改目标。它们不是特殊 runtime。
 
 ## 6. CLI
 
@@ -191,7 +191,7 @@ status/watch/artifacts
 如果缺少 provider 配置，则进入 missing_config
 ```
 
-bootstrap 不覆盖已有文件。已有 docs、src、tests、脚本和配置先作为当前 world 的一部分被感知，只有缺失的 self 文件和 `.feng/` 状态会被补齐。
+bootstrap 不覆盖已有文件。已有 docs、源码、测试、脚本和配置先作为当前 world 的一部分被感知，只有缺失的 self 文件和 `.feng/` 状态会被补齐。
 
 bootstrap 不是单独产品命令。它只是 `grow` 在非 workspace 目录中的前置阶段。
 
@@ -424,23 +424,29 @@ MVP permission 只做本地边界：
 files:
   read:
     - docs/**
-    - src/**
-    - tests/**
+    - cmd/**
+    - internal/**
+    - pkg/**
+    - scripts/**
     - "*.md"
   write:
     - docs/**
-    - src/**
-    - tests/**
+    - cmd/**
+    - internal/**
+    - pkg/**
+    - scripts/**
+    - go.mod
+    - go.sum
 commands:
   allow:
     - git status
     - git diff
     - git log
     - rg
-    - npm test
-    - pytest
-    - cargo test
+    - go run
     - go test
+    - go vet
+    - go build
   deny:
     - git reset --hard
     - git push
@@ -546,7 +552,7 @@ validated commit 仍是运行基线。
 
 只有 check 通过才可以更新 validated commit。
 
-checkpoint/tag/hatch 的 Git 干净检查只针对 self roots：最小 self 文件、skills/tools/world/evals、docs/src/tests/cmd/internal/pkg/scripts 和 Go module 文件。这样 feng 可以跑在一个真实 workspace 里，旁边存在数据、日志或目标环境文件，但 validated self 不会误提交这些内容，也不会被它们阻塞发布。
+checkpoint/tag/hatch 的 Git 干净检查只针对 self roots：最小 self 文件、skills/tools/world/evals、docs/cmd/internal/pkg/scripts 和 Go module 文件。这样 feng 可以跑在一个真实 workspace 里，旁边存在数据、日志或目标环境文件，但 validated self 不会误提交这些内容，也不会被它们阻塞发布。
 
 LLM 修复 self 的方式是读取 Git 报告、diff 和失败 artifact，然后继续编辑 working tree。Git commit/tag 由 kernel 在验证通过后执行，避免把版本推进权交给一次普通 tool call。
 
@@ -619,7 +625,7 @@ dist/feng/
 
 hatch 只能清理空目录或已有 feng package 目录。已有 package 通过 `feng-release.yaml` 或 package marker 识别；如果目标目录已有普通用户内容，hatch 必须拒绝覆盖，让用户显式处理。
 
-Python 行为原型可以暂时使用 `runner/ + self/` 目录结构；Go 产品 runtime 的目标是直接产出命名可执行文件，并携带或定位 frozen self bundle。
+portable package 使用 `runner + self/` 目录结构：runner 是命名 Go binary，`self/` 是 frozen self bundle。未来可以把 self bundle embed 进 binary，但这只是打包形态优化。
 
 manifest：
 
@@ -656,7 +662,7 @@ API key
 未通过 check 的 candidate
 ```
 
-对 `feng hatch --name feng --portable`，frozen self 还应携带已经长出来的 `docs/`、`src/`、`tests/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。它们必须先经过 check 和 secret scan，不能绕过 validated commit。这样下一代 feng 到新目录后仍能继续用通用 grow/check/hatch 迭代自己，而不是只剩一个不可成长的 binary。
+对 `feng hatch --name feng --portable`，frozen self 还应携带已经长出来的 `docs/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。它们必须先经过 check 和 secret scan，不能绕过 validated commit。这样下一代 feng 到新目录后仍能继续用通用 grow/check/hatch 迭代自己，而不是只剩一个不可成长的 binary。
 
 下一代 feng 第一次 bootstrap 新 workspace 时，应把 package manifest 的 `self_commit` 记录为 `source_self_commit`。它表示这一代 self 的来源版本，不替代新 workspace 自己通过 `check` 生成的本地 `validated_commit`。
 

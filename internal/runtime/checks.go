@@ -215,13 +215,13 @@ func checkInterfaceConfig(workspace string) []string {
 
 func checkNoSpecialRuntime(workspace string) []string {
 	var problems []string
-	for _, rootName := range []string{"cmd", "internal", "src"} {
+	for _, rootName := range []string{"cmd", "internal", "pkg"} {
 		root := filepath.Join(workspace, rootName)
 		if !exists(root) {
 			continue
 		}
 		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !(strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".py")) {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
 				return nil
 			}
 			data, err := os.ReadFile(path)

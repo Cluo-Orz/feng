@@ -97,7 +97,7 @@ token usage mapping
 这些不应继续写进调研文档：
 
 ```text
-具体 TypeScript/Rust/Python interface
+具体语言 interface
 provider profile parser
 stream parser 代码
 tokenizer 选型

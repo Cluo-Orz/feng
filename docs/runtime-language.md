@@ -2,13 +2,11 @@
 
 ## 决策
 
-feng 的产品级 runtime 应该使用 Go。
-
-当前 Python 实现是行为原型：它用于验证 MVP loop、文件约定、Git checkpoint、tool 边界、check 和 hatch 语义。迁移 runtime 时，Python 版本应保留为参考实现和测试基准。
+feng 的 runtime、CLI、check、hatch 和 portable runner 统一使用 Go 实现。MVP 不保留第二套运行时，也不要求使用者理解解释器、虚拟环境或语言包管理。
 
 ## 为什么是 Go
 
-feng runtime 的主要工作是：
+feng runtime 的主要工作是协调：
 
 ```text
 CLI
@@ -43,9 +41,9 @@ xiaogui
 xiaogui --input ./Downloads
 ```
 
-使用者不应该理解 Python 环境、虚拟环境、包管理器或源码目录。Go runner 更适合让 `hatch` 产出一个命名可执行文件，并携带或定位 frozen self bundle。
+使用者只需要拿到命名可执行文件和必要配置。portable package 可以携带 frozen self bundle，但 runner 本身仍是 Go binary。
 
-## 迁移规则
+## 架构不变量
 
 runtime 语言不能改变 feng 的架构。
 
@@ -67,29 +65,22 @@ feng hatch --name NAME --portable
 feng status
 feng watch
 feng artifacts
+feng gui
+feng tag NAME
 ```
 
-只有在 Go 实现保持通用 loop、且不引入项目专用自迭代逻辑时，语言迁移才成立。
+只有在 Go 实现保持通用 loop、且不引入项目专用自迭代逻辑时，语言选择才成立。
 
 ## 实现形态
 
-Go runtime 应该保持小：
+Go runtime 保持小而直接：
 
 ```text
 cmd/feng/
-internal/kernel/
-internal/selfrepo/
-internal/state/
-internal/events/
-internal/artifacts/
-internal/llm/
-internal/tools/
-internal/permissions/
-internal/check/
-internal/hatch/
+internal/runtime/
 ```
 
-MVP 不需要框架。Go 标准库足够。
+后续只有在模块边界真的稳定时，才把 `internal/runtime/` 拆成更细的包。MVP 不需要框架。
 
 ## Hatch 目标
 
@@ -99,24 +90,23 @@ MVP 不需要框架。Go 标准库足够。
 dist/xiaogui/
   xiaogui.exe      Windows
   xiaogui          macOS/Linux
-  self.feng        frozen self bundle，或嵌入 binary 的 self 数据
-  manifest.json
+  self/            frozen self bundle
+  feng-release.yaml
   checksums.json
 ```
 
-第一个 Go hatch 可以仍然是目录包。后续可以把 `self.feng` append 或 embed 到可执行文件里，但这是打包优化，不是新架构层。
+第一个 hatch 可以是目录包。后续可以把 self bundle embed 到可执行文件里，但这是打包优化，不是新架构层。
 
-## 当前状态
-
-当前本机已经安装 Go，可以编译和测试 Go runtime。Rust/Cargo 仍不是 MVP 必需项。
+## 当前验证
 
 影响 runtime 行为的改动必须至少通过：
 
 ```text
 go test ./...
 go vet ./...
-Python 行为原型回归测试
+go build ./cmd/feng
 真实二进制 smoke
+portable hatch smoke
 ```
 
 如果涉及 provider，还必须用临时环境变量验证真实 provider 调用，并确认 API key 没有写入仓库、artifact 或 hatch package。
