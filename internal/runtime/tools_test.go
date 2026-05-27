@@ -204,6 +204,44 @@ func TestLongToolOutputBecomesArtifact(t *testing.T) {
 	}
 }
 
+func TestListFilesSkipsGeneratedNoiseUnlessExplicit(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "list noise test", ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{
+		"docs/important.md",
+		"node_modules/pkg/index.js",
+		".feng/cache/noise.txt",
+		"build/generated.txt",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, rel), []byte(rel+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rootList := executeTool(dir, bootstrapTools(), "list_files", map[string]any{"path": ".", "max_files": 200})
+	if rootList.IsError {
+		t.Fatalf("list_files failed: %s", rootList.Content)
+	}
+	if !strings.Contains(rootList.Content, "docs/important.md") {
+		t.Fatalf("root listing missed self-relevant docs: %s", rootList.Content)
+	}
+	for _, noisy := range []string{"node_modules/pkg/index.js", ".feng/cache/noise.txt", "build/generated.txt"} {
+		if strings.Contains(rootList.Content, noisy) {
+			t.Fatalf("root listing leaked noisy path %s:\n%s", noisy, rootList.Content)
+		}
+	}
+
+	explicitList := executeTool(dir, bootstrapTools(), "list_files", map[string]any{"path": "node_modules", "max_files": 20})
+	if explicitList.IsError || !strings.Contains(explicitList.Content, "node_modules/pkg/index.js") {
+		t.Fatalf("explicit generated directory listing should remain possible: %+v", explicitList)
+	}
+}
+
 func TestParseGrowArgs(t *testing.T) {
 	goal, turns, err := parseGrowArgs([]string{"improve", "self", "--max-turns", "3"})
 	if err != nil {

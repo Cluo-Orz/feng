@@ -82,20 +82,66 @@ def run_list_files(workspace: Path, args: dict[str, Any]) -> dict[str, Any]:
     root = check_file_read(workspace, root_raw)
     max_files = int(args.get("max_files", 300))
     files: list[str] = []
+    root_rel = rel_path(workspace, root)
     if root.is_file():
-        files.append(rel_path(workspace, root))
+        files.append(root_rel)
     elif root.exists():
-        for path in sorted(root.rglob("*")):
-            rel = rel_path(workspace, path)
-            if ".git/" in rel or rel.startswith(".git"):
-                continue
-            if path.is_file():
+        for directory, dirs, names in os.walk(root):
+            current = Path(directory)
+            dirs.sort()
+            names.sort()
+            dirs[:] = [
+                name
+                for name in dirs
+                if not _skip_list_dir(rel_path(workspace, current / name), root_rel)
+            ]
+            for name in names:
+                path = current / name
+                rel = rel_path(workspace, path)
+                if _skip_list_file(rel):
+                    continue
                 files.append(rel)
+                if len(files) >= max_files:
+                    files.append("[truncated]")
+                    dirs[:] = []
+                    break
             if len(files) >= max_files:
-                files.append("[truncated]")
                 break
     append_event(workspace, "tool_called", {"tool": "list_files", "path": root_raw})
     return _maybe_artifact(workspace, f"list_files:{root_raw}", "\n".join(files), "list_files output")
+
+
+def _skip_list_dir(rel: str, root_rel: str) -> bool:
+    rel = rel.replace("\\", "/").strip("/")
+    root_rel = root_rel.replace("\\", "/").strip("/")
+    if not rel or rel == "." or rel == root_rel:
+        return False
+    base = Path(rel).name
+    if rel in {".git", ".feng", "dist", "bin", "build", "out", "coverage"}:
+        return True
+    if rel in {".feng/cache", ".feng/runs"}:
+        return True
+    return base in {
+        "__pycache__",
+        "node_modules",
+        "vendor",
+        "target",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "venv",
+        ".next",
+        ".nuxt",
+        ".turbo",
+        ".cache",
+    }
+
+
+def _skip_list_file(rel: str) -> bool:
+    base = Path(rel).name
+    return base.endswith((".pyc", ".test", ".exe"))
 
 
 def run_run_command(workspace: Path, args: dict[str, Any]) -> dict[str, Any]:

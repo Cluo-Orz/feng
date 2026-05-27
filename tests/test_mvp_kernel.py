@@ -256,6 +256,37 @@ class MvpKernelTest(unittest.TestCase):
             self.assertIn("api_contract_check", check_tools)
             self.assertIn("news_fetch", check_tools)
 
+    def test_list_files_skips_generated_noise_unless_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed list files", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            for rel in [
+                "docs/important.md",
+                "node_modules/pkg/index.js",
+                ".feng/cache/noise.txt",
+                "build/generated.txt",
+            ]:
+                path = work / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(rel + "\n", encoding="utf-8")
+            root_list = execute_tool(work, BOOTSTRAP_TOOLS, "list_files", {"path": ".", "max_files": 200})
+            self.assertFalse(root_list["is_error"], root_list["content"])
+            self.assertIn("docs/important.md", root_list["content"])
+            self.assertNotIn("node_modules/pkg/index.js", root_list["content"])
+            self.assertNotIn(".feng/cache/noise.txt", root_list["content"])
+            self.assertNotIn("build/generated.txt", root_list["content"])
+            explicit = execute_tool(work, BOOTSTRAP_TOOLS, "list_files", {"path": "node_modules", "max_files": 20})
+            self.assertFalse(explicit["is_error"], explicit["content"])
+            self.assertIn("node_modules/pkg/index.js", explicit["content"])
+
     def test_anthropic_message_mapping(self) -> None:
         system, messages = _anthropic_messages(
             [

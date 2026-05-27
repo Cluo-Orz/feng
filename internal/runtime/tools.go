@@ -181,35 +181,55 @@ func runListFiles(workspace string, args map[string]any) ToolResult {
 	}
 	maxFiles := clampInt(argInt(args, "max_files", 300), 1, 2000)
 	var files []string
+	truncated := false
 	info, err := os.Stat(root)
 	if err != nil {
 		return ToolResult{Content: err.Error(), IsError: true}
 	}
+	rootRel := relPath(workspace, root)
 	if !info.IsDir() {
-		files = append(files, relPath(workspace, root))
+		files = append(files, rootRel)
 	} else {
 		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return nil
+			if err != nil || truncated {
+				return filepath.SkipAll
 			}
 			rel := relPath(workspace, path)
 			if d.IsDir() {
-				if rel == ".git" || strings.HasPrefix(rel, ".git/") {
+				if shouldSkipListDir(rel, rootRel) {
 					return filepath.SkipDir
 				}
 				return nil
 			}
+			if shouldSkipContextFile(rel) {
+				return nil
+			}
 			files = append(files, rel)
 			if len(files) >= maxFiles {
-				files = append(files, "[truncated]")
+				truncated = true
 				return filepath.SkipAll
 			}
 			return nil
 		})
 		sort.Strings(files)
+		if truncated {
+			files = append(files, "[truncated]")
+		}
 	}
 	appendEvent(workspace, "tool_called", map[string]any{"tool": "list_files", "path": rawPath})
 	return maybeArtifact(workspace, "list_files:"+rawPath, strings.Join(files, "\n"), "list_files output")
+}
+
+func shouldSkipListDir(rel, rootRel string) bool {
+	rel = filepath.ToSlash(rel)
+	rootRel = filepath.ToSlash(rootRel)
+	if rel == rootRel || rel == "." || rel == "" {
+		return false
+	}
+	if rel == ".feng/cache" || rel == ".feng/runs" {
+		return true
+	}
+	return shouldSkipContextDir(rel)
 }
 
 func runRunCommand(workspace string, args map[string]any) ToolResult {

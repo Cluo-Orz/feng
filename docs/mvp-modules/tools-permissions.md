@@ -19,6 +19,8 @@ self repo tools
 
 registry 是全集，active tool pack 是本轮暴露给 LLM 的子集。
 
+`list_files` 默认跳过 `.git`、`.feng` 运行目录、依赖目录和构建/cache 目录，避免第一次感知就被噪声吃掉 token；如果明确把这些目录作为 `path` 传入，仍允许在权限范围内列出。
+
 self repo tool 可以带少量选择提示：
 
 ```text
