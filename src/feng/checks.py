@@ -7,7 +7,7 @@ from typing import Any
 
 from .artifacts import write_artifact
 from .events import append_event
-from .git_utils import checkpoint_commit
+from .git_utils import checkpoint_commit, self_diff_names, self_diff_summary, self_status_short
 from .llm import load_provider_profile
 from .message_context import compile_messages
 from .permissions import check_command
@@ -219,6 +219,29 @@ def _check_tool_files(workspace: Path, problems: list[str]) -> None:
             problems.append(f"tool command denied in {rel}: {exc}")
 
 
+def _write_diff_summary_artifact(workspace: Path) -> dict[str, Any] | None:
+    content = (
+        "git status --short:\n"
+        + self_status_short(workspace)
+        + "\n\ngit diff --stat:\n"
+        + self_diff_summary(workspace)
+        + "\n\ngit diff --name-only:\n"
+        + self_diff_names(workspace)
+    ).strip()
+    if content == "git status --short:\n\n\ngit diff --stat:\n\n\ngit diff --name-only:":
+        return None
+    return write_artifact(
+        workspace,
+        "diff",
+        "git",
+        content,
+        "candidate diff summary",
+        "check failed; diff summary helps the next grow repair the candidate without embedding full file contents",
+        extension="txt",
+        snippets=content.splitlines()[:20],
+    )
+
+
 def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
     problems: list[str] = []
     state = load_state(workspace)
@@ -264,7 +287,12 @@ def run_check(workspace: Path, update_validated: bool = True) -> dict[str, Any]:
         extension="json",
     )
     state = load_state(workspace)
-    state["last_artifacts"] = [artifact]
+    artifacts = [artifact]
+    if not ok:
+        diff_artifact = _write_diff_summary_artifact(workspace)
+        if diff_artifact:
+            artifacts.append(diff_artifact)
+    state["last_artifacts"] = artifacts
     if ok and update_validated:
         state["validated_commit"] = report["validated_commit"]
     state["mode"] = "ready" if ok else "blocked"

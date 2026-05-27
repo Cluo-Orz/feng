@@ -210,6 +210,9 @@ class MvpKernelTest(unittest.TestCase):
             check = run_feng(work, "check")
             self.assertEqual(check.returncode, 1)
             self.assertIn("interface.yaml command 0 is empty", check.stdout)
+            artifacts = run_feng(work, "artifacts")
+            self.assertEqual(artifacts.returncode, 0, artifacts.stderr)
+            self.assertIn('"type": "diff"', artifacts.stdout)
 
     def test_active_tool_pack_selects_relevant_self_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -88,6 +88,14 @@ def self_diff_summary(workspace: Path) -> str:
     return output.strip() if code == 0 else ""
 
 
+def self_diff_names(workspace: Path) -> str:
+    roots = self_git_roots(workspace)
+    if not roots:
+        return ""
+    code, output = git(workspace, "diff", "--name-only", "--", *roots, timeout=15)
+    return output.strip() if code == 0 else ""
+
+
 def checkpoint_commit(workspace: Path, message: str) -> str:
     roots = self_git_roots(workspace)
     if not roots:

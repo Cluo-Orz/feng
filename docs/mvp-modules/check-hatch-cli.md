@@ -23,6 +23,7 @@ Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项
 ```text
 不更新 validated_commit
 写 check report artifact
+写 diff artifact，作为下一轮 grow 的修复材料
 state.candidate_status = failed
 ```
 
