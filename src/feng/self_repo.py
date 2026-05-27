@@ -135,6 +135,7 @@ def _seed_dir(seed_self: Path | None, name: str) -> Path | None:
 
 def bootstrap(workspace: Path, goal: str = "", seed_self: Path | None = None) -> bool:
     created = False
+    source_self_commit = _source_self_commit(seed_self)
     ensure_git(workspace)
     if _ensure_gitignore(workspace):
         created = True
@@ -179,11 +180,25 @@ def bootstrap(workspace: Path, goal: str = "", seed_self: Path | None = None) ->
     if not state_file.exists():
         state = default_state(goal)
         state["validated_commit"] = current_head(workspace)
+        state["source_self_commit"] = source_self_commit
         save_state(workspace, state)
         created = True
     if created:
-        append_event(workspace, "bootstrap", {"goal": goal})
+        event = {"goal": goal}
+        if source_self_commit:
+            event["source_self_commit"] = source_self_commit
+        append_event(workspace, "bootstrap", event)
     return created
+
+
+def _source_self_commit(seed_self: Path | None) -> str:
+    if not seed_self:
+        return ""
+    manifest = seed_self.parent / "feng-release.yaml"
+    if not manifest.exists():
+        return ""
+    data = read_jsonish(manifest, {}) or {}
+    return str(data.get("self_commit") or "").strip() if isinstance(data, dict) else ""
 
 
 def _seed_optional_names() -> list[str]:

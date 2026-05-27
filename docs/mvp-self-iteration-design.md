@@ -479,6 +479,7 @@ MVP grow loop：
   mode: growing | checking | blocked | ready | missing_config
   current_goal
   validated_commit
+  source_self_commit
   candidate_status
   active_tool_pack_hash
   stable_prefix_hash
@@ -656,6 +657,8 @@ API key
 ```
 
 对 `feng hatch --name feng --portable`，frozen self 还应携带已经长出来的 `docs/`、`src/`、`tests/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。它们必须先经过 check 和 secret scan，不能绕过 validated commit。这样下一代 feng 到新目录后仍能继续用通用 grow/check/hatch 迭代自己，而不是只剩一个不可成长的 binary。
+
+下一代 feng 第一次 bootstrap 新 workspace 时，应把 package manifest 的 `self_commit` 记录为 `source_self_commit`。它表示这一代 self 的来源版本，不替代新 workspace 自己通过 `check` 生成的本地 `validated_commit`。
 
 Hatch 可以包含 provider examples：
 

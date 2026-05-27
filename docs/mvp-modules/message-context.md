@@ -22,6 +22,9 @@ user: latest event
 skill/world index
   进入稳定 self contract，可缓存。
 
+source_self_commit
+  如果当前 workspace 来自 hatch package，进入 self contract，用于让 agent 感知这一代 self 的来源版本。
+
 workspace file index
   进入动态 state manifest。self roots 优先，普通 world 文件后置；node_modules、vendor、target、build/cache 等生成或依赖目录默认不进入 index。
 

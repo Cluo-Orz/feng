@@ -10,6 +10,7 @@
 mode: growing | checking | blocked | ready | missing_config
 current_goal: ""
 validated_commit: ""
+source_self_commit: ""
 candidate_status: none | dirty | failed | validated
 active_tool_pack_hash: ""
 stable_prefix_hash: ""
@@ -86,6 +87,8 @@ Go module files
 `check` 创建 checkpoint commit 时只 stage 这些 roots；`tag` 和 `hatch` 也只要求这些 roots 干净。workspace 里的无关用户文件、临时目录或目标环境文件可以被 agent 感知，但不能被 kernel 误提交，也不能阻塞 validated self 打包。
 
 check 失败不强制回滚。下一轮 grow 从 validated self 启动，读取 self roots 的 diff 和 artifacts 修复 candidate。
+
+如果 workspace 是从 hatch package bootstrap 出来的，`source_self_commit` 记录 package manifest 中的 frozen self commit。它只表达来源，不代替本地 Git 的 `validated_commit`；新 workspace 仍然需要通过自己的 `check` 生成本地 validated checkpoint。
 
 ## 不变量
 

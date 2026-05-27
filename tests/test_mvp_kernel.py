@@ -584,6 +584,8 @@ class MvpKernelTest(unittest.TestCase):
             self.assertTrue((user_work / "docs" / "design.md").exists())
             self.assertTrue((user_work / "src" / "feng" / "cli.py").exists())
             self.assertTrue((user_work / "internal" / "runtime" / "runtime.go").exists())
+            user_state = json.loads((user_work / ".feng" / "state.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(user_state["source_self_commit"], manifest["self_commit"])
 
     def test_hatch_rejects_existing_non_package_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

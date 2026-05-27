@@ -228,12 +228,13 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 	state, _ := loadState(workspace)
 	selfCommit := currentHead(workspace)
 	selfContract := map[string]any{
-		"self_commit":   selfCommit,
-		"self_files":    selfFileIndex(workspace),
-		"identity":      fileTextExcerpt(workspace, "identity.md", 2000),
-		"goal":          fileTextExcerpt(workspace, "goal.md", 2000),
-		"skill_catalog": skillCatalog(workspace, 80),
-		"world_index":   worldIndex(workspace, 200),
+		"self_commit":        selfCommit,
+		"source_self_commit": state.SourceSelfCommit,
+		"self_files":         selfFileIndex(workspace),
+		"identity":           fileTextExcerpt(workspace, "identity.md", 2000),
+		"goal":               fileTextExcerpt(workspace, "goal.md", 2000),
+		"skill_catalog":      skillCatalog(workspace, 80),
+		"world_index":        worldIndex(workspace, 200),
 	}
 	stateManifest := map[string]any{
 		"mode":                 state.Mode,

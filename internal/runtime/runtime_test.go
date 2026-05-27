@@ -385,6 +385,14 @@ func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
 	if _, err := os.Stat(packageRunner); err != nil {
 		t.Fatal(err)
 	}
+	manifestData, err := os.ReadFile(filepath.Join(packagePath, "feng-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest HatchManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatal(err)
+	}
 
 	user := filepath.Join(tmp, "user")
 	if err := os.MkdirAll(user, 0o755); err != nil {
@@ -402,6 +410,13 @@ func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(user, "internal", "runtime", "runtime.go")); err != nil {
 		t.Fatalf("packaged runner did not seed optional runtime source root: %v", err)
+	}
+	userState, err := loadState(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userState.SourceSelfCommit != manifest.SelfCommit {
+		t.Fatalf("packaged runner did not record source self commit: state=%q manifest=%q", userState.SourceSelfCommit, manifest.SelfCommit)
 	}
 	runExternalFeng(t, packageRunner, user, env, 0, "check")
 	secondPackage := strings.TrimSpace(runExternalFeng(t, packageRunner, user, env, 0, "hatch", "--name", "sample2", "--portable"))

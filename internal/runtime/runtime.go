@@ -94,6 +94,7 @@ type State struct {
 	Mode               string            `json:"mode"`
 	CurrentGoal        string            `json:"current_goal"`
 	ValidatedCommit    string            `json:"validated_commit"`
+	SourceSelfCommit   string            `json:"source_self_commit"`
 	CandidateStatus    string            `json:"candidate_status"`
 	ActiveToolPackHash string            `json:"active_tool_pack_hash"`
 	StablePrefixHash   string            `json:"stable_prefix_hash"`
@@ -391,6 +392,7 @@ func writeDiffSummaryArtifact(workspace string) (Artifact, bool) {
 
 func bootstrap(workspace, goal string, seedSelf string) (bool, error) {
 	created := false
+	sourceSelfCommit := packagedSourceCommit(seedSelf)
 	if !exists(filepath.Join(workspace, ".git")) {
 		if _, err := runGit(workspace, "init"); err != nil {
 			return false, err
@@ -471,15 +473,32 @@ func bootstrap(workspace, goal string, seedSelf string) (bool, error) {
 	if !exists(statePath) {
 		state := defaultState(goal)
 		state.ValidatedCommit = currentHead(workspace)
+		state.SourceSelfCommit = sourceSelfCommit
 		if err := saveState(workspace, state); err != nil {
 			return false, err
 		}
 		created = true
 	}
 	if created {
-		appendEvent(workspace, "bootstrap", map[string]any{"goal": goal})
+		event := map[string]any{"goal": goal}
+		if sourceSelfCommit != "" {
+			event["source_self_commit"] = sourceSelfCommit
+		}
+		appendEvent(workspace, "bootstrap", event)
 	}
 	return created, nil
+}
+
+func packagedSourceCommit(seedSelf string) string {
+	if seedSelf == "" {
+		return ""
+	}
+	value, err := readJSONFile(filepath.Join(filepath.Dir(seedSelf), "feng-release.yaml"))
+	if err != nil {
+		return ""
+	}
+	raw, _ := value.(map[string]any)
+	return argString(raw, "self_commit")
 }
 
 func seedOptionalSelfNames() []string {

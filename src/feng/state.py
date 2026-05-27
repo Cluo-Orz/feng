@@ -15,6 +15,7 @@ def default_state(goal: str = "") -> dict[str, Any]:
         "mode": "ready",
         "current_goal": goal,
         "validated_commit": "",
+        "source_self_commit": "",
         "candidate_status": "none",
         "active_tool_pack_hash": "",
         "stable_prefix_hash": "",

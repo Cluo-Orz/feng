@@ -61,6 +61,7 @@ def compile_messages(
         "world_index": world_index(workspace),
         "permissions": "tool calls are checked by runtime permissions",
         "self_commit": current_head(workspace),
+        "source_self_commit": state.get("source_self_commit", ""),
     }
     state_manifest = {
         "state": state,
