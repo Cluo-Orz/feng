@@ -57,7 +57,7 @@ hatch 只能覆盖空目录或已有 feng package 目录；如果目标目录已
 
 hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 workspace 没有无关未跟踪文件。它打包的是 frozen self，不是把当前目录完整复制成发布物。
 
-hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts。
+hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts/gui/tag。
 
 产品级 hatch 的 runner 目标是 Go binary。Python runner 只作为当前行为原型存在，不能成为长期使用者体验的前提。
 
@@ -80,6 +80,8 @@ feng hatch --name NAME --portable
 feng status
 feng watch
 feng artifacts
+feng gui
+feng tag NAME
 ```
 
 `grow` 是第一个语义入口；bootstrap 是 grow 的前置阶段，不是用户必须理解的独立命令。

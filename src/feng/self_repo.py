@@ -10,7 +10,7 @@ from .utils import ensure_dir, read_jsonish, write_jsonish, write_text
 
 
 DEFAULT_INTERFACE = {
-    "commands": ["grow", "check", "hatch", "status", "watch", "artifacts"],
+    "commands": ["grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag"],
 }
 
 SELF_FILES = {

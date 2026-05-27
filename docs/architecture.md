@@ -567,7 +567,7 @@ permissions
 8. skill-ready context assembly：有 skill 时按 skill 选择上下文；没有 skill 时走通用 seed loop。
 9. 简单 validate：load、schema、tool、eval。
 10. builtin/local template。
-11. CLI：grow、check、hatch、status、watch、artifacts。
+11. CLI：grow、check、hatch、status、watch、artifacts、gui、tag。
 12. named portable release。
 13. 首次运行配置引导。
 14. 权限摘要确认和 tool call permission check。

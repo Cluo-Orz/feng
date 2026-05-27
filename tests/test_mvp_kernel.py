@@ -69,6 +69,8 @@ class MvpKernelTest(unittest.TestCase):
             interface = json.loads((work / "interface.yaml").read_text(encoding="utf-8"))
             self.assertIn("grow", interface["commands"])
             self.assertIn("hatch", interface["commands"])
+            self.assertIn("gui", interface["commands"])
+            self.assertIn("tag", interface["commands"])
             (work / "tools" / "hello.tool.yaml").write_text(
                 json.dumps(
                     {
@@ -94,6 +96,19 @@ class MvpKernelTest(unittest.TestCase):
             status = run_feng(work, "status")
             self.assertEqual(status.returncode, 0, status.stderr)
             self.assertIn('"candidate_status": "validated"', status.stdout)
+
+            tag = run_feng(work, "tag", "sample-v1")
+            self.assertEqual(tag.returncode, 0, tag.stderr + tag.stdout)
+            self.assertIn('"tag": "sample-v1"', tag.stdout)
+
+            gui = run_feng(work, "gui")
+            self.assertEqual(gui.returncode, 0, gui.stderr + gui.stdout)
+            dashboard = Path(gui.stdout.strip())
+            self.assertTrue(dashboard.exists())
+            html = dashboard.read_text(encoding="utf-8")
+            self.assertIn("Running", html)
+            self.assertIn("Progress", html)
+            self.assertIn("Artifacts", html)
 
             artifacts = run_feng(work, "artifacts")
             self.assertEqual(artifacts.returncode, 0, artifacts.stderr)
@@ -426,6 +441,9 @@ class MvpKernelTest(unittest.TestCase):
                 hatch = run_feng(work, "hatch", "--name", "locked", "--portable")
                 self.assertEqual(hatch.returncode, 2)
                 self.assertIn("workspace_locked", hatch.stdout)
+                tag = run_feng(work, "tag", "locked-v1")
+                self.assertEqual(tag.returncode, 2)
+                self.assertIn("workspace_locked", tag.stdout)
             self.assertFalse((work / ".feng" / "lock").exists())
 
     def test_hatch_package_seeds_new_workspace(self) -> None:
@@ -459,6 +477,8 @@ class MvpKernelTest(unittest.TestCase):
             self.assertEqual(git_stdout(work, "ls-files", "--", "outside-world/keep.txt").strip(), "")
             manifest = json.loads((package / "feng-release.yaml").read_text(encoding="utf-8"))
             self.assertIn("grow", manifest["interface"]["commands"])
+            self.assertIn("gui", manifest["interface"]["commands"])
+            self.assertIn("tag", manifest["interface"]["commands"])
             self.assertIn("anthropic_messages", (package / "provider-examples" / "deepseek-anthropic.yaml").read_text(encoding="utf-8"))
 
             user_work = Path(tmp) / "user"

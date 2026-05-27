@@ -8,12 +8,15 @@ from pathlib import Path
 from .artifacts import list_artifacts
 from .checks import run_check
 from .events import tail_events
+from .git_utils import current_head
+from .gui import write_gui
 from .hatch import hatch
 from .kernel import grow as run_grow
 from .lock import WorkspaceLocked, acquire_workspace_lock
 from .llm import provider_status
 from .self_repo import is_workspace
 from .state import load_state
+from .tag import create_validated_tag
 from .utils import workspace_or_cwd
 
 
@@ -84,6 +87,38 @@ def cmd_artifacts(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    workspace = workspace_or_cwd()
+    if not (workspace / ".feng").exists():
+        print("not a feng workspace", file=sys.stderr)
+        return 1
+    try:
+        path = write_gui(workspace, Path(args.out) if args.out else None)
+    except Exception as exc:
+        print(f"gui failed: {exc}", file=sys.stderr)
+        return 1
+    print(path)
+    return 0
+
+
+def cmd_tag(args: argparse.Namespace) -> int:
+    workspace = workspace_or_cwd()
+    if not is_workspace(workspace):
+        print("not a feng workspace; run feng grow first", file=sys.stderr)
+        return 1
+    try:
+        with acquire_workspace_lock(workspace, "tag"):
+            tag = create_validated_tag(workspace, args.name)
+    except WorkspaceLocked as exc:
+        print(json.dumps({"ok": False, "reason": "workspace_locked", "message": str(exc)}, ensure_ascii=False, indent=2))
+        return 2
+    except Exception as exc:
+        print(f"tag failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "tag": tag, "commit": current_head(workspace)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="feng")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -111,6 +146,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     artifacts = sub.add_parser("artifacts", help="list artifacts")
     artifacts.set_defaults(func=cmd_artifacts)
+
+    gui = sub.add_parser("gui", help="write a read-only dashboard")
+    gui.add_argument("--out")
+    gui.set_defaults(func=cmd_gui)
+
+    tag = sub.add_parser("tag", help="tag the current validated self")
+    tag.add_argument("name")
+    tag.set_defaults(func=cmd_tag)
 
     return parser
 
