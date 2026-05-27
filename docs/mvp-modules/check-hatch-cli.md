@@ -18,6 +18,8 @@ eval 是否能运行
 
 Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项目专用 eval，也不要求空白 self 预置业务测试；它只防止明显坏掉的 Go runtime/source 被推进成 validated commit。
 
+secret scan 只覆盖 self/source roots 中的人写内容，跳过 `__pycache__`、依赖目录、构建目录、`.feng/cache` 和 `.feng/runs` 这类生成或运行时内容。
+
 失败：
 
 ```text

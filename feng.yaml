@@ -1,0 +1,8 @@
+{
+  "llm": {
+    "model": "deepseek-chat",
+    "provider": "deepseek"
+  },
+  "name": "feng-workspace",
+  "version": 1
+}

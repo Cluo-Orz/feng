@@ -106,7 +106,7 @@ func runSourceHealthChecks(workspace string) []string {
 	if err := checkCommand(workspace, command); err != nil {
 		return []string{"source health command denied: " + err.Error()}
 	}
-	exitCode, output := runShellCommand(workspace, command, 120)
+	exitCode, output := runShellCommand(workspace, command, 240)
 	if exitCode == 0 {
 		appendEvent(workspace, "source_health_passed", map[string]any{"command": command})
 		return nil

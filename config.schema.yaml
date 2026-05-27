@@ -1,0 +1,8 @@
+{
+  "env": [
+    "DEEPSEEK_API_KEY"
+  ],
+  "provider_profiles": [
+    "deepseek"
+  ]
+}

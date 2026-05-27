@@ -718,7 +718,7 @@ func scanSecretsUnder(workspace, root string) []string {
 		rel, _ := filepath.Rel(workspace, path)
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
-			if rel == ".git" || rel == ".feng/cache" || rel == ".feng/runs" {
+			if shouldSkipSecretScanDir(rel) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -734,6 +734,14 @@ func scanSecretsUnder(workspace, root string) []string {
 		return nil
 	})
 	return problems
+}
+
+func shouldSkipSecretScanDir(rel string) bool {
+	rel = filepath.ToSlash(rel)
+	if rel == ".git" || rel == ".feng/cache" || rel == ".feng/runs" {
+		return true
+	}
+	return shouldSkipContextDir(rel)
 }
 
 func checkpointCommit(workspace, message string) (string, error) {

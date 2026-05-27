@@ -13,3 +13,8 @@ feng.exe
 .feng/artifacts/
 .feng/cache/
 .feng/runs/
+# feng runtime
+.feng/lock
+.feng/provider.yaml
+.feng/provider.json
+.feng/gui.html

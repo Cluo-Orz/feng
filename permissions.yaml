@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "allow": [
+      "git status",
+      "git diff",
+      "git log",
+      "rg",
+      "python -m",
+      "python",
+      "pytest",
+      "go test",
+      "go vet",
+      "go build"
+    ],
+    "deny": [
+      "git reset --hard",
+      "git push",
+      "rm -rf",
+      "Remove-Item -Recurse",
+      "del /s"
+    ]
+  },
+  "files": {
+    "read": [
+      "**"
+    ],
+    "write": [
+      ".gitignore",
+      "identity.md",
+      "goal.md",
+      "feng.yaml",
+      "hooks.yaml",
+      "permissions.yaml",
+      "interface.yaml",
+      "config.schema.yaml",
+      "skills/**",
+      "tools/**",
+      "world/**",
+      "evals/**",
+      "docs/**",
+      "src/**",
+      "tests/**",
+      "cmd/**",
+      "internal/**",
+      "pkg/**",
+      "scripts/**",
+      "go.mod",
+      "go.sum",
+      "go.work",
+      "go.work.sum"
+    ]
+  }
+}

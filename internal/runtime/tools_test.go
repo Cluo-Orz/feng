@@ -428,6 +428,26 @@ func TestCheckScansPackagedSourceRootsForSecrets(t *testing.T) {
 	}
 }
 
+func TestCheckIgnoresGeneratedSecretLikeFiles(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "generated secret scan test", ""); err != nil {
+		t.Fatal(err)
+	}
+	secretLike := "sk-" + "generatedcache1234567890"
+	generated := filepath.Join(dir, "tests", "__pycache__", "test.cpython-314.pyc")
+	if err := os.MkdirAll(filepath.Dir(generated), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(generated, []byte(secretLike), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if !report.OK {
+		t.Fatalf("generated cache files should not fail check: %+v", report.Problems)
+	}
+}
+
 func TestCheckRunsCommandEvals(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "eval test", ""); err != nil {

@@ -214,6 +214,24 @@ class MvpKernelTest(unittest.TestCase):
             self.assertEqual(artifacts.returncode, 0, artifacts.stderr)
             self.assertIn('"type": "diff"', artifacts.stdout)
 
+    def test_check_ignores_generated_secret_like_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed generated secret scan", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            generated = work / "tests" / "__pycache__" / "test.cpython-314.pyc"
+            generated.parent.mkdir(parents=True, exist_ok=True)
+            generated.write_text("sk-" + "generatedcache1234567890", encoding="utf-8")
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
+
     def test_active_tool_pack_selects_relevant_self_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

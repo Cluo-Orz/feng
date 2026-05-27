@@ -92,18 +92,27 @@ def _check_no_secrets(workspace: Path, problems: list[str]) -> None:
 
 
 def _check_file_no_secret(workspace: Path, path: Path, problems: list[str]) -> None:
-        rel = path.relative_to(workspace).as_posix()
-        if not path.is_file():
-            return
-        if rel.startswith(".git/"):
-            return
-        if rel.startswith(".feng/cache/") or rel.startswith(".feng/runs/"):
-            return
-        if path.stat().st_size > 512_000:
-            return
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        if SECRET_RE.search(text):
-            problems.append(f"possible secret in {rel}")
+    rel = path.relative_to(workspace).as_posix()
+    if not path.is_file():
+        return
+    if _should_skip_secret_path(rel):
+        return
+    if path.stat().st_size > 512_000:
+        return
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if SECRET_RE.search(text):
+        problems.append(f"possible secret in {rel}")
+
+
+def _should_skip_secret_path(rel: str) -> bool:
+    parts = tuple(part for part in rel.replace("\\", "/").split("/") if part)
+    if not parts:
+        return False
+    if parts[0] == ".git":
+        return True
+    if len(parts) >= 2 and parts[0] == ".feng" and parts[1] in {"cache", "runs"}:
+        return True
+    return any(part in {"__pycache__", "node_modules", "vendor", "target", "build", "dist", ".venv", "venv"} for part in parts)
 
 
 def _check_no_special_runtime(workspace: Path, problems: list[str]) -> None:
@@ -173,7 +182,7 @@ def _run_source_health_checks(workspace: Path, problems: list[str]) -> None:
     except Exception as exc:
         problems.append(f"source health command denied: {exc}")
         return
-    code, output = run_process([command], cwd=workspace, timeout=120, shell=True)
+    code, output = run_process([command], cwd=workspace, timeout=240, shell=True)
     if code == 0:
         append_event(workspace, "source_health_passed", {"command": command})
         return

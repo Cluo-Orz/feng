@@ -1,0 +1,12 @@
+{
+  "commands": [
+    "grow",
+    "check",
+    "hatch",
+    "status",
+    "watch",
+    "artifacts",
+    "gui",
+    "tag"
+  ]
+}
