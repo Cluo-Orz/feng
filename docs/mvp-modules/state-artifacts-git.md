@@ -28,6 +28,8 @@ lock:
   heartbeat: ""
 ```
 
+Go runtime 和 Python 行为原型使用同一个 `.feng/lock` 文件格式。`grow`、`check`、`hatch` 这类会修改 workspace 的命令必须先拿锁；`status/watch/artifacts/gui` 只读命令不需要拿锁。
+
 ## Events
 
 `.feng/events.jsonl` 是 append-only：

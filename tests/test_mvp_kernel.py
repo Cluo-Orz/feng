@@ -17,6 +17,7 @@ ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "FENG_HOME": str(TEST_FENG
 
 from feng.permissions import check_command, check_file_write
 from feng.llm import LLMError, _anthropic_messages, _normalize_http_error, _openai_like_from_anthropic, _raise_if_openai_output_truncated, load_provider_profile
+from feng.lock import acquire_workspace_lock
 from feng.tools import BOOTSTRAP_TOOLS, active_tool_pack, execute_tool
 
 
@@ -368,6 +369,30 @@ class MvpKernelTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = run_feng(Path(tmp), "bootstrap", "make a tiny agent")
             self.assertEqual(result.returncode, 2)
+
+    def test_mutating_commands_respect_workspace_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            grow = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed lock test", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(grow.returncode, 2)
+            with acquire_workspace_lock(work, "test"):
+                check = run_feng(work, "check")
+                self.assertEqual(check.returncode, 2)
+                self.assertIn("workspace_locked", check.stdout)
+                blocked_grow = run_feng(work, "grow", "continue", "--max-turns", "1")
+                self.assertEqual(blocked_grow.returncode, 2)
+                self.assertIn("workspace_locked", blocked_grow.stdout)
+                hatch = run_feng(work, "hatch", "--name", "locked", "--portable")
+                self.assertEqual(hatch.returncode, 2)
+                self.assertIn("workspace_locked", hatch.stdout)
+            self.assertFalse((work / ".feng" / "lock").exists())
 
     def test_hatch_package_seeds_new_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

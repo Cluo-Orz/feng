@@ -10,6 +10,7 @@ from .checks import run_check
 from .events import tail_events
 from .hatch import hatch
 from .kernel import grow as run_grow
+from .lock import WorkspaceLocked, acquire_workspace_lock
 from .llm import provider_status
 from .self_repo import is_workspace
 from .state import load_state
@@ -18,7 +19,11 @@ from .utils import workspace_or_cwd
 
 def cmd_grow(args: argparse.Namespace) -> int:
     workspace = workspace_or_cwd()
-    result = run_grow(workspace, args.goal, max_turns=args.max_turns)
+    try:
+        result = run_grow(workspace, args.goal, max_turns=args.max_turns)
+    except WorkspaceLocked as exc:
+        print(json.dumps({"ok": False, "reason": "workspace_locked", "message": str(exc)}, ensure_ascii=False, indent=2))
+        return 2
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("ok") else 2
 
@@ -28,7 +33,12 @@ def cmd_check(_args: argparse.Namespace) -> int:
     if not is_workspace(workspace):
         print("not a feng workspace; run feng grow first", file=sys.stderr)
         return 1
-    report = run_check(workspace)
+    try:
+        with acquire_workspace_lock(workspace, "check"):
+            report = run_check(workspace)
+    except WorkspaceLocked as exc:
+        print(json.dumps({"ok": False, "reason": "workspace_locked", "message": str(exc)}, ensure_ascii=False, indent=2))
+        return 2
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report.get("ok") else 1
 
@@ -37,7 +47,11 @@ def cmd_hatch(args: argparse.Namespace) -> int:
     workspace = workspace_or_cwd()
     out = Path(args.out) if args.out else None
     try:
-        path = hatch(workspace, args.name, out_dir=out, portable=args.portable)
+        with acquire_workspace_lock(workspace, "hatch"):
+            path = hatch(workspace, args.name, out_dir=out, portable=args.portable)
+    except WorkspaceLocked as exc:
+        print(json.dumps({"ok": False, "reason": "workspace_locked", "message": str(exc)}, ensure_ascii=False, indent=2))
+        return 2
     except Exception as exc:
         print(f"hatch failed: {exc}", file=sys.stderr)
         return 1

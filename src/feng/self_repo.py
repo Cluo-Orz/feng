@@ -89,6 +89,10 @@ SELF_DIRS = {
 }
 
 RUNTIME_GITIGNORE_LINES = [
+    ".feng/lock",
+    ".feng/provider.yaml",
+    ".feng/provider.json",
+    ".feng/gui.html",
     ".feng/state.yaml",
     ".feng/events.jsonl",
     ".feng/artifacts/",
