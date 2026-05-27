@@ -20,6 +20,8 @@ Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项
 
 secret scan 只覆盖 self/source roots 中的人写内容，跳过 `__pycache__`、依赖目录、构建目录、`.feng/cache` 和 `.feng/runs` 这类生成或运行时内容。
 
+特殊 runtime 检查覆盖 `cmd/`、`internal/` 和 `src/` 中的 Go/Python 源码，避免把 feng 自举专用逻辑藏在产品 runner 里。
+
 失败：
 
 ```text

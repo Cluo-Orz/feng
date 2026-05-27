@@ -116,9 +116,6 @@ def _should_skip_secret_path(rel: str) -> bool:
 
 
 def _check_no_special_runtime(workspace: Path, problems: list[str]) -> None:
-    src = workspace / "src"
-    if not src.exists():
-        return
     product_name = "feng"
     forbidden = [
         f"if project == '{product_name}'",
@@ -126,11 +123,17 @@ def _check_no_special_runtime(workspace: Path, problems: list[str]) -> None:
         "init" + "-self",
         product_name + "smith",
     ]
-    for path in sorted(src.rglob("*.py")):
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        for needle in forbidden:
-            if needle in text:
-                problems.append(f"special runtime marker in {path.relative_to(workspace).as_posix()}: {needle}")
+    for root_name in ["cmd", "internal", "src"]:
+        root = workspace / root_name
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.suffix not in {".go", ".py"}:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for needle in forbidden:
+                if needle in text:
+                    problems.append(f"special runtime marker in {path.relative_to(workspace).as_posix()}: {needle}")
 
 
 def _run_evals(workspace: Path, problems: list[str]) -> None:

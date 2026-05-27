@@ -234,6 +234,25 @@ class MvpKernelTest(unittest.TestCase):
             check = run_feng(work, "check")
             self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
 
+    def test_check_rejects_special_runtime_markers_outside_src(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            result = subprocess.run(
+                [sys.executable, "-m", "feng", "grow", "seed special runtime check", "--max-turns", "1"],
+                cwd=str(work),
+                env=env_without_llm_key(),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 2)
+            marker = work / "internal" / "runtime" / "bad.py"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("feng" + "smith\n", encoding="utf-8")
+            check = run_feng(work, "check")
+            self.assertEqual(check.returncode, 1)
+            self.assertIn("special runtime marker in internal/runtime/bad.py", check.stdout)
+
     def test_active_tool_pack_selects_relevant_self_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
