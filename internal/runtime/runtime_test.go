@@ -366,6 +366,12 @@ func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
 	if !strings.Contains(growOut, "missing_config") {
 		t.Fatalf("maker grow did not stop on missing config: %s", growOut)
 	}
+	if err := writeText(filepath.Join(maker, "src", "feng", "cli.py"), "print('seed source')\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(maker, "internal", "runtime", "runtime.go"), "package runtime\n"); err != nil {
+		t.Fatal(err)
+	}
 	runExternalFeng(t, fengExe, maker, env, 0, "check")
 	packagePath := strings.TrimSpace(runExternalFeng(t, fengExe, maker, env, 0, "hatch", "--name", "sample", "--portable"))
 	packageRunner := filepath.Join(packagePath, runnerEntrypointName("sample"))
@@ -383,6 +389,12 @@ func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(user, "identity.md")); err != nil {
 		t.Fatalf("packaged runner did not seed self repo in new workspace: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(user, "src", "feng", "cli.py")); err != nil {
+		t.Fatalf("packaged runner did not seed optional source root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(user, "internal", "runtime", "runtime.go")); err != nil {
+		t.Fatalf("packaged runner did not seed optional runtime source root: %v", err)
 	}
 	runExternalFeng(t, packageRunner, user, env, 0, "check")
 	secondPackage := strings.TrimSpace(runExternalFeng(t, packageRunner, user, env, 0, "hatch", "--name", "sample2", "--portable"))

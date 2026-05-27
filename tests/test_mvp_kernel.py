@@ -514,6 +514,12 @@ class MvpKernelTest(unittest.TestCase):
             docs = work / "docs"
             docs.mkdir(exist_ok=True)
             (docs / "design.md").write_text("portable design notes\n", encoding="utf-8")
+            source = work / "src" / "feng" / "cli.py"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("print('seed source')\n", encoding="utf-8")
+            runtime_source = work / "internal" / "runtime" / "runtime.go"
+            runtime_source.parent.mkdir(parents=True, exist_ok=True)
+            runtime_source.write_text("package runtime\n", encoding="utf-8")
             check = run_feng(work, "check")
             self.assertEqual(check.returncode, 0, check.stderr + check.stdout)
             outside = work / "outside-world"
@@ -546,6 +552,9 @@ class MvpKernelTest(unittest.TestCase):
             self.assertEqual(run.returncode, 2)
             self.assertTrue((user_work / ".feng" / "state.yaml").exists())
             self.assertTrue((user_work / "identity.md").exists())
+            self.assertTrue((user_work / "docs" / "design.md").exists())
+            self.assertTrue((user_work / "src" / "feng" / "cli.py").exists())
+            self.assertTrue((user_work / "internal" / "runtime" / "runtime.go").exists())
 
     def test_hatch_rejects_existing_non_package_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

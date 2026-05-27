@@ -447,6 +447,25 @@ func bootstrap(workspace, goal string, seedSelf string) (bool, error) {
 			created = true
 		}
 	}
+	for _, name := range seedOptionalSelfNames() {
+		path := filepath.Join(workspace, filepath.FromSlash(name))
+		seed := filepath.Join(seedSelf, filepath.FromSlash(name))
+		if seedSelf == "" || exists(path) || !exists(seed) {
+			continue
+		}
+		info, err := os.Stat(seed)
+		if err != nil {
+			return false, err
+		}
+		if info.IsDir() {
+			if err := copyDir(seed, path); err != nil {
+				return false, err
+			}
+		} else if err := copyFile(seed, path); err != nil {
+			return false, err
+		}
+		created = true
+	}
 	statePath := filepath.Join(workspace, ".feng", "state.yaml")
 	if !exists(statePath) {
 		state := defaultState(goal)
@@ -460,6 +479,20 @@ func bootstrap(workspace, goal string, seedSelf string) (bool, error) {
 		appendEvent(workspace, "bootstrap", map[string]any{"goal": goal})
 	}
 	return created, nil
+}
+
+func seedOptionalSelfNames() []string {
+	var names []string
+	for _, name := range selfNames {
+		if _, ok := selfFiles[name]; ok {
+			continue
+		}
+		if _, ok := selfDirs[name]; ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
 }
 
 func ensureGitignore(workspace string) bool {

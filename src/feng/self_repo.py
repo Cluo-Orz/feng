@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from .events import append_event
-from .git_utils import current_head, ensure_git
+from .git_utils import SELF_GIT_ROOTS, current_head, ensure_git
 from .state import default_state, save_state
 from .utils import ensure_dir, read_jsonish, write_jsonish, write_text
 
@@ -164,6 +164,17 @@ def bootstrap(workspace: Path, goal: str = "", seed_self: Path | None = None) ->
         if not readme_path.exists():
             write_text(readme_path, readme)
             created = True
+    for name in _seed_optional_names():
+        path = workspace / name
+        seed = seed_self / name if seed_self else None
+        if path.exists() or not seed or not seed.exists():
+            continue
+        if seed.is_dir():
+            shutil.copytree(seed, path)
+        else:
+            ensure_dir(path.parent)
+            shutil.copy2(seed, path)
+        created = True
     state_file = workspace / ".feng" / "state.yaml"
     if not state_file.exists():
         state = default_state(goal)
@@ -173,6 +184,10 @@ def bootstrap(workspace: Path, goal: str = "", seed_self: Path | None = None) ->
     if created:
         append_event(workspace, "bootstrap", {"goal": goal})
     return created
+
+
+def _seed_optional_names() -> list[str]:
+    return [name for name in SELF_GIT_ROOTS if name not in SELF_FILES and name not in SELF_DIRS]
 
 
 def load_self_config(workspace: Path) -> dict:
