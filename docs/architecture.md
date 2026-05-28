@@ -455,6 +455,8 @@ feng grow --template ./my-template "帮我整理下载目录"
 
 默认模板不预置领域 skill。local template 可以带少量 skills、tools、evals 和 world 示例，但它们是创造者显式选择的起点，仍然只是 self repo 文件，必须经过正常 check 才能成为 validated self。
 
+MVP 中 template 不做成市场或插件系统。`--template builtin/default` 表示使用内置最小形状；`--template ./path` 表示从本地目录复制缺失的 self 文件和 self roots。复制规则和 bootstrap 一样：只补缺失文件，不覆盖当前 workspace 已有内容。
+
 ## 12. LLM 和缓存
 
 OpenAI 和 Anthropic 只是 adapter 差异，不进入 self 核心概念。

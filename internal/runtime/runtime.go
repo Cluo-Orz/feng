@@ -188,16 +188,17 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag,config} ...")
+	fmt.Fprintln(w, "       feng grow [--template PATH|builtin] [--max-turns N] \"goal\"")
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
-	goal, maxTurns, err := parseGrowArgs(args)
+	options, err := parseGrowOptions(args, cwd)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	workspace := workspaceOrCwd(cwd)
-	if _, err := bootstrap(workspace, goal, packagedSeedSelf()); err != nil {
+	if _, err := bootstrap(workspace, options.Goal, options.SeedSelf); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -209,22 +210,38 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 	defer release()
 	state, _ := loadState(workspace)
 	state.Mode = "growing"
-	state.CurrentGoal = goal
+	state.CurrentGoal = options.Goal
 	state.CandidateStatus = "dirty"
 	saveState(workspace, state)
-	appendEvent(workspace, "run_started", map[string]any{"mode": "grow", "goal": goal})
+	event := map[string]any{"mode": "grow", "goal": options.Goal}
+	if options.Template != "" {
+		event["template"] = options.Template
+	}
+	appendEvent(workspace, "run_started", event)
 
-	return runGrowLoop(workspace, goal, maxTurns, stdout)
+	return runGrowLoop(workspace, options.Goal, options.MaxTurns, stdout)
+}
+
+type GrowOptions struct {
+	Goal     string
+	MaxTurns int
+	Template string
+	SeedSelf string
 }
 
 func parseGrowArgs(args []string) (string, int, error) {
+	options, err := parseGrowOptions(args, "")
+	return options.Goal, options.MaxTurns, err
+}
+
+func parseGrowOptions(args []string, cwd string) (GrowOptions, error) {
 	var parts []string
-	maxTurns := 12
+	options := GrowOptions{MaxTurns: 12}
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--max-turns" {
 			if i+1 < len(args) {
 				if parsed, err := strconv.Atoi(args[i+1]); err == nil {
-					maxTurns = parsed
+					options.MaxTurns = parsed
 				}
 			}
 			i++
@@ -232,20 +249,70 @@ func parseGrowArgs(args []string) (string, int, error) {
 		}
 		if strings.HasPrefix(args[i], "--max-turns=") {
 			if parsed, err := strconv.Atoi(strings.TrimPrefix(args[i], "--max-turns=")); err == nil {
-				maxTurns = parsed
+				options.MaxTurns = parsed
 			}
+			continue
+		}
+		if args[i] == "--template" {
+			if i+1 >= len(args) {
+				return options, errors.New("--template requires a path or builtin")
+			}
+			options.Template = args[i+1]
+			i++
+			continue
+		}
+		if strings.HasPrefix(args[i], "--template=") {
+			options.Template = strings.TrimPrefix(args[i], "--template=")
 			continue
 		}
 		parts = append(parts, args[i])
 	}
 	goal := strings.TrimSpace(strings.Join(parts, " "))
 	if goal == "" {
-		return "", 0, errors.New("grow requires a goal")
+		return options, errors.New("grow requires a goal")
 	}
-	if maxTurns < 1 {
-		maxTurns = 1
+	if options.MaxTurns < 1 {
+		options.MaxTurns = 1
 	}
-	return goal, maxTurns, nil
+	seedSelf, err := resolveGrowSeedSelf(cwd, options.Template)
+	if err != nil {
+		return options, err
+	}
+	options.Goal = goal
+	options.SeedSelf = seedSelf
+	return options, nil
+}
+
+func resolveGrowSeedSelf(cwd, template string) (string, error) {
+	template = strings.TrimSpace(template)
+	if template == "" {
+		return packagedSeedSelf(), nil
+	}
+	if template == "builtin" || template == "default" {
+		return "", nil
+	}
+	base := cwd
+	if strings.TrimSpace(base) == "" {
+		if current, err := os.Getwd(); err == nil {
+			base = current
+		}
+	}
+	path := template
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(base, path)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("template not found: %s", template)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("template must be a directory: %s", template)
+	}
+	return abs, nil
 }
 
 func cmdCheck(cwd string, stdout, stderr io.Writer) int {

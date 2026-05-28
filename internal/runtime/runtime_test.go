@@ -80,6 +80,70 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeGrowCanSeedFromLocalTemplate(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	root := t.TempDir()
+	template := filepath.Join(root, "template")
+	if err := os.MkdirAll(filepath.Join(template, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(template, "identity.md"), []byte("template identity\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(template, "skills", "templated.md"), []byte("# Templated Skill\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "identity.md"), []byte("existing identity\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"grow", "--template", template, "use local template", "--max-turns", "1"}, workspace, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	identity, err := os.ReadFile(filepath.Join(workspace, "identity.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(identity) != "existing identity\n" {
+		t.Fatalf("local template overwrote existing file: %q", string(identity))
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "skills", "templated.md")); err != nil {
+		t.Fatalf("local template did not seed missing skill: %v", err)
+	}
+	state, err := loadState(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CurrentGoal != "use local template" {
+		t.Fatalf("grow goal not recorded in state: %+v", state)
+	}
+	if !hasEventWithTemplate(workspace, template) {
+		t.Fatalf("run_started event did not record template: %+v", tailEvents(workspace, 20))
+	}
+}
+
+func TestGoRuntimeGrowRejectsMissingLocalTemplate(t *testing.T) {
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	code := Run([]string{"grow", "--template", filepath.Join(dir, "missing"), "bad template"}, dir, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("missing template should fail usage, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "template not found") {
+		t.Fatalf("missing template error was unclear: %s", errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".feng")); !os.IsNotExist(err) {
+		t.Fatalf("missing template should not bootstrap workspace: %v", err)
+	}
+}
+
 func TestGoRuntimeCheckDoesNotCommitUnrelatedUntrackedFiles(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()
@@ -532,6 +596,15 @@ func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
 func artifactTypeExists(workspace, artifactType string) bool {
 	for _, artifact := range listArtifacts(workspace) {
 		if artifact.Type == artifactType {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEventWithTemplate(workspace, template string) bool {
+	for _, event := range tailEvents(workspace, 20) {
+		if event.Type == "run_started" && event.Data["template"] == template {
 			return true
 		}
 	}

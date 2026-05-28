@@ -102,9 +102,12 @@ feng watch
 feng artifacts
 feng gui
 feng tag NAME
+feng config
 ```
 
 `grow` 是第一个语义入口；bootstrap 是 grow 的前置阶段，不是用户必须理解的独立命令。
+
+`grow --template ./path "..."` 是 bootstrap 的可选 seed，不是新的生命周期命令。template 目录只补缺失的 self 文件，不覆盖已有 workspace 内容。
 
 ## Execute Mode
 
