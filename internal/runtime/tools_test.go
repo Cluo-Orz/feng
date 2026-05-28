@@ -621,6 +621,12 @@ func TestCheckRunsCommandEvals(t *testing.T) {
 	if _, err := bootstrap(dir, "eval test", ""); err != nil {
 		t.Fatal(err)
 	}
+	if err := writeJSONFile(filepath.Join(dir, "evals", "good.eval.yaml"), map[string]any{
+		"type":    "command",
+		"command": "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := writeJSONFile(filepath.Join(dir, "evals", "bad.eval.yaml"), map[string]any{
 		"type":    "command",
 		"command": "git status --definitely-not-a-real-option",
@@ -634,6 +640,15 @@ func TestCheckRunsCommandEvals(t *testing.T) {
 	}
 	if !containsProblem(report.Problems, "eval failed") {
 		t.Fatalf("expected eval failure, got %+v", report.Problems)
+	}
+	if !hasEventForPath(dir, "eval_passed", "evals/good.eval.yaml") {
+		t.Fatalf("expected eval_passed event, got %+v", tailEvents(dir, 50))
+	}
+	if !hasEventForPath(dir, "eval_failed", "evals/bad.eval.yaml") {
+		t.Fatalf("expected eval_failed event, got %+v", tailEvents(dir, 50))
+	}
+	if !artifactTypeExistsForToolsTest(dir, "eval-output") {
+		t.Fatalf("expected eval-output artifact, got %+v", listArtifacts(dir))
 	}
 }
 
@@ -657,6 +672,24 @@ func containsProblem(problems []string, needle string) bool {
 
 func hasArtifactType(artifacts []Artifact, artifactType string) bool {
 	for _, artifact := range artifacts {
+		if artifact.Type == artifactType {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEventForPath(workspace, eventType, path string) bool {
+	for _, event := range tailEvents(workspace, 50) {
+		if event.Type == eventType && event.Data["path"] == path {
+			return true
+		}
+	}
+	return false
+}
+
+func artifactTypeExistsForToolsTest(workspace, artifactType string) bool {
+	for _, artifact := range listArtifacts(workspace) {
 		if artifact.Type == artifactType {
 			return true
 		}

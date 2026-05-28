@@ -16,6 +16,8 @@ eval 是否能运行
 是否存在特殊 runtime 或 secret 泄漏
 ```
 
+command eval 运行时必须可观测：通过时写 `eval_passed` event；失败时写 `eval_failed` event 和 `eval-output` artifact。失败 artifact 是下一轮 grow 修复 candidate 的材料，不会自动回滚 working tree。
+
 Go source health check 只在 workspace 存在 `go.mod` 时启用。它不是项目专用 eval，也不要求空白 self 预置业务测试；它只防止明显坏掉的 Go runtime/source 被推进成 validated commit。
 
 source health 和 hatch 构建都通过同一套 Go 可执行发现逻辑：优先使用 `FENG_GO_EXECUTABLE`，然后查 PATH，Windows 下再查默认 Go 安装路径。这样 portable feng 在新目录里运行时，不会因为 Go 没写进 PATH 就误判 self 损坏。

@@ -595,6 +595,8 @@ evals 能运行
 candidate 声明的项目业务 eval 能运行；如果还没有业务 eval，不因此失败
 ```
 
+command eval 的结果必须写入事件流：通过写 `eval_passed`，失败写 `eval_failed`，并把长输出写入 `eval-output` artifact。这样 check 失败后的下一轮 grow 能通过 artifact refs 修复 candidate。
+
 作为通用自修改安全检查，check 还要验证：
 
 ```text

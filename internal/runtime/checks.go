@@ -88,6 +88,7 @@ func runCommandEvals(workspace string) []string {
 		}
 		if err := checkCommand(workspace, command); err != nil {
 			problems = append(problems, "eval command denied in "+rel+": "+err.Error())
+			appendEvent(workspace, "eval_failed", map[string]any{"path": rel, "reason": "command_denied", "command": command})
 			return nil
 		}
 		exitCode, output := runShellCommand(workspace, command, clampInt(argInt(raw, "timeout", 60), 1, 600))
@@ -102,8 +103,11 @@ func runCommandEvals(workspace string) []string {
 				"txt",
 				[]string{output[:minInt(1000, len(output))]},
 			)
+			appendEvent(workspace, "eval_failed", map[string]any{"path": rel, "command": command, "exit_code": exitCode, "artifact": artifact.Path})
 			problems = append(problems, fmt.Sprintf("eval failed in %s: exit_code=%d; artifact=%s", rel, exitCode, artifact.Path))
+			return nil
 		}
+		appendEvent(workspace, "eval_passed", map[string]any{"path": rel, "command": command, "exit_code": exitCode})
 		return nil
 	})
 	return problems
