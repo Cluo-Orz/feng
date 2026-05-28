@@ -371,6 +371,10 @@ func runShellCommand(workspace, command string, timeoutSeconds int) (int, string
 }
 
 func runShellCommandWithEnv(workspace, command string, timeoutSeconds int, env map[string]string) (int, string) {
+	return runShellCommandInDir(workspace, workspace, command, timeoutSeconds, env)
+}
+
+func runShellCommandInDir(workspace, dir, command string, timeoutSeconds int, env map[string]string) (int, string) {
 	timeout := time.Duration(clampInt(timeoutSeconds, 1, 600)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -380,7 +384,7 @@ func runShellCommandWithEnv(workspace, command string, timeoutSeconds int, env m
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-c", command)
 	}
-	cmd.Dir = workspace
+	cmd.Dir = dir
 	if len(env) > 0 {
 		cmd.Env = os.Environ()
 		keys := make([]string, 0, len(env))
@@ -467,6 +471,14 @@ func commandToolFromRoot(workspace, selfRoot, path string) *Tool {
 		inputSchema = map[string]any{"type": "object", "properties": map[string]any{}, "required": []any{}}
 	}
 	timeout := clampInt(argInt(raw, "timeout", 60), 1, 600)
+	workdirMode := strings.ToLower(strings.TrimSpace(argString(raw, "workdir")))
+	if workdirMode == "" {
+		workdirMode = "workspace"
+	}
+	if workdirMode != "workspace" && workdirMode != "self" {
+		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(selfRoot, path), "reason": "invalid workdir"})
+		return nil
+	}
 	rel := relPath(selfRoot, path)
 
 	return &Tool{
@@ -482,10 +494,16 @@ func commandToolFromRoot(workspace, selfRoot, path string) *Tool {
 				return ToolResult{Content: err.Error(), IsError: true}
 			}
 			encodedArgs, _ := json.Marshal(args)
-			exitCode, output := runShellCommandWithEnv(toolWorkspace, command, timeout, map[string]string{
-				"FENG_TOOL_ARGS":   string(encodedArgs),
-				"FENG_TOOL_NAME":   name,
-				"FENG_TOOL_SOURCE": rel,
+			commandDir := toolWorkspace
+			if workdirMode == "self" {
+				commandDir = selfRoot
+			}
+			exitCode, output := runShellCommandInDir(toolWorkspace, commandDir, command, timeout, map[string]string{
+				"FENG_TOOL_ARGS":     string(encodedArgs),
+				"FENG_TOOL_NAME":     name,
+				"FENG_TOOL_SOURCE":   rel,
+				"FENG_SELF_DIR":      selfRoot,
+				"FENG_WORKSPACE_DIR": toolWorkspace,
 			})
 			appendEvent(toolWorkspace, "tool_called", map[string]any{"tool": name, "command": command, "exit_code": exitCode})
 			result := maybeArtifact(toolWorkspace, name+":"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), name+" output")

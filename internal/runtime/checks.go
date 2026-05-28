@@ -44,6 +44,10 @@ func checkSelfRepoTools(workspace string) []string {
 			problems = append(problems, "tool command is empty in "+rel)
 			return nil
 		}
+		workdir := strings.ToLower(strings.TrimSpace(argString(raw, "workdir")))
+		if workdir != "" && workdir != "workspace" && workdir != "self" {
+			problems = append(problems, "tool workdir must be workspace or self in "+rel)
+		}
 		if err := checkCommand(workspace, command); err != nil {
 			problems = append(problems, "tool command denied in "+rel+": "+err.Error())
 		}

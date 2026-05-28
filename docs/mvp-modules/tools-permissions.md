@@ -35,6 +35,21 @@ always
 
 self repo 的 command tool 可以声明 `input_schema`。LLM tool call 传入的参数不会拼接到 shell 命令里，而是以 JSON 形式写入环境变量 `FENG_TOOL_ARGS`，并附带 `FENG_TOOL_NAME`、`FENG_TOOL_SOURCE`。这样工具可以读取参数，同时避免 runtime 做字符串模板替换。
 
+command tool 默认在使用者 workspace 中运行。若工具实现随 frozen self 一起打包，例如 `scripts/` 下的辅助程序，可以声明：
+
+```yaml
+workdir: self
+```
+
+此时命令从 packaged self 目录执行，但仍通过环境变量拿到使用者目录：
+
+```text
+FENG_SELF_DIR
+FENG_WORKSPACE_DIR
+```
+
+这样 hatch 后的业务命令可以调用 frozen self 里的工具实现，同时把实际读写动作作用到用户当前目录。
+
 MVP 的 schema validation 只做小闭环：检查 required 字段和常见 JSON 类型（string、integer、number、boolean、object、array）。校验失败时不执行工具命令，写入 `tool_argument_invalid` event，并把错误作为 tool result 返回给 LLM。
 
 ## Active Tool Pack

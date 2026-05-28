@@ -172,6 +172,157 @@ func TestDefaultKernelInterfaceDoesNotEnterExecuteMode(t *testing.T) {
 	}
 }
 
+func TestPackagedSelfToolCanRunFromFrozenSelf(t *testing.T) {
+	seed := t.TempDir()
+	user := t.TempDir()
+	if _, err := bootstrap(seed, "seed packaged tool", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"go run"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(seed, "scripts", "mark.go"), "package main\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\tworkspace := os.Getenv(\"FENG_WORKSPACE_DIR\")\n\tif workspace == \"\" {\n\t\tos.Exit(2)\n\t}\n\t_ = os.WriteFile(filepath.Join(workspace, \"marker.txt\"), []byte(os.Getenv(\"FENG_SELF_DIR\")), 0o644)\n}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "tools", "marker.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "mark_from_self",
+		"description": "Create a marker from a packaged self script.",
+		"command":     "go run scripts/mark.go",
+		"workdir":     "self",
+		"always":      true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := activeToolPackReportFromSelf(user, seed, "execute", "mark").Tools
+	result := executeTool(user, tools, "mark_from_self", map[string]any{})
+	if result.IsError {
+		t.Fatalf("packaged self tool failed: %+v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(user, "marker.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != seed {
+		t.Fatalf("tool did not run from packaged self: marker=%q seed=%q", string(data), seed)
+	}
+}
+
+func TestPackagedExecuteLoopCanCallFrozenSelfTool(t *testing.T) {
+	seed := t.TempDir()
+	user := t.TempDir()
+	if _, err := bootstrap(seed, "seed execute self tool", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "run",
+			"usage": "packaged-runner [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"go run"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(seed, "scripts", "mark.go"), "package main\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\tworkspace := os.Getenv(\"FENG_WORKSPACE_DIR\")\n\t_ = os.WriteFile(filepath.Join(workspace, \"execute-marker.txt\"), []byte(\"from-self\"), 0o644)\n}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "tools", "marker.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "mark_from_self",
+		"description": "Create an execute marker from a packaged self script.",
+		"command":     "go run scripts/mark.go",
+		"workdir":     "self",
+		"always":      true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requests.Add(1)
+		if hasToolMessage(request.Messages) {
+			var result ToolResult
+			if err := json.Unmarshal([]byte(lastToolMessage(request.Messages)), &result); err != nil {
+				t.Errorf("tool result decode: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if result.IsError {
+				t.Errorf("self tool failed: %+v", result)
+				http.Error(w, "tool failed", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{"role": "assistant", "content": "done"})
+			return
+		}
+		if !requestHasTool(request.Tools, "mark_from_self") {
+			t.Errorf("execute request did not expose packaged self tool: %+v", request.Tools)
+			http.Error(w, "missing self tool", http.StatusBadRequest)
+			return
+		}
+		writeChatResponse(w, map[string]any{
+			"role": "assistant",
+			"tool_calls": []map[string]any{
+				{
+					"id":   "call_1",
+					"type": "function",
+					"function": map[string]any{
+						"name":      "mark_from_self",
+						"arguments": `{}`,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"--flag"}, user, &out, &errOut, "packaged-runner.exe")
+	if code != 0 {
+		t.Fatalf("execute exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected two provider calls, got %d", requests.Load())
+	}
+	data, err := os.ReadFile(filepath.Join(user, "execute-marker.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "from-self" {
+		t.Fatalf("unexpected marker: %q", string(data))
+	}
+}
+
 func requestContains(messages []chatMessage, needle string) bool {
 	for _, message := range messages {
 		if strings.Contains(message.Content, needle) {
