@@ -423,6 +423,48 @@ func TestActiveToolPackSelectsRelevantSelfRepoTools(t *testing.T) {
 	}
 }
 
+func TestActiveToolPackSelectsHookSkillDeclaredTools(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "hook tool selection test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "validate.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "validation_gate",
+		"description": "Run validation gate.",
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "unrelated.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "unrelated_tool",
+		"description": "Unrelated helper.",
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "reviewer.md"), []byte("# Reviewer\n\ntools:\n- validation_gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "hooks.yaml"), map[string]any{
+		"on_grow": []any{"reviewer"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := activeToolPackReport(dir, "grow", "plain objective", "on_grow")
+	if !hasTool(report.Tools, "validation_gate") {
+		t.Fatalf("hook-selected skill tool was not exposed: %+v", report)
+	}
+	if hasTool(report.Tools, "unrelated_tool") {
+		t.Fatalf("unrelated self repo tool should not be exposed: %+v", report)
+	}
+	if !strings.Contains(report.SelectionReason["validation_gate"], "hook on_grow selected skill") {
+		t.Fatalf("hook-selected tool reason missing: %+v", report.SelectionReason)
+	}
+}
+
 func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "bad tool test", ""); err != nil {
@@ -449,6 +491,49 @@ func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	}
 	if !hasArtifactType(state.LastArtifacts, "diff") {
 		t.Fatalf("expected failed check to expose diff artifact, got %+v", state.LastArtifacts)
+	}
+}
+
+func TestCheckRejectsBrokenHookSkillReferences(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "bad hook test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "hooks.yaml"), map[string]any{
+		"on_grow": []any{"missing-skill"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject missing hook skill")
+	}
+	if !containsProblem(report.Problems, "hook skill not found") {
+		t.Fatalf("expected missing hook skill problem, got %+v", report.Problems)
+	}
+}
+
+func TestCheckRejectsHookSkillUnknownTool(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "bad hook tool test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "reviewer.md"), []byte("# Reviewer\n\ntools: missing_tool\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "hooks.yaml"), map[string]any{
+		"on_grow": []any{"reviewer"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject hook skill unknown tool")
+	}
+	if !containsProblem(report.Problems, "declares unknown tool: missing_tool") {
+		t.Fatalf("expected unknown tool problem, got %+v", report.Problems)
 	}
 }
 

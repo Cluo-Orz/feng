@@ -113,11 +113,11 @@ func activeToolPack(workspace, _mode, _latestEvent string) []Tool {
 	return activeToolPackReport(workspace, _mode, _latestEvent).Tools
 }
 
-func activeToolPackReport(workspace, mode, latestEvent string) ActiveToolPackReport {
-	return activeToolPackReportFromSelf(workspace, workspace, mode, latestEvent)
+func activeToolPackReport(workspace, mode, latestEvent string, hookEvents ...string) ActiveToolPackReport {
+	return activeToolPackReportFromSelf(workspace, workspace, mode, latestEvent, hookEvents...)
 }
 
-func activeToolPackReportFromSelf(workspace, selfRoot, mode, latestEvent string) ActiveToolPackReport {
+func activeToolPackReportFromSelf(workspace, selfRoot, mode, latestEvent string, hookEvents ...string) ActiveToolPackReport {
 	tools := bootstrapToolsWithPermissions(selfRoot)
 	reasons := map[string]string{}
 	for _, tool := range tools {
@@ -137,13 +137,39 @@ func activeToolPackReportFromSelf(workspace, selfRoot, mode, latestEvent string)
 		return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
 	}
 
+	hookSelected, hookReasons := selectHookDeclaredTools(selfRoot, selfTools, hookEvents)
+	selected := append([]Tool{}, hookSelected...)
+	selectedNames := map[string]bool{}
+	for _, tool := range selected {
+		selectedNames[tool.Name] = true
+		reasons[tool.Name] = hookReasons[tool.Name]
+	}
+
 	query := selectionQuery(workspace, mode, latestEvent)
-	selected, selectedReasons := selectSelfRepoTools(selfTools, query, activeSelfToolLimit())
+	remainingLimit := activeSelfToolLimit() - len(selected)
+	if remainingLimit < 0 {
+		remainingLimit = 0
+	}
+	querySelected, selectedReasons := selectSelfRepoTools(selfTools, query, remainingLimit)
+	for _, tool := range querySelected {
+		if selectedNames[tool.Name] {
+			continue
+		}
+		selectedNames[tool.Name] = true
+		selected = append(selected, tool)
+	}
 	tools = append(tools, selected...)
 	for name, reason := range selectedReasons {
-		reasons[name] = reason
+		if !hookReasonsHasName(hookReasons, name) {
+			reasons[name] = reason
+		}
 	}
 	return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
+}
+
+func hookReasonsHasName(reasons map[string]string, name string) bool {
+	_, ok := reasons[name]
+	return ok
 }
 
 func effectivePermissionsRoot(workspace, permissionsRoot string) string {

@@ -11,11 +11,11 @@ import (
 func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout io.Writer) int {
 	messages := compileGrowMessages(workspace, goal, hookEvent)
 	latestEvent := goal
-	toolPack := activeToolPackReport(workspace, "grow", latestEvent)
+	toolPack := activeToolPackReport(workspace, "grow", latestEvent, hookEvent)
 	tools := toolPack.Tools
 	toolSchemas := toolSchemasForProvider(tools)
 	refreshToolPack := func() {
-		toolPack = activeToolPackReport(workspace, "grow", latestEvent)
+		toolPack = activeToolPackReport(workspace, "grow", latestEvent, hookEvent)
 		tools = toolPack.Tools
 		toolSchemas = toolSchemasForProvider(tools)
 		updateContextMetrics(workspace, messages, toolSchemas)

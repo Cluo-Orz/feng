@@ -278,6 +278,8 @@ on_check_failed: []
 
 MVP hook 只做 skill 选择，不执行脚本。`hooks.yaml` 的事件值可以引用 skill 名称或路径，例如 `reviewer`、`skills/reviewer.md` 或 `{ "skill": "reviewer" }`。被 hook 选中的 skill body 会优先进入 cached context pack；没有 hook 匹配时仍按 goal/request 关键词选择相关 skill/world。
 
+如果 hook 选中的 skill 声明了 `tools:`，这些工具会优先进入本轮 active tool pack。`check` 必须拒绝不存在的 hook skill 或不存在的 tool 声明，避免 validated self 里留下看得见但用不了的能力。
+
 MVP 支持的事件点保持很少：
 
 ```text

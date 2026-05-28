@@ -120,11 +120,11 @@ func bootstrapExecuteWorkspace(workspace, goal, seedSelf string) (bool, error) {
 func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, interfaceConfig map[string]any, stdout io.Writer) int {
 	messages := compileExecuteMessages(workspace, selfRoot, command, commandArgs, interfaceConfig)
 	latestEvent := "execute " + command + " " + strings.Join(commandArgs, " ")
-	toolPack := activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent)
+	toolPack := activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent, "on_execute")
 	tools := toolPack.Tools
 	toolSchemas := toolSchemasForProvider(tools)
 	refreshToolPack := func() {
-		toolPack = activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent)
+		toolPack = activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent, "on_execute")
 		tools = toolPack.Tools
 		toolSchemas = toolSchemasForProvider(tools)
 		updateContextMetrics(workspace, messages, toolSchemas)
