@@ -50,6 +50,7 @@ type HatchManifest struct {
 	RequiredProviderProfiles []string       `json:"required_provider_profiles"`
 	RequiredEnv              []string       `json:"required_env"`
 	Entrypoints              []string       `json:"entrypoints"`
+	Installers               []string       `json:"installers,omitempty"`
 	Interface                map[string]any `json:"interface"`
 	Excludes                 []string       `json:"excludes"`
 }
@@ -150,6 +151,10 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err := writeProviderExample(output); err != nil {
 		return "", err
 	}
+	installers, err := writeInstallers(output, cleanName)
+	if err != nil {
+		return "", err
+	}
 	interfaceConfig, err := loadInterfaceConfig(workspace)
 	if err != nil {
 		return "", err
@@ -163,6 +168,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		RequiredProviderProfiles: []string{"deepseek"},
 		RequiredEnv:              []string{"DEEPSEEK_API_KEY"},
 		Entrypoints:              entrypoints,
+		Installers:               installers,
 		Interface:                interfaceConfig,
 		Excludes:                 []string{"API keys", "local provider profile", ".feng/cache", ".feng/runs", "unvalidated candidate"},
 	}
@@ -299,13 +305,78 @@ func writeWindowsCommandShim(output, cleanName string) ([]string, error) {
 	var entrypoints []string
 	if runtime.GOOS == "windows" {
 		cmdName := cleanName + ".cmd"
-		content := fmt.Sprintf("@echo off\r\n\"%%~dp0%s.exe\" %%*\r\n", cleanName)
+		content := fmt.Sprintf("@echo off\r\n\"%%~dp0%s.exe\" %%*\r\nexit /b %%ERRORLEVEL%%\r\n", cleanName)
 		if err := writeText(filepath.Join(output, cmdName), content); err != nil {
 			return nil, err
 		}
 		entrypoints = append(entrypoints, cmdName)
+		psName := cleanName + ".ps1"
+		psContent := fmt.Sprintf("$ErrorActionPreference = \"Stop\"\r\n& \"$PSScriptRoot\\%s.exe\" @args\r\nexit $LASTEXITCODE\r\n", cleanName)
+		if err := writeText(filepath.Join(output, psName), psContent); err != nil {
+			return nil, err
+		}
+		entrypoints = append(entrypoints, psName)
 	}
 	return entrypoints, nil
+}
+
+func writeInstallers(output, cleanName string) ([]string, error) {
+	installers := []string{"install", "install.ps1"}
+	if err := writeText(filepath.Join(output, "install"), shellInstallScript(cleanName)); err != nil {
+		return nil, err
+	}
+	_ = os.Chmod(filepath.Join(output, "install"), 0o755)
+	if err := writeText(filepath.Join(output, "install.ps1"), powershellInstallScript(cleanName)); err != nil {
+		return nil, err
+	}
+	return installers, nil
+}
+
+func shellInstallScript(cleanName string) string {
+	return fmt.Sprintf(`#!/bin/sh
+set -eu
+BIN_DIR="${1:-$HOME/.local/bin}"
+PACKAGE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+RUNNER="$PACKAGE_DIR/%[1]s"
+if [ -f "$PACKAGE_DIR/%[1]s.exe" ]; then
+  RUNNER="$PACKAGE_DIR/%[1]s.exe"
+fi
+mkdir -p "$BIN_DIR"
+cat > "$BIN_DIR/%[1]s" <<EOF
+#!/bin/sh
+exec "$RUNNER" "\$@"
+EOF
+chmod +x "$BIN_DIR/%[1]s"
+echo "Installed %[1]s launcher to $BIN_DIR/%[1]s"
+`, cleanName)
+}
+
+func powershellInstallScript(cleanName string) string {
+	lines := []string{
+		"param(",
+		"  [string]$BinDir = \"$env:USERPROFILE\\bin\"",
+		")",
+		"$ErrorActionPreference = \"Stop\"",
+		"$PackageDir = $PSScriptRoot",
+		"$CmdRunner = Join-Path $PackageDir \"%[1]s.cmd\"",
+		"if (-not (Test-Path -LiteralPath $CmdRunner)) {",
+		"  $CmdRunner = Join-Path $PackageDir \"%[1]s.exe\"",
+		"}",
+		"if (-not (Test-Path -LiteralPath $CmdRunner)) {",
+		"  $CmdRunner = Join-Path $PackageDir \"%[1]s\"",
+		"}",
+		"$PsRunner = Join-Path $PackageDir \"%[1]s.ps1\"",
+		"if (-not (Test-Path -LiteralPath $PsRunner)) {",
+		"  $PsRunner = $CmdRunner",
+		"}",
+		"New-Item -ItemType Directory -Force -Path $BinDir | Out-Null",
+		"$CmdLauncher = \"@echo off`r`n`\"$CmdRunner`\" %%*`r`nexit /b %%ERRORLEVEL%%`r`n\"",
+		"Set-Content -LiteralPath (Join-Path $BinDir \"%[1]s.cmd\") -Value $CmdLauncher -Encoding ASCII",
+		"$PsLauncher = \"& `\"$PsRunner`\" @args`r`nexit `$LASTEXITCODE`r`n\"",
+		"Set-Content -LiteralPath (Join-Path $BinDir \"%[1]s.ps1\") -Value $PsLauncher -Encoding ASCII",
+		"Write-Host \"Installed %[1]s launchers to $BinDir\"",
+	}
+	return fmt.Sprintf(strings.Join(lines, "\r\n")+"\r\n", cleanName)
 }
 
 func buildRunnerFromSource(workspace, output, cleanName string) ([]string, error) {

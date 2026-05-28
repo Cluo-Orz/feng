@@ -54,6 +54,7 @@ manifest
 checksums
 provider examples
 named entry command
+install scripts
 ```
 
 `frozen self` 包含最小 self repo，也包含当前 workspace 中已经长出来、并被 check 管住的可选根：`docs/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。这样 `feng hatch --name feng --portable` 产出的下一代 feng 不会丢失继续自迭代需要的源码、文档和验证材料。
@@ -67,6 +68,18 @@ hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 w
 hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts/gui/tag。
 
 产品级 hatch 的 runner 目标是 Go binary。hatch 不引入第二套 runner。
+
+release package 同时生成命名 entrypoint 和安装脚本：
+
+```text
+NAME
+NAME.cmd
+NAME.ps1
+install
+install.ps1
+```
+
+安装脚本只在用户指定的 bin 目录生成 launcher，指向当前 package 中的 runner。它不移动 frozen self，不写 API key，也不自动修改 PATH。
 
 不包含：
 

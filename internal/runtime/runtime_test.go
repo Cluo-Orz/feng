@@ -176,6 +176,20 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(packagePath, "checksums.json")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(packagePath, "install")); err != nil {
+		t.Fatalf("hatch package missing shell installer: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(packagePath, "install.ps1")); err != nil {
+		t.Fatalf("hatch package missing PowerShell installer: %v", err)
+	}
+	if runnerEntrypointName("sample") == "sample.exe" {
+		if _, err := os.Stat(filepath.Join(packagePath, "sample.cmd")); err != nil {
+			t.Fatalf("hatch package missing cmd shim: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(packagePath, "sample.ps1")); err != nil {
+			t.Fatalf("hatch package missing PowerShell shim: %v", err)
+		}
+	}
 	if _, err := os.Stat(filepath.Join(packagePath, "self", "outside-world", "keep.txt")); !os.IsNotExist(err) {
 		t.Fatalf("hatch copied unrelated workspace content: %v", err)
 	}
@@ -199,6 +213,16 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest), `"self_tag": "sample-v1"`) || !strings.Contains(string(manifest), `"tag"`) {
 		t.Fatalf("hatch manifest did not include tag metadata: %s", string(manifest))
+	}
+	if !strings.Contains(string(manifest), `"installers"`) || !strings.Contains(string(manifest), `"install.ps1"`) {
+		t.Fatalf("hatch manifest did not include installers: %s", string(manifest))
+	}
+	checksums, err := os.ReadFile(filepath.Join(packagePath, "checksums.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(checksums), `"install"`) || !strings.Contains(string(checksums), `"install.ps1"`) {
+		t.Fatalf("checksums did not include installers: %s", string(checksums))
 	}
 }
 
