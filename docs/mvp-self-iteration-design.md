@@ -707,7 +707,7 @@ newsbrief --topic ai
 
 单命令 interface 直接把可执行文件名当作业务命令；多命令 interface 使用第一个参数选择子命令。execute mode 读取 packaged `self/`、当前目录状态、本机 provider config 和本次 args，组装 LLM message list 并调用工具完成任务。
 
-execute mode 默认读取 frozen self、本机 config 和本次 args，不修改 packaged self。若使用者要让它继续成长，应在一个 feng workspace 中再次进入 grow mode。
+execute mode 默认读取 frozen self、本机 config 和本次 args，不修改 packaged self，也不把 self repo 展开到使用者当前目录。它只在当前目录写 `.feng/` 状态、事件和 artifacts。若使用者要让它继续成长，应在一个 feng workspace 中再次进入 grow mode。
 
 如果缺少 provider profile 或 API key：
 

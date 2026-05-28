@@ -42,6 +42,10 @@ type ActiveToolPackReport struct {
 }
 
 func bootstrapTools() []Tool {
+	return bootstrapToolsWithPermissions("")
+}
+
+func bootstrapToolsWithPermissions(permissionsRoot string) []Tool {
 	return []Tool{
 		{
 			Name:        "read_file",
@@ -54,7 +58,9 @@ func bootstrapTools() []Tool {
 				},
 				"required": []any{"path"},
 			},
-			Handler: runReadFile,
+			Handler: func(workspace string, args map[string]any) ToolResult {
+				return runReadFileWithPermissions(workspace, effectivePermissionsRoot(workspace, permissionsRoot), args)
+			},
 		},
 		{
 			Name:        "write_file",
@@ -67,7 +73,9 @@ func bootstrapTools() []Tool {
 				},
 				"required": []any{"path", "content"},
 			},
-			Handler: runWriteFile,
+			Handler: func(workspace string, args map[string]any) ToolResult {
+				return runWriteFileWithPermissions(workspace, effectivePermissionsRoot(workspace, permissionsRoot), args)
+			},
 		},
 		{
 			Name:        "list_files",
@@ -79,7 +87,9 @@ func bootstrapTools() []Tool {
 					"max_files": map[string]any{"type": "integer"},
 				},
 			},
-			Handler: runListFiles,
+			Handler: func(workspace string, args map[string]any) ToolResult {
+				return runListFilesWithPermissions(workspace, effectivePermissionsRoot(workspace, permissionsRoot), args)
+			},
 		},
 		{
 			Name:        "run_command",
@@ -92,7 +102,9 @@ func bootstrapTools() []Tool {
 				},
 				"required": []any{"command"},
 			},
-			Handler: runRunCommand,
+			Handler: func(workspace string, args map[string]any) ToolResult {
+				return runRunCommandWithPermissions(workspace, effectivePermissionsRoot(workspace, permissionsRoot), args)
+			},
 		},
 	}
 }
@@ -102,13 +114,17 @@ func activeToolPack(workspace, _mode, _latestEvent string) []Tool {
 }
 
 func activeToolPackReport(workspace, mode, latestEvent string) ActiveToolPackReport {
-	tools := bootstrapTools()
+	return activeToolPackReportFromSelf(workspace, workspace, mode, latestEvent)
+}
+
+func activeToolPackReportFromSelf(workspace, selfRoot, mode, latestEvent string) ActiveToolPackReport {
+	tools := bootstrapToolsWithPermissions(selfRoot)
 	reasons := map[string]string{}
 	for _, tool := range tools {
 		reasons[tool.Name] = "bootstrap tool"
 	}
 
-	selfTools := selfRepoTools(workspace)
+	selfTools := selfRepoToolsFromRoot(workspace, selfRoot)
 	if len(selfTools) == 0 {
 		return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
 	}
@@ -128,6 +144,13 @@ func activeToolPackReport(workspace, mode, latestEvent string) ActiveToolPackRep
 		reasons[name] = reason
 	}
 	return ActiveToolPackReport{Tools: tools, SelectedTools: toolNameList(tools), SelectionReason: reasons}
+}
+
+func effectivePermissionsRoot(workspace, permissionsRoot string) string {
+	if strings.TrimSpace(permissionsRoot) == "" {
+		return workspace
+	}
+	return permissionsRoot
 }
 
 func executeTool(workspace string, tools []Tool, name string, args map[string]any) ToolResult {
@@ -214,7 +237,11 @@ func argumentMatchesType(value any, expected string) bool {
 }
 
 func runReadFile(workspace string, args map[string]any) ToolResult {
-	path, err := checkFileRead(workspace, argString(args, "path"))
+	return runReadFileWithPermissions(workspace, workspace, args)
+}
+
+func runReadFileWithPermissions(workspace, permissionsRoot string, args map[string]any) ToolResult {
+	path, err := checkFileReadWithPermissions(workspace, permissionsRoot, argString(args, "path"))
 	if err != nil {
 		return deniedToolResult(workspace, "read_file", err)
 	}
@@ -232,7 +259,11 @@ func runReadFile(workspace string, args map[string]any) ToolResult {
 }
 
 func runWriteFile(workspace string, args map[string]any) ToolResult {
-	path, err := checkFileWrite(workspace, argString(args, "path"))
+	return runWriteFileWithPermissions(workspace, workspace, args)
+}
+
+func runWriteFileWithPermissions(workspace, permissionsRoot string, args map[string]any) ToolResult {
+	path, err := checkFileWriteWithPermissions(workspace, permissionsRoot, argString(args, "path"))
 	if err != nil {
 		return deniedToolResult(workspace, "write_file", err)
 	}
@@ -245,11 +276,15 @@ func runWriteFile(workspace string, args map[string]any) ToolResult {
 }
 
 func runListFiles(workspace string, args map[string]any) ToolResult {
+	return runListFilesWithPermissions(workspace, workspace, args)
+}
+
+func runListFilesWithPermissions(workspace, permissionsRoot string, args map[string]any) ToolResult {
 	rawPath := argString(args, "path")
 	if rawPath == "" {
 		rawPath = "."
 	}
-	root, err := checkFileRead(workspace, rawPath)
+	root, err := checkFileReadWithPermissions(workspace, permissionsRoot, rawPath)
 	if err != nil {
 		return deniedToolResult(workspace, "list_files", err)
 	}
@@ -307,11 +342,15 @@ func shouldSkipListDir(rel, rootRel string) bool {
 }
 
 func runRunCommand(workspace string, args map[string]any) ToolResult {
+	return runRunCommandWithPermissions(workspace, workspace, args)
+}
+
+func runRunCommandWithPermissions(workspace, permissionsRoot string, args map[string]any) ToolResult {
 	command := strings.TrimSpace(argString(args, "command"))
 	if command == "" {
 		return ToolResult{Content: "command is required", IsError: true}
 	}
-	if err := checkCommand(workspace, command); err != nil {
+	if err := checkCommandWithPermissions(workspace, permissionsRoot, command); err != nil {
 		return deniedToolResult(workspace, "run_command", err)
 	}
 	timeout := clampInt(argInt(args, "timeout", 60), 1, 600)
@@ -368,7 +407,11 @@ func runShellCommandWithEnv(workspace, command string, timeoutSeconds int, env m
 }
 
 func selfRepoTools(workspace string) []Tool {
-	toolsDir := filepath.Join(workspace, "tools")
+	return selfRepoToolsFromRoot(workspace, workspace)
+}
+
+func selfRepoToolsFromRoot(workspace, selfRoot string) []Tool {
+	toolsDir := filepath.Join(selfRoot, "tools")
 	if !exists(toolsDir) {
 		return nil
 	}
@@ -381,7 +424,7 @@ func selfRepoTools(workspace string) []Tool {
 		if err != nil || d.IsDir() || !isToolFile(path) {
 			return nil
 		}
-		tool := commandTool(workspace, path)
+		tool := commandToolFromRoot(workspace, selfRoot, path)
 		if tool == nil || seen[tool.Name] {
 			return nil
 		}
@@ -393,9 +436,13 @@ func selfRepoTools(workspace string) []Tool {
 }
 
 func commandTool(workspace, path string) *Tool {
+	return commandToolFromRoot(workspace, workspace, path)
+}
+
+func commandToolFromRoot(workspace, selfRoot, path string) *Tool {
 	data, err := readJSONFile(path)
 	if err != nil {
-		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(workspace, path), "reason": err.Error()})
+		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(selfRoot, path), "reason": err.Error()})
 		return nil
 	}
 	raw, _ := data.(map[string]any)
@@ -408,7 +455,7 @@ func commandTool(workspace, path string) *Tool {
 	}
 	command := strings.TrimSpace(argString(raw, "command"))
 	if !validToolName(name) || command == "" {
-		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(workspace, path), "reason": "invalid name or command"})
+		appendEvent(workspace, "tool_load_failed", map[string]any{"path": relPath(selfRoot, path), "reason": "invalid name or command"})
 		return nil
 	}
 	description := argString(raw, "description")
@@ -420,7 +467,7 @@ func commandTool(workspace, path string) *Tool {
 		inputSchema = map[string]any{"type": "object", "properties": map[string]any{}, "required": []any{}}
 	}
 	timeout := clampInt(argInt(raw, "timeout", 60), 1, 600)
-	rel := relPath(workspace, path)
+	rel := relPath(selfRoot, path)
 
 	return &Tool{
 		Name:           name,
@@ -430,7 +477,7 @@ func commandTool(workspace, path string) *Tool {
 		SelectionTerms: selectionTerms(name, rel, description, raw),
 		AlwaysActive:   boolFromAny(raw["always"]),
 		Handler: func(toolWorkspace string, args map[string]any) ToolResult {
-			if err := checkCommand(toolWorkspace, command); err != nil {
+			if err := checkCommandWithPermissions(toolWorkspace, selfRoot, command); err != nil {
 				appendEvent(toolWorkspace, "tool_denied", map[string]any{"tool": name, "reason": err.Error()})
 				return ToolResult{Content: err.Error(), IsError: true}
 			}

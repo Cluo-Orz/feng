@@ -111,7 +111,7 @@ feng hatch --name feng --portable
 xiaogui --input ./Downloads
 ```
 
-单命令 interface 直接执行该命令；多命令 interface 使用第一个参数选择子命令。execute mode 使用 frozen self、本机 provider config、当前目录状态和本次 args 组装 messages，默认不修改 packaged self。
+单命令 interface 直接执行该命令；多命令 interface 使用第一个参数选择子命令。execute mode 使用 frozen self、本机 provider config、当前目录状态和本次 args 组装 messages，默认不修改 packaged self，也不把 self repo 展开到使用者当前目录。使用者目录只出现 `.feng/` 状态、事件和 artifacts。
 
 ## GUI
 

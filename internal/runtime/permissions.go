@@ -26,8 +26,12 @@ var builtInDeniedCommands = []string{
 }
 
 func loadPermissions(workspace string) Permissions {
+	return loadPermissionsFrom(workspace)
+}
+
+func loadPermissionsFrom(root string) Permissions {
 	var permissions Permissions
-	data, err := readJSONFile(filepath.Join(workspace, "permissions.yaml"))
+	data, err := readJSONFile(filepath.Join(root, "permissions.yaml"))
 	if err != nil {
 		permissions.Files.Read = []string{"**"}
 		return permissions
@@ -46,17 +50,25 @@ func loadPermissions(workspace string) Permissions {
 }
 
 func checkFileRead(workspace, rawPath string) (string, error) {
+	return checkFileReadWithPermissions(workspace, workspace, rawPath)
+}
+
+func checkFileReadWithPermissions(workspace, permissionsRoot, rawPath string) (string, error) {
 	target, rel, err := safeWorkspacePath(workspace, rawPath)
 	if err != nil {
 		return "", permissionDenied(workspace, "file_read", rawPath, err.Error(), "file read target must stay inside the workspace")
 	}
-	if !matchesAny(rel, loadPermissions(workspace).Files.Read) {
+	if !matchesAny(rel, loadPermissionsFrom(permissionsRoot).Files.Read) {
 		return "", permissionDenied(workspace, "file_read", rel, "file read denied: "+rel, "file read path did not match permissions.yaml")
 	}
 	return target, nil
 }
 
 func checkFileWrite(workspace, rawPath string) (string, error) {
+	return checkFileWriteWithPermissions(workspace, workspace, rawPath)
+}
+
+func checkFileWriteWithPermissions(workspace, permissionsRoot, rawPath string) (string, error) {
 	target, rel, err := safeWorkspacePath(workspace, rawPath)
 	if err != nil {
 		return "", permissionDenied(workspace, "file_write", rawPath, err.Error(), "file write target must stay inside the workspace")
@@ -67,14 +79,18 @@ func checkFileWrite(workspace, rawPath string) (string, error) {
 	if rel == ".feng" || strings.HasPrefix(rel, ".feng/") {
 		return "", permissionDenied(workspace, "file_write", rel, "writing .feng is denied", "runtime owns .feng state/events/artifacts; tools cannot write .feng directly")
 	}
-	if !matchesAny(rel, loadPermissions(workspace).Files.Write) {
+	if !matchesAny(rel, loadPermissionsFrom(permissionsRoot).Files.Write) {
 		return "", permissionDenied(workspace, "file_write", rel, "file write denied: "+rel, "file write path did not match permissions.yaml")
 	}
 	return target, nil
 }
 
 func checkCommand(workspace, command string) error {
-	permissions := loadPermissions(workspace)
+	return checkCommandWithPermissions(workspace, workspace, command)
+}
+
+func checkCommandWithPermissions(workspace, permissionsRoot, command string) error {
+	permissions := loadPermissionsFrom(permissionsRoot)
 	lowered := normalizedCommand(command)
 	for _, pattern := range builtInDeniedCommands {
 		if strings.Contains(lowered, normalizedCommand(pattern)) {

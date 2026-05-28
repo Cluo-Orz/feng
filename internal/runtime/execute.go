@@ -54,9 +54,9 @@ func cmdExecute(args []string, cwd string, stdout, stderr io.Writer, executable 
 		return 0
 	}
 
-	workspace := workspaceOrCwd(cwd)
+	workspace := executeWorkspace(cwd)
 	goal := strings.TrimSpace("execute " + command + " " + strings.Join(commandArgs, " "))
-	if _, err := bootstrap(workspace, goal, seedSelf); err != nil {
+	if _, err := bootstrapExecuteWorkspace(workspace, goal, seedSelf); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -72,17 +72,59 @@ func cmdExecute(args []string, cwd string, stdout, stderr io.Writer, executable 
 	state.CurrentGoal = goal
 	saveState(workspace, state)
 	appendEvent(workspace, "run_started", map[string]any{"mode": "execute", "command": command, "args": commandArgs})
-	return runExecuteLoop(workspace, command, commandArgs, interfaceConfig, stdout)
+	return runExecuteLoop(workspace, seedSelf, command, commandArgs, interfaceConfig, stdout)
 }
 
-func runExecuteLoop(workspace, command string, commandArgs []string, interfaceConfig map[string]any, stdout io.Writer) int {
-	messages := compileExecuteMessages(workspace, command, commandArgs, interfaceConfig)
+func executeWorkspace(cwd string) string {
+	abs, err := filepath.Abs(cwd)
+	if err != nil {
+		return cwd
+	}
+	return abs
+}
+
+func bootstrapExecuteWorkspace(workspace, goal, seedSelf string) (bool, error) {
+	created := false
+	for _, dir := range []string{".feng", ".feng/artifacts", ".feng/cache", ".feng/runs"} {
+		full := filepath.Join(workspace, filepath.FromSlash(dir))
+		if !exists(full) {
+			created = true
+		}
+		if err := os.MkdirAll(full, 0o755); err != nil {
+			return false, err
+		}
+	}
+	statePath := filepath.Join(workspace, ".feng", "state.yaml")
+	if !exists(statePath) {
+		state := defaultState(goal)
+		state.SourceSelfCommit = packagedSourceCommit(seedSelf)
+		state.CandidateStatus = "execute"
+		if err := saveState(workspace, state); err != nil {
+			return false, err
+		}
+		created = true
+	} else if state, err := loadState(workspace); err == nil && state.SourceSelfCommit == "" {
+		state.SourceSelfCommit = packagedSourceCommit(seedSelf)
+		if err := saveState(workspace, state); err != nil {
+			return false, err
+		}
+	}
+	if created {
+		appendEvent(workspace, "execute_bootstrap", map[string]any{
+			"source_self_commit": packagedSourceCommit(seedSelf),
+		})
+	}
+	return created, nil
+}
+
+func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, interfaceConfig map[string]any, stdout io.Writer) int {
+	messages := compileExecuteMessages(workspace, selfRoot, command, commandArgs, interfaceConfig)
 	latestEvent := "execute " + command + " " + strings.Join(commandArgs, " ")
-	toolPack := activeToolPackReport(workspace, "execute", latestEvent)
+	toolPack := activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent)
 	tools := toolPack.Tools
 	toolSchemas := toolSchemasForProvider(tools)
 	refreshToolPack := func() {
-		toolPack = activeToolPackReport(workspace, "execute", latestEvent)
+		toolPack = activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent)
 		tools = toolPack.Tools
 		toolSchemas = toolSchemasForProvider(tools)
 		updateContextMetrics(workspace, messages, toolSchemas)
@@ -151,16 +193,16 @@ func runExecuteLoop(workspace, command string, commandArgs []string, interfaceCo
 	return 2
 }
 
-func compileExecuteMessages(workspace, command string, commandArgs []string, interfaceConfig map[string]any) []chatMessage {
+func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []string, interfaceConfig map[string]any) []chatMessage {
 	state, _ := loadState(workspace)
 	selfContract := map[string]any{
-		"self_commit":        currentHead(workspace),
+		"self_commit":        packagedSourceCommit(selfRoot),
 		"source_self_commit": state.SourceSelfCommit,
-		"self_files":         selfFileIndex(workspace),
-		"identity":           fileTextExcerpt(workspace, "identity.md", 2000),
-		"goal":               fileTextExcerpt(workspace, "goal.md", 2000),
-		"skill_catalog":      skillCatalog(workspace, 80),
-		"world_index":        worldIndex(workspace, 200),
+		"self_files":         selfFileIndex(selfRoot),
+		"identity":           fileTextExcerpt(selfRoot, "identity.md", 2000),
+		"goal":               fileTextExcerpt(selfRoot, "goal.md", 2000),
+		"skill_catalog":      skillCatalog(selfRoot, 80),
+		"world_index":        worldIndex(selfRoot, 200),
 		"interface":          interfaceConfig,
 	}
 	stateManifest := map[string]any{

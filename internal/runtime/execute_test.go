@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
 func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 	var seenRequest chatRequest
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
@@ -24,9 +26,37 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		requests.Add(1)
+		if hasToolMessage(seenRequest.Messages) {
+			var result ToolResult
+			if err := json.Unmarshal([]byte(lastToolMessage(seenRequest.Messages)), &result); err != nil {
+				t.Errorf("tool message was not structured JSON: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if result.IsError || !strings.Contains(result.Content, "wrote result.txt") {
+				t.Errorf("unexpected tool result: %+v", result)
+				http.Error(w, "bad tool result", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role":    "assistant",
+				"content": "downloads organized",
+			})
+			return
+		}
 		writeChatResponse(w, map[string]any{
-			"role":    "assistant",
-			"content": "downloads organized",
+			"role": "assistant",
+			"tool_calls": []map[string]any{
+				{
+					"id":   "call_1",
+					"type": "function",
+					"function": map[string]any{
+						"name":      "write_file",
+						"arguments": `{"path":"result.txt","content":"organized\n"}`,
+					},
+				},
+			},
 		})
 	}))
 	defer server.Close()
@@ -44,6 +74,18 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := writeJSONFile(filepath.Join(seed, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"result.txt"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git status"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("FENG_PACKAGED_SELF", seed)
 	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
@@ -58,10 +100,16 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 	if strings.TrimSpace(out.String()) != "downloads organized" {
 		t.Fatalf("execute did not print assistant result: %s", out.String())
 	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected two provider calls, got %d", requests.Load())
+	}
 	if !requestContains(seenRequest.Messages, "execute request:") ||
 		!requestContains(seenRequest.Messages, `"command": "organize"`) ||
 		!requestContains(seenRequest.Messages, `"./Downloads"`) {
 		t.Fatalf("execute request was not compiled into messages: %+v", seenRequest.Messages)
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "result.txt")); err != nil || string(data) != "organized\n" {
+		t.Fatalf("execute did not write through packaged permissions: data=%q err=%v", string(data), err)
 	}
 	state, err := loadState(dir)
 	if err != nil {
@@ -70,8 +118,13 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 	if state.Mode != "ready" || state.CurrentGoal == "" {
 		t.Fatalf("execute state not recorded: %+v", state)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "identity.md")); err != nil {
-		t.Fatalf("execute did not seed packaged self into workspace: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, ".feng", "state.yaml")); err != nil {
+		t.Fatalf("execute did not create runtime state: %v", err)
+	}
+	for _, rel := range []string{"identity.md", "skills", "tools", "world", "evals", "interface.yaml", "permissions.yaml"} {
+		if _, err := os.Stat(filepath.Join(dir, rel)); !os.IsNotExist(err) {
+			t.Fatalf("execute exposed self repo in user workspace at %s: %v", rel, err)
+		}
 	}
 }
 
