@@ -535,6 +535,15 @@ func TestGoRuntimeCheckRejectsBrokenGoSource(t *testing.T) {
 	if state.CandidateStatus != "failed" {
 		t.Fatalf("broken source should not validate: %+v", state)
 	}
+	if state.LastRecovery["type"] != "check_failed" || state.LastRecovery["artifact"] == "" {
+		t.Fatalf("check failure should record recovery material: %+v", state.LastRecovery)
+	}
+	if state.RecoveryCount < 1 {
+		t.Fatalf("check failure should increment recovery_count: %+v", state)
+	}
+	if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(state.LastRecovery["artifact"]))); err != nil {
+		t.Fatalf("last_recovery artifact missing: %v", err)
+	}
 	if !artifactTypeExists(dir, "source-health") {
 		t.Fatalf("source health artifact missing: %+v", listArtifacts(dir))
 	}

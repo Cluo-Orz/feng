@@ -35,6 +35,9 @@ skill/world body
 
 artifact refs
   大内容只放 type/source/path/hash/summary/why_relevant/snippets。
+
+last_recovery
+  进入动态 state manifest。它只放失败类型和 artifact 地址，让下一轮 grow 能从失败现场继续修复，而不是把完整日志塞进 prompt。
 ```
 
 ## Context Pressure

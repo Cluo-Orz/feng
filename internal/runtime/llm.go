@@ -248,6 +248,8 @@ func compileGrowMessages(workspace, goal string, hookEvents ...string) []chatMes
 		"current_goal":         state.CurrentGoal,
 		"candidate_status":     state.CandidateStatus,
 		"validated_commit":     state.ValidatedCommit,
+		"last_recovery":        state.LastRecovery,
+		"recovery_count":       state.RecoveryCount,
 		"git":                  gitContext(workspace),
 		"workspace_file_index": workspaceFileIndex(workspace, 300),
 		"recent_events":        recentEventRefs(workspace, 8),

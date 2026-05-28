@@ -147,6 +147,34 @@ func TestCompileGrowMessagesUsesHookSelectedSkill(t *testing.T) {
 	}
 }
 
+func TestCompileGrowMessagesExposeRecoveryState(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "recovery context test", ""); err != nil {
+		t.Fatal(err)
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Mode = "blocked"
+	state.CandidateStatus = "failed"
+	state.LastRecovery = map[string]string{"type": "check_failed", "artifact": ".feng/artifacts/check.json"}
+	state.RecoveryCount = 3
+	if err := saveState(dir, state); err != nil {
+		t.Fatal(err)
+	}
+
+	messages := compileGrowMessages(dir, "repair candidate")
+	stateManifest := parseStateManifest(t, messages[2].Content)
+	recovery, _ := stateManifest["last_recovery"].(map[string]any)
+	if recovery["type"] != "check_failed" || recovery["artifact"] != ".feng/artifacts/check.json" {
+		t.Fatalf("state manifest did not expose recovery material: %+v", stateManifest)
+	}
+	if stateManifest["recovery_count"].(float64) != 3 {
+		t.Fatalf("state manifest did not expose recovery count: %+v", stateManifest)
+	}
+}
+
 func TestCompileExecuteMessagesUsesOnExecuteHook(t *testing.T) {
 	selfRoot := t.TempDir()
 	user := t.TempDir()

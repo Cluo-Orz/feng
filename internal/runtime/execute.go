@@ -215,6 +215,8 @@ func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []s
 		"active_hook":          hookEvent,
 		"current_goal":         state.CurrentGoal,
 		"source_self_commit":   state.SourceSelfCommit,
+		"last_recovery":        state.LastRecovery,
+		"recovery_count":       state.RecoveryCount,
 		"workspace_file_index": workspaceFileIndex(workspace, 300),
 		"recent_events":        recentEventRefs(workspace, 8),
 		"artifact_refs":        artifactRefs(workspace, 10),

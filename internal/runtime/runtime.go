@@ -446,6 +446,8 @@ func runCheck(workspace string) CheckReport {
 	} else {
 		state.Mode = "blocked"
 		state.CandidateStatus = "failed"
+		state.LastRecovery = map[string]string{"type": "check_failed", "artifact": artifact.Path}
+		state.RecoveryCount++
 	}
 	saveState(workspace, state)
 	appendEvent(workspace, ternary(report.OK, "check_passed", "check_failed"), map[string]any{"ok": report.OK, "problems": report.Problems, "validated_commit": report.ValidatedCommit})
