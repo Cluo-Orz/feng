@@ -93,6 +93,26 @@ feng tag NAME
 
 `grow` 是第一个语义入口；bootstrap 是 grow 的前置阶段，不是用户必须理解的独立命令。
 
+## Execute Mode
+
+hatch 出来的命名 runner 先读取 packaged `self/interface.yaml`。
+
+如果 interface 仍是默认 feng 命令，runner 保留内核 CLI：
+
+```text
+feng grow "..."
+feng check
+feng hatch --name feng --portable
+```
+
+如果 interface 暴露业务命令，runner 进入 execute mode：
+
+```text
+xiaogui --input ./Downloads
+```
+
+单命令 interface 直接执行该命令；多命令 interface 使用第一个参数选择子命令。execute mode 使用 frozen self、本机 provider config、当前目录状态和本次 args 组装 messages，默认不修改 packaged self。
+
 ## GUI
 
 GUI MVP 只读：

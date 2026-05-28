@@ -138,6 +138,10 @@ type StatusSnapshot struct {
 }
 
 func Run(args []string, cwd string, stdout, stderr io.Writer) int {
+	return RunWithExecutable(args, cwd, stdout, stderr, "")
+}
+
+func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, executable string) int {
 	if cwd == "" {
 		var err error
 		cwd, err = os.Getwd()
@@ -145,6 +149,9 @@ func Run(args []string, cwd string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
+	}
+	if shouldRunPackagedExecute(args, executable) {
+		return cmdExecute(args, cwd, stdout, stderr, executable)
 	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		printHelp(stdout)

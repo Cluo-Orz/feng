@@ -435,6 +435,9 @@ func packageChecksums(root string) (map[string]string, error) {
 }
 
 func packagedSeedSelf() string {
+	if explicit := strings.TrimSpace(os.Getenv("FENG_PACKAGED_SELF")); explicit != "" && exists(explicit) {
+		return explicit
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return ""

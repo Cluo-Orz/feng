@@ -687,7 +687,7 @@ capabilities
 
 ## 16. Execute
 
-产物 `feng` 在另一台机器上运行：
+如果 frozen self 的 `interface.yaml` 仍是默认 feng interface，产物 `feng` 在另一台机器上运行：
 
 ```text
 feng grow "..."
@@ -695,7 +695,17 @@ feng check
 feng hatch --name feng --portable
 ```
 
-这是因为本 MVP hatch 出来的命名命令仍然叫 `feng`，所以它的 execute interface 仍然是 grow/check/hatch。普通目标 agent 的 hatch 产物则执行 `interface.yaml` 暴露的业务命令，例如 `xiaogui`、`coder`、`newsbrief`。
+这是因为自举 MVP hatch 出来的命名命令仍然叫 `feng`，所以它的 interface 仍然是 grow/check/hatch。
+
+如果 frozen self 的 `interface.yaml` 暴露的是业务命令，runner 进入 execute mode：
+
+```text
+xiaogui --input ./Downloads
+coder review --diff ./patch.diff
+newsbrief --topic ai
+```
+
+单命令 interface 直接把可执行文件名当作业务命令；多命令 interface 使用第一个参数选择子命令。execute mode 读取 packaged `self/`、当前目录状态、本机 provider config 和本次 args，组装 LLM message list 并调用工具完成任务。
 
 execute mode 默认读取 frozen self、本机 config 和本次 args，不修改 packaged self。若使用者要让它继续成长，应在一个 feng workspace 中再次进入 grow mode。
 
