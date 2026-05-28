@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,4 +64,72 @@ func TestWorkspaceLockReleaseAndStaleRecovery(t *testing.T) {
 		t.Fatalf("stale lock was not recovered: %v", err)
 	}
 	secondRelease()
+}
+
+func TestWorkspaceLockHeartbeatRefreshesRecordAndState(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "heartbeat lock test", ""); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, ".feng", "lock")
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"heartbeat","pid":`+strconv.Itoa(os.Getpid())+`,"started_at":1,"heartbeat":1}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !heartbeatWorkspaceLock(dir, "heartbeat", os.Getpid()) {
+		t.Fatal("heartbeat refresh returned false")
+	}
+	record, ok := readLockRecord(lockPath)
+	if !ok {
+		t.Fatal("lock record was not readable after heartbeat")
+	}
+	if record.Heartbeat <= 1 {
+		t.Fatalf("heartbeat was not refreshed: %+v", record)
+	}
+
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Lock["owner"] != "heartbeat" {
+		t.Fatalf("state lock owner was not updated: %+v", state.Lock)
+	}
+	if state.Lock["heartbeat"] == time.Unix(1, 0).Format(time.RFC3339) || state.Lock["heartbeat"] == "" {
+		t.Fatalf("state lock heartbeat was not refreshed: %+v", state.Lock)
+	}
+}
+
+func TestWorkspaceLockStaleRecoveryUsesHeartbeatNotModTime(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "heartbeat stale test", ""); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, ".feng", "lock")
+	freshHeartbeat := time.Now().Add(60 * time.Second).Unix()
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"fresh","pid":1,"started_at":1,"heartbeat":`+strconv.FormatInt(freshHeartbeat, 10)+`}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Second)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_LOCK_STALE_SECONDS", "1")
+	release, err := acquireWorkspaceLock(dir, "blocked")
+	if err == nil {
+		release()
+		t.Fatal("fresh heartbeat lock was incorrectly treated as stale")
+	}
+
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"old","pid":1,"started_at":1,"heartbeat":1}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := os.Chtimes(lockPath, now, now); err != nil {
+		t.Fatal(err)
+	}
+	release, err = acquireWorkspaceLock(dir, "second")
+	if err != nil {
+		t.Fatalf("stale heartbeat lock was not recovered: %v", err)
+	}
+	release()
 }

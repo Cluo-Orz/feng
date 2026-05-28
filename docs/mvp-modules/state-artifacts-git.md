@@ -31,6 +31,8 @@ lock:
 
 Go runtime 使用 `.feng/lock` 表示 workspace 修改锁。`grow`、`check`、`hatch` 这类会修改 workspace 的命令必须先拿锁；`status/watch/artifacts/gui` 只读命令不需要拿锁。
 
+拿到锁的进程会持续刷新 `.feng/lock` 和 `.feng/state.yaml` 里的 heartbeat。stale lock 判断以 heartbeat 为准，而不是只看 lock 文件 mtime，避免长任务运行中被误判为失效。
+
 `last_recovery` 表示当前需要用户或下一轮 grow 关注的最近恢复状态。成功的 grow 或 check 会清空它；`recovery_count` 保留为累计计数，避免 status/gui 在 ready 状态下继续展示旧错误。
 
 ## Events

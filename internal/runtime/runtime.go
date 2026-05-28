@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -24,6 +25,7 @@ const stateVersion = 1
 
 var (
 	eventSequence atomic.Uint64
+	stateFileMu   sync.Mutex
 
 	selfFiles = map[string]any{
 		"identity.md": "This is a feng self.\n\nIt starts without project-specific skills. Stable capabilities must grow through candidate files and pass check before becoming validated self.\n",
@@ -651,6 +653,12 @@ func emptyRecovery() map[string]string {
 }
 
 func loadState(workspace string) (State, error) {
+	stateFileMu.Lock()
+	defer stateFileMu.Unlock()
+	return loadStateUnlocked(workspace)
+}
+
+func loadStateUnlocked(workspace string) (State, error) {
 	state := defaultState("")
 	path := filepath.Join(workspace, ".feng", "state.yaml")
 	data, err := os.ReadFile(path)
@@ -680,7 +688,24 @@ func loadState(workspace string) (State, error) {
 }
 
 func saveState(workspace string, state State) error {
+	stateFileMu.Lock()
+	defer stateFileMu.Unlock()
+	return saveStateUnlocked(workspace, state)
+}
+
+func saveStateUnlocked(workspace string, state State) error {
 	return writeJSONFile(filepath.Join(workspace, ".feng", "state.yaml"), state)
+}
+
+func updateState(workspace string, update func(*State)) error {
+	stateFileMu.Lock()
+	defer stateFileMu.Unlock()
+	state, err := loadStateUnlocked(workspace)
+	if err != nil {
+		return err
+	}
+	update(&state)
+	return saveStateUnlocked(workspace, state)
 }
 
 func appendEvent(workspace, eventType string, data map[string]any) Event {
@@ -696,10 +721,9 @@ func appendEvent(workspace, eventType string, data map[string]any) Event {
 		encoded, _ := json.Marshal(event)
 		_, _ = f.Write(append(encoded, '\n'))
 	}
-	if state, err := loadState(workspace); err == nil {
+	_ = updateState(workspace, func(state *State) {
 		state.LastEventID = event.ID
-		_ = saveState(workspace, state)
-	}
+	})
 	return event
 }
 
