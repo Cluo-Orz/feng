@@ -198,7 +198,8 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []string, interfaceConfig map[string]any) []chatMessage {
 	state, _ := loadState(workspace)
 	requestQuery := command + " " + strings.Join(commandArgs, " ")
-	contextPack := cachedContextPack(selfRoot, requestQuery)
+	hookEvent := "on_execute"
+	contextPack := cachedContextPack(selfRoot, requestQuery, hookEvent)
 	selfContract := map[string]any{
 		"self_commit":        packagedSourceCommit(selfRoot),
 		"source_self_commit": state.SourceSelfCommit,
@@ -211,6 +212,7 @@ func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []s
 	}
 	stateManifest := map[string]any{
 		"mode":                 state.Mode,
+		"active_hook":          hookEvent,
 		"current_goal":         state.CurrentGoal,
 		"source_self_commit":   state.SourceSelfCommit,
 		"workspace_file_index": workspaceFileIndex(workspace, 300),

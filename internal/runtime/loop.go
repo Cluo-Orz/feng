@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
-	messages := compileGrowMessages(workspace, goal)
+func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout io.Writer) int {
+	messages := compileGrowMessages(workspace, goal, hookEvent)
 	latestEvent := goal
 	toolPack := activeToolPackReport(workspace, "grow", latestEvent)
 	tools := toolPack.Tools

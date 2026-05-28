@@ -276,7 +276,17 @@ on_check_failed: []
 
 如果 hook 没有匹配 skill，kernel 使用通用 seed loop：latest event + self index + 文件索引 + 初始工具 + artifact refs。LLM 可以在这个 loop 中生成第一批 candidate skills/hooks/world/evals。
 
-MVP 不做 hook 脚本执行器。
+MVP hook 只做 skill 选择，不执行脚本。`hooks.yaml` 的事件值可以引用 skill 名称或路径，例如 `reviewer`、`skills/reviewer.md` 或 `{ "skill": "reviewer" }`。被 hook 选中的 skill body 会优先进入 cached context pack；没有 hook 匹配时仍按 goal/request 关键词选择相关 skill/world。
+
+MVP 支持的事件点保持很少：
+
+```text
+on_grow
+on_check_failed
+on_execute
+```
+
+复杂 hook 脚本执行器不是 MVP。
 
 ### tools/
 

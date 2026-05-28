@@ -118,6 +118,65 @@ func TestCompileGrowMessagesIncludesRelevantCachedContextPack(t *testing.T) {
 	}
 }
 
+func TestCompileGrowMessagesUsesHookSelectedSkill(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "hook context test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "hooks.yaml"), map[string]any{
+		"on_grow": []any{"reviewer"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "reviewer.md"), []byte("# Review gate\nAlways inspect validation reports before editing.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	messages := compileGrowMessages(dir, "unrelated objective")
+	if len(messages) != 5 {
+		t.Fatalf("expected hook-selected cached context pack, got %d messages", len(messages))
+	}
+	pack := parseCachedContextPack(t, messages[2].Content)
+	skills, _ := pack["skills"].([]any)
+	if !containsAnyString(skills, "skills/reviewer.md") || !containsAnyString(skills, "validation reports") {
+		t.Fatalf("hook-selected skill body missing from context pack: %+v", pack)
+	}
+	stateManifest := parseStateManifest(t, messages[3].Content)
+	if stateManifest["active_hook"] != "on_grow" {
+		t.Fatalf("state manifest did not expose active hook: %+v", stateManifest)
+	}
+}
+
+func TestCompileExecuteMessagesUsesOnExecuteHook(t *testing.T) {
+	selfRoot := t.TempDir()
+	user := t.TempDir()
+	if _, err := bootstrap(selfRoot, "execute hook context test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(selfRoot, "hooks.yaml"), map[string]any{
+		"on_execute": []any{map[string]any{"skill": "runner"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(selfRoot, "skills", "runner.md"), []byte("# Runner skill\nUse packaged behavior rules for every execution.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	messages := compileExecuteMessages(user, selfRoot, "do", []string{"task"}, map[string]any{"commands": []any{"do"}})
+	if len(messages) != 5 {
+		t.Fatalf("expected execute cached context pack, got %d messages", len(messages))
+	}
+	pack := parseCachedContextPack(t, messages[2].Content)
+	skills, _ := pack["skills"].([]any)
+	if !containsAnyString(skills, "skills/runner.md") || !containsAnyString(skills, "packaged behavior rules") {
+		t.Fatalf("execute hook-selected skill body missing from context pack: %+v", pack)
+	}
+	stateManifest := parseStateManifest(t, messages[3].Content)
+	if stateManifest["active_hook"] != "on_execute" {
+		t.Fatalf("execute state manifest did not expose active hook: %+v", stateManifest)
+	}
+}
+
 func TestWorkspaceFileIndexPrioritizesSelfRootsOverUnrelatedNoise(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "context priority test", ""); err != nil {

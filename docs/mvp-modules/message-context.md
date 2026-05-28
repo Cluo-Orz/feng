@@ -31,6 +31,7 @@ workspace file index
 skill/world body
   只在相关时进入 cached context pack 或动态后缀。
   MVP 用本轮 goal/request 的关键词匹配 path、标题和正文，只取少量最相关文件的 excerpt；不把整个 skills/ 或 world/ 全量塞入 message。
+  如果当前 hook 在 hooks.yaml 中选中了 skill，这些 skill body 优先进入 cached context pack。
 
 artifact refs
   大内容只放 type/source/path/hash/summary/why_relevant/snippets。

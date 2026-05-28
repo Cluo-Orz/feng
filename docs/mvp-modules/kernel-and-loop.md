@@ -21,6 +21,8 @@ read state/files/git
 -> repeat
 ```
 
+MVP 的 hook 只用于选择 skill body，不执行脚本。`on_grow`、`on_check_failed`、`on_execute` 可以从 `hooks.yaml` 引用 skill 名称或路径；命中的 skill body 进入 cached context pack。没有命中时走 seed loop 和关键词相关性选择。
+
 ## 输入
 
 ```text

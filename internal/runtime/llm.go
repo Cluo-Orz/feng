@@ -225,10 +225,14 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func compileGrowMessages(workspace, goal string) []chatMessage {
+func compileGrowMessages(workspace, goal string, hookEvents ...string) []chatMessage {
 	state, _ := loadState(workspace)
 	selfCommit := currentHead(workspace)
-	contextPack := cachedContextPack(workspace, goal)
+	hookEvent := growHookEvent(state)
+	if len(hookEvents) > 0 && strings.TrimSpace(hookEvents[0]) != "" {
+		hookEvent = strings.TrimSpace(hookEvents[0])
+	}
+	contextPack := cachedContextPack(workspace, goal, hookEvent)
 	selfContract := map[string]any{
 		"self_commit":        selfCommit,
 		"source_self_commit": state.SourceSelfCommit,
@@ -240,6 +244,7 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 	}
 	stateManifest := map[string]any{
 		"mode":                 state.Mode,
+		"active_hook":          hookEvent,
 		"current_goal":         state.CurrentGoal,
 		"candidate_status":     state.CandidateStatus,
 		"validated_commit":     state.ValidatedCommit,
@@ -679,17 +684,31 @@ type scoredContextFile struct {
 	Ordinal int
 }
 
-func cachedContextPack(root, query string) map[string]any {
+func cachedContextPack(root, query string, hookEvents ...string) map[string]any {
 	terms := contextTerms(query)
-	if len(terms) == 0 {
-		return nil
-	}
 	pack := map[string]any{}
-	if skills := relevantContextFiles(root, "skills", terms, isSkillBodyFile, 3, 2500); len(skills) > 0 {
+	skills := hookSelectedSkillItems(root, hookEvents, 2500)
+	seenSkills := contextItemPathSet(skills)
+	if len(terms) > 0 {
+		for _, item := range relevantContextFiles(root, "skills", terms, isSkillBodyFile, 3, 2500) {
+			path, _ := item["path"].(string)
+			if path == "" || seenSkills[path] {
+				continue
+			}
+			seenSkills[path] = true
+			skills = append(skills, item)
+			if len(skills) >= 5 {
+				break
+			}
+		}
+	}
+	if len(skills) > 0 {
 		pack["skills"] = skills
 	}
-	if world := relevantContextFiles(root, "world", terms, func(path string) bool { return true }, 3, 1500); len(world) > 0 {
-		pack["world"] = world
+	if len(terms) > 0 {
+		if world := relevantContextFiles(root, "world", terms, func(path string) bool { return true }, 3, 1500); len(world) > 0 {
+			pack["world"] = world
+		}
 	}
 	if len(pack) == 0 {
 		return nil
@@ -719,13 +738,16 @@ func relevantContextFiles(root, dirName string, terms []string, include func(str
 		rel := relPath(root, path)
 		score, reason := contextMatchScore(rel, string(data), terms)
 		if score > 0 {
-			scored = append(scored, scoredContextFile{
-				Path:    rel,
-				Body:    string(data),
-				Score:   score,
-				Reason:  reason,
-				Ordinal: ordinal,
-			})
+			item, ok := contextFileItem(root, path, reason, excerptLimit)
+			if ok {
+				scored = append(scored, scoredContextFile{
+					Path:    rel,
+					Body:    argString(item, "content_excerpt"),
+					Score:   score,
+					Reason:  reason,
+					Ordinal: ordinal,
+				})
+			}
 		}
 		ordinal++
 		return nil
@@ -745,10 +767,39 @@ func relevantContextFiles(root, dirName string, terms []string, include func(str
 		items = append(items, map[string]any{
 			"path":            scored[i].Path,
 			"why_relevant":    scored[i].Reason,
-			"content_excerpt": truncateString(scored[i].Body, excerptLimit),
+			"content_excerpt": scored[i].Body,
 		})
 	}
 	return items
+}
+
+func contextFileItem(root, path, whyRelevant string, excerptLimit int) (map[string]any, bool) {
+	if !exists(path) {
+		return nil, false
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > 256_000 {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	return map[string]any{
+		"path":            relPath(root, path),
+		"why_relevant":    whyRelevant,
+		"content_excerpt": truncateString(string(data), excerptLimit),
+	}, true
+}
+
+func contextItemPathSet(items []map[string]any) map[string]bool {
+	seen := map[string]bool{}
+	for _, item := range items {
+		if path, _ := item["path"].(string); path != "" {
+			seen[path] = true
+		}
+	}
+	return seen
 }
 
 func isSkillBodyFile(path string) bool {

@@ -209,17 +209,18 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 	}
 	defer release()
 	state, _ := loadState(workspace)
+	hookEvent := growHookEvent(state)
 	state.Mode = "growing"
 	state.CurrentGoal = options.Goal
 	state.CandidateStatus = "dirty"
 	saveState(workspace, state)
-	event := map[string]any{"mode": "grow", "goal": options.Goal}
+	event := map[string]any{"mode": "grow", "goal": options.Goal, "active_hook": hookEvent}
 	if options.Template != "" {
 		event["template"] = options.Template
 	}
 	appendEvent(workspace, "run_started", event)
 
-	return runGrowLoop(workspace, options.Goal, options.MaxTurns, stdout)
+	return runGrowLoop(workspace, options.Goal, options.MaxTurns, hookEvent, stdout)
 }
 
 type GrowOptions struct {
