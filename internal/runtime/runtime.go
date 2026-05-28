@@ -88,7 +88,7 @@ var (
 
 func defaultInterfaceConfig() map[string]any {
 	return map[string]any{
-		"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag"},
+		"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag", "config"},
 	}
 }
 
@@ -150,6 +150,9 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 			return 1
 		}
 	}
+	if len(args) > 0 && args[0] == "config" {
+		return cmdConfig(args[1:], cwd, stdout, stderr)
+	}
 	if shouldRunPackagedExecute(args, executable) {
 		return cmdExecute(args, cwd, stdout, stderr, executable)
 	}
@@ -174,6 +177,8 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 		return cmdGUI(args[1:], cwd, stdout, stderr)
 	case "tag":
 		return cmdTag(args[1:], cwd, stdout, stderr)
+	case "config":
+		return cmdConfig(args[1:], cwd, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printHelp(stderr)
@@ -182,7 +187,7 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag} ...")
+	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag,config} ...")
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {

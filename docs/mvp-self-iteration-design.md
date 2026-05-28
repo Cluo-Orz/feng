@@ -162,6 +162,7 @@ feng watch
 feng artifacts
 feng gui
 feng tag NAME
+feng config
 ```
 
 说明：
@@ -179,6 +180,9 @@ hatch
 
 status/watch/artifacts
   可观测性入口。
+
+config
+  查看或初始化本机 provider profile。只写 provider profile 模板，不保存 API key。
 ```
 
 第一次 `grow` 的通用 bootstrap：
@@ -715,6 +719,8 @@ execute mode 默认读取 frozen self、本机 config 和本次 args，不修改
 feng status 显示 missing_config。
 feng grow 不启动 LLM。
 提示 provider profile 路径、需要的 env 名称和 provider example。
+feng config status 可查看 provider 状态。
+feng config init 可在当前 workspace 的 .feng/provider.yaml 写入 provider profile 模板。
 ```
 
 ## 17. 可观测性

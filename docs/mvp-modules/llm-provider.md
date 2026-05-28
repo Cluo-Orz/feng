@@ -64,6 +64,16 @@ suggested_provider_profile
 
 这些提示只包含 env 名、路径和无 key 示例，不包含真实 API key。
 
+CLI 提供最小配置入口：
+
+```text
+feng config status
+feng config init
+feng config init --user
+```
+
+`config init` 只写 provider profile 模板，例如 base URL、protocol、model 和 `api_key_env`。真实 API key 仍然只通过环境变量提供，不写入 self repo、`.feng/provider.yaml`、artifact 或 hatch package。
+
 ## Recovery
 
 ```text
