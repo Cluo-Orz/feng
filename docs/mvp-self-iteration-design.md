@@ -652,9 +652,10 @@ interface:
     - artifacts
     - gui
     - tag
+    - config
 ```
 
-`interface` 来自 self repo 的 `interface.yaml`。check 必须确认 `commands` 是非空列表；hatch 只把通过 check 的 interface 写入 manifest。默认 feng self 的 interface 暴露 grow/check/hatch/status/watch/artifacts/gui/tag，后续普通目标 agent 可以通过 grow 修改 interface。
+`interface` 来自 self repo 的 `interface.yaml`。check 必须确认 `commands` 是非空列表；hatch 只把通过 check 的 interface 写入 manifest。默认 feng self 的 interface 暴露 grow/check/hatch/status/watch/artifacts/gui/tag/config，后续普通目标 agent 可以通过 grow 修改 interface。
 
 Hatch 不包含：
 

@@ -172,6 +172,27 @@ func TestDefaultKernelInterfaceDoesNotEnterExecuteMode(t *testing.T) {
 	}
 }
 
+func TestLegacyDefaultKernelInterfaceDoesNotEnterExecuteMode(t *testing.T) {
+	seed := t.TempDir()
+	if _, err := bootstrap(seed, "seed legacy kernel", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{"grow", "check", "hatch", "status", "watch", "artifacts", "gui", "tag"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"--help"}, t.TempDir(), &out, &errOut, "feng.exe")
+	if code != 0 {
+		t.Fatalf("help exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag,config}") {
+		t.Fatalf("legacy default kernel interface should keep feng help: %s", out.String())
+	}
+}
+
 func TestPackagedSelfToolCanRunFromFrozenSelf(t *testing.T) {
 	seed := t.TempDir()
 	user := t.TempDir()

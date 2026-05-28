@@ -321,12 +321,29 @@ func printExecuteHelp(w io.Writer, executableName string, commands []interfaceCo
 
 func isDefaultKernelInterface(commands []interfaceCommand) bool {
 	defaults := stringListFromAny(defaultInterfaceConfig()["commands"])
-	if len(commands) != len(defaults) {
-		return false
+	defaultSet := map[string]bool{}
+	for _, item := range defaults {
+		defaultSet[item] = true
 	}
 	actual := make([]string, 0, len(commands))
 	for _, command := range commands {
+		if !defaultSet[command.Name] {
+			return false
+		}
 		actual = append(actual, command.Name)
+	}
+	// Older hatch packages may have a default kernel interface from before a
+	// new kernel command was added. Treat a core kernel subset as kernel mode
+	// so a packaged feng can still grow itself instead of becoming execute mode.
+	if len(actual) < len(defaults) {
+		seen := map[string]bool{}
+		for _, item := range actual {
+			seen[item] = true
+		}
+		return seen["grow"] && seen["check"] && seen["hatch"]
+	}
+	if len(actual) != len(defaults) {
+		return false
 	}
 	sort.Strings(actual)
 	sort.Strings(defaults)
