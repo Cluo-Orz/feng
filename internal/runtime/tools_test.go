@@ -494,6 +494,28 @@ func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsMCPToolTypeInMVP(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "mcp tool boundary test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "external.tool.yaml"), map[string]any{
+		"type":   "mcp",
+		"name":   "external_search",
+		"server": "example",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject MCP tool type in MVP")
+	}
+	if !containsProblem(report.Problems, "unsupported type") || !containsProblem(report.Problems, "MVP supports command tools only") {
+		t.Fatalf("expected explicit MVP tool boundary problem, got %+v", report.Problems)
+	}
+}
+
 func TestCheckRejectsBrokenHookSkillReferences(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "bad hook test", ""); err != nil {

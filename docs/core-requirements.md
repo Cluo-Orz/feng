@@ -477,6 +477,7 @@ R02 Function Call
 
 R03 自造工具
   grow 能修改 tools/，新增领域工具声明和实现，并通过 check 验证。
+  MVP 工具不是 MCP；MCP 未来只能作为 adapter 接入内部 Tool 协议。
 
 R04 Token Efficiency
   message list 围绕缓存命中设计：稳定前缀、动态后缀、大内容文件化、active tool pack。

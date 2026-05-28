@@ -19,6 +19,16 @@ self repo tools
 
 registry 是全集，active tool pack 是本轮暴露给 LLM 的子集。
 
+MVP 的工具不是 MCP 实现。feng 内部稳定协议是 `Tool / ToolCall / ToolResult`；bootstrap tools 和 self repo command tools 都会被归一化成这个内部协议。MCP 未来可以作为新的 tool adapter 接入 Tool Registry，但不能替代内部协议，也不能改变 loop、permission、artifact 和 active tool pack 语义。
+
+MVP 支持的 self repo tool 类型只有：
+
+```text
+type: command
+```
+
+如果出现 `type: mcp` 或其他类型，`check` 必须拒绝。这样可以避免 validated self 声明了 runtime 还不会执行的工具。
+
 `list_files` 默认跳过 `.git`、`.feng` 运行目录、依赖目录和构建/cache 目录，避免第一次感知就被噪声吃掉 token；如果明确把这些目录作为 `path` 传入，仍允许在权限范围内列出。
 
 self repo tool 可以带少量选择提示：

@@ -363,6 +363,8 @@ active tool pack
 
 每轮只暴露当前 hook/skill 或 seed loop 需要的工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。active tool pack 的 hash 是 prompt cache key 的一部分。tool growth、provider capability 变化或 permission 变化都会让 hash 改变，不能复用旧工具前缀。
 
+MCP 不属于 feng 的核心工具协议。未来 MCP server 可以作为 tool adapter，把外部工具归一化成 feng 内部 `Tool / ToolCall / ToolResult` 后进入 registry；但 MVP 不实现 MCP transport，也不允许 self repo 声明一个 runtime 无法执行的 MCP 工具。MVP 工具保持 bootstrap tools + command tools。
+
 `check` 是验证入口，只回答三个问题：
 
 ```text

@@ -28,8 +28,12 @@ func checkSelfRepoTools(workspace string) []string {
 			return nil
 		}
 		raw, _ := data.(map[string]any)
-		if raw["type"] != "command" {
-			problems = append(problems, "tool has unsupported type in "+rel)
+		toolType := strings.TrimSpace(argString(raw, "type"))
+		if toolType != "command" {
+			if toolType == "" {
+				toolType = "<empty>"
+			}
+			problems = append(problems, "tool has unsupported type in "+rel+": "+toolType+"; MVP supports command tools only")
 			return nil
 		}
 		name := strings.TrimSpace(argString(raw, "name"))

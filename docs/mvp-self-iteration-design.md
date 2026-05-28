@@ -303,6 +303,8 @@ run_command
 
 领域工具可以后续 grow 出来，但 MVP 不依赖它。
 
+MVP 的工具实现不是 MCP。MVP 只支持 bootstrap tools 和 self repo command tools；MCP 是未来可选 adapter，接入后也必须先转换为 feng 内部 `Tool / ToolCall / ToolResult`，并继续经过 active tool pack、permissions、artifact 和 events。`type: mcp` 这类 self repo 工具声明在 MVP 中必须被 `check` 拒绝。
+
 ### evals/
 
 MVP eval：
