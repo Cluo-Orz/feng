@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 )
@@ -246,7 +247,13 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(packagePath, "install.ps1")); err != nil {
 		t.Fatalf("hatch package missing PowerShell installer: %v", err)
 	}
-	if runnerEntrypointName("sample") == "sample.exe" {
+	if _, err := os.Stat(filepath.Join(packagePath, packageRunnerBinaryName())); err != nil {
+		t.Fatalf("hatch package missing fixed runner binary: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(packagePath, "sample")); err != nil {
+		t.Fatalf("hatch package missing named shell entrypoint: %v", err)
+	}
+	if goruntime.GOOS == "windows" {
 		if _, err := os.Stat(filepath.Join(packagePath, "sample.cmd")); err != nil {
 			t.Fatalf("hatch package missing cmd shim: %v", err)
 		}
@@ -278,6 +285,9 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if !strings.Contains(string(manifest), `"self_tag": "sample-v1"`) || !strings.Contains(string(manifest), `"tag"`) {
 		t.Fatalf("hatch manifest did not include tag metadata: %s", string(manifest))
 	}
+	if !strings.Contains(string(manifest), `"runner": "feng-runner`) {
+		t.Fatalf("hatch manifest did not include fixed runner: %s", string(manifest))
+	}
 	if !strings.Contains(string(manifest), `"installers"`) || !strings.Contains(string(manifest), `"install.ps1"`) {
 		t.Fatalf("hatch manifest did not include installers: %s", string(manifest))
 	}
@@ -285,7 +295,7 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(checksums), `"install"`) || !strings.Contains(string(checksums), `"install.ps1"`) {
+	if !strings.Contains(string(checksums), `"install"`) || !strings.Contains(string(checksums), `"install.ps1"`) || !strings.Contains(string(checksums), `"feng-runner`) {
 		t.Fatalf("checksums did not include installers: %s", string(checksums))
 	}
 }
@@ -422,7 +432,7 @@ func TestGoRuntimeHatchBuildsRunnerFromWorkspaceSource(t *testing.T) {
 		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
 	packagePath := strings.TrimSpace(out.String())
-	exePath := filepath.Join(packagePath, runnerEntrypointName("sample"))
+	exePath := filepath.Join(packagePath, packageEntrypointName("sample"))
 	output, err := exec.Command(exePath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("built runner failed: %v output=%s", err, string(output))
@@ -466,7 +476,7 @@ func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
 	}
 	runExternalFeng(t, fengExe, maker, env, 0, "check")
 	packagePath := strings.TrimSpace(runExternalFeng(t, fengExe, maker, env, 0, "hatch", "--name", "sample", "--portable"))
-	packageRunner := filepath.Join(packagePath, runnerEntrypointName("sample"))
+	packageRunner := filepath.Join(packagePath, packageEntrypointName("sample"))
 	if _, err := os.Stat(packageRunner); err != nil {
 		t.Fatal(err)
 	}
@@ -500,9 +510,22 @@ func TestGoRuntimePortableHatchRunnerContinuesInNewWorkspace(t *testing.T) {
 	if userState.SourceSelfCommit != manifest.SelfCommit {
 		t.Fatalf("packaged runner did not record source self commit: state=%q manifest=%q", userState.SourceSelfCommit, manifest.SelfCommit)
 	}
+	if goruntime.GOOS == "windows" {
+		if _, err := exec.LookPath("pwsh"); err == nil {
+			binDir := filepath.Join(tmp, "installed-bin")
+			install := exec.Command("pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath.Join(packagePath, "install.ps1"), "-BinDir", binDir)
+			if output, err := install.CombinedOutput(); err != nil {
+				t.Fatalf("install.ps1 failed: %v output=%s", err, string(output))
+			}
+			installedRunner := filepath.Join(binDir, packageEntrypointName("sample"))
+			if output, err := exec.Command(installedRunner, "--help").CombinedOutput(); err != nil || !strings.Contains(string(output), "usage: feng") {
+				t.Fatalf("installed launcher failed: err=%v output=%s", err, string(output))
+			}
+		}
+	}
 	runExternalFeng(t, packageRunner, user, env, 0, "check")
 	secondPackage := strings.TrimSpace(runExternalFeng(t, packageRunner, user, env, 0, "hatch", "--name", "sample2", "--portable"))
-	if _, err := os.Stat(filepath.Join(secondPackage, runnerEntrypointName("sample2"))); err != nil {
+	if _, err := os.Stat(filepath.Join(secondPackage, packageEntrypointName("sample2"))); err != nil {
 		t.Fatalf("second hatch package is not runnable: %v", err)
 	}
 }

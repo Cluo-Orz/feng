@@ -47,6 +47,7 @@ type HatchManifest struct {
 	SelfCommit               string         `json:"self_commit"`
 	SelfTag                  string         `json:"self_tag,omitempty"`
 	RunnerVersion            string         `json:"runner_version"`
+	Runner                   string         `json:"runner"`
 	RequiredProviderProfiles []string       `json:"required_provider_profiles"`
 	RequiredEnv              []string       `json:"required_env"`
 	Entrypoints              []string       `json:"entrypoints"`
@@ -144,7 +145,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err := copySelf(workspace, filepath.Join(output, "self")); err != nil {
 		return "", err
 	}
-	entrypoints, err := buildOrCopyRunner(workspace, output, cleanName)
+	runnerName, entrypoints, err := buildOrCopyRunner(workspace, output, cleanName)
 	if err != nil {
 		return "", err
 	}
@@ -165,6 +166,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		SelfCommit:               state.ValidatedCommit,
 		SelfTag:                  currentValidatedTag(workspace, state.ValidatedCommit),
 		RunnerVersion:            "0.1.0-go",
+		Runner:                   runnerName,
 		RequiredProviderProfiles: []string{"deepseek"},
 		RequiredEnv:              []string{"DEEPSEEK_API_KEY"},
 		Entrypoints:              entrypoints,
@@ -283,11 +285,20 @@ func copySelf(workspace, dst string) error {
 	return nil
 }
 
-func buildOrCopyRunner(workspace, output, cleanName string) ([]string, error) {
+func buildOrCopyRunner(workspace, output, cleanName string) (string, []string, error) {
+	runnerName := packageRunnerBinaryName()
 	if hasGoRunnerSource(workspace) {
-		return buildRunnerFromSource(workspace, output, cleanName)
+		if err := buildRunnerFromSource(workspace, output, runnerName); err != nil {
+			return "", nil, err
+		}
+	} else if err := copyRunner(output, runnerName); err != nil {
+		return "", nil, err
 	}
-	return copyRunner(output, cleanName)
+	entrypoints, err := writePackageEntrypoints(output, cleanName, runnerName)
+	if err != nil {
+		return "", nil, err
+	}
+	return runnerName, entrypoints, nil
 }
 
 func hasGoRunnerSource(workspace string) bool {
@@ -301,23 +312,53 @@ func runnerEntrypointName(cleanName string) string {
 	return cleanName
 }
 
-func writeWindowsCommandShim(output, cleanName string) ([]string, error) {
-	var entrypoints []string
+func packageRunnerBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "feng-runner.exe"
+	}
+	return "feng-runner"
+}
+
+func packageEntrypointName(cleanName string) string {
+	if runtime.GOOS == "windows" {
+		return cleanName + ".cmd"
+	}
+	return cleanName
+}
+
+func writePackageEntrypoints(output, cleanName, runnerName string) ([]string, error) {
+	entrypoints := []string{}
 	if runtime.GOOS == "windows" {
 		cmdName := cleanName + ".cmd"
-		content := fmt.Sprintf("@echo off\r\n\"%%~dp0%s.exe\" %%*\r\nexit /b %%ERRORLEVEL%%\r\n", cleanName)
+		content := fmt.Sprintf("@echo off\r\n\"%%~dp0%s\" %%*\r\nexit /b %%ERRORLEVEL%%\r\n", runnerName)
 		if err := writeText(filepath.Join(output, cmdName), content); err != nil {
 			return nil, err
 		}
 		entrypoints = append(entrypoints, cmdName)
+
 		psName := cleanName + ".ps1"
-		psContent := fmt.Sprintf("$ErrorActionPreference = \"Stop\"\r\n& \"$PSScriptRoot\\%s.exe\" @args\r\nexit $LASTEXITCODE\r\n", cleanName)
+		psContent := fmt.Sprintf("$ErrorActionPreference = \"Stop\"\r\n& \"$PSScriptRoot\\%s\" @args\r\nexit $LASTEXITCODE\r\n", runnerName)
 		if err := writeText(filepath.Join(output, psName), psContent); err != nil {
 			return nil, err
 		}
 		entrypoints = append(entrypoints, psName)
 	}
+
+	shellName := cleanName
+	if err := writeText(filepath.Join(output, shellName), shellEntrypointScript(runnerName)); err != nil {
+		return nil, err
+	}
+	_ = os.Chmod(filepath.Join(output, shellName), 0o755)
+	entrypoints = append(entrypoints, shellName)
 	return entrypoints, nil
+}
+
+func shellEntrypointScript(runnerName string) string {
+	return fmt.Sprintf(`#!/bin/sh
+set -eu
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$DIR/%s" "$@"
+`, runnerName)
 }
 
 func writeInstallers(output, cleanName string) ([]string, error) {
@@ -379,12 +420,11 @@ func powershellInstallScript(cleanName string) string {
 	return fmt.Sprintf(strings.Join(lines, "\r\n")+"\r\n", cleanName)
 }
 
-func buildRunnerFromSource(workspace, output, cleanName string) ([]string, error) {
-	entryName := runnerEntrypointName(cleanName)
-	target := filepath.Join(output, entryName)
+func buildRunnerFromSource(workspace, output, runnerName string) error {
+	target := filepath.Join(output, runnerName)
 	goExe, err := goExecutable()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	cmd := exec.Command(goExe, "build", "-o", target, "./cmd/feng")
 	cmd.Dir = workspace
@@ -392,17 +432,11 @@ func buildRunnerFromSource(workspace, output, cleanName string) ([]string, error
 	if err != nil {
 		output := strings.TrimSpace(string(combined))
 		if output == "" {
-			return nil, fmt.Errorf("go build runner failed: %w", err)
+			return fmt.Errorf("go build runner failed: %w", err)
 		}
-		return nil, fmt.Errorf("go build runner failed: %w: %s", err, output)
+		return fmt.Errorf("go build runner failed: %w: %s", err, output)
 	}
-	entrypoints := []string{entryName}
-	shims, err := writeWindowsCommandShim(output, cleanName)
-	if err != nil {
-		return nil, err
-	}
-	entrypoints = append(entrypoints, shims...)
-	return entrypoints, nil
+	return nil
 }
 
 func goExecutable() (string, error) {
@@ -431,22 +465,12 @@ func goExecutable() (string, error) {
 	return "", errors.New("go executable not found; install Go or add it to PATH before hatching a Go-source runner")
 }
 
-func copyRunner(output, cleanName string) ([]string, error) {
+func copyRunner(output, runnerName string) error {
 	exe, err := os.Executable()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	entryName := runnerEntrypointName(cleanName)
-	if err := copyFile(exe, filepath.Join(output, entryName)); err != nil {
-		return nil, err
-	}
-	entrypoints := []string{entryName}
-	shims, err := writeWindowsCommandShim(output, cleanName)
-	if err != nil {
-		return nil, err
-	}
-	entrypoints = append(entrypoints, shims...)
-	return entrypoints, nil
+	return copyFile(exe, filepath.Join(output, runnerName))
 }
 
 func writeProviderExample(output string) error {
