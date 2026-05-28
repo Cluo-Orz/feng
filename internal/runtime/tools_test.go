@@ -114,6 +114,72 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	}
 }
 
+func TestBrokenPermissionsFallbackKeepsSelfRepairable(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "permission repair test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "permissions.yaml"), []byte("{not-json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tools := bootstrapTools()
+
+	denied := executeTool(dir, tools, "write_file", map[string]any{
+		"path":    "private.txt",
+		"content": "nope",
+	})
+	if !denied.IsError || !strings.Contains(denied.Content, "file write denied") {
+		t.Fatalf("fallback permissions should not allow arbitrary writes: %+v", denied)
+	}
+
+	command := executeTool(dir, tools, "run_command", map[string]any{"command": "git status --short"})
+	if command.IsError {
+		t.Fatalf("fallback permissions should allow baseline git inspection: %+v", command)
+	}
+	dangerous := executeTool(dir, tools, "run_command", map[string]any{"command": "git reset --hard"})
+	if !dangerous.IsError || !strings.Contains(dangerous.Content, "command denied by built-in rule") {
+		t.Fatalf("fallback permissions should still enforce built-in deny rules: %+v", dangerous)
+	}
+
+	repair := executeTool(dir, tools, "write_file", map[string]any{
+		"path":    "permissions.yaml",
+		"content": "{}\n",
+	})
+	if repair.IsError {
+		t.Fatalf("broken permissions should not prevent self repair: %+v", repair)
+	}
+}
+
+func TestCheckRejectsBrokenPermissionsWithoutBlockingRepair(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "broken permission check test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "permissions.yaml"), []byte("{not-json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK || !containsProblem(report.Problems, "permissions.yaml is not valid") {
+		t.Fatalf("check should reject broken permissions.yaml: %+v", report)
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CandidateStatus != "failed" || state.LastRecovery["type"] != "check_failed" {
+		t.Fatalf("broken permissions should become repair material: %+v", state)
+	}
+
+	repair := executeTool(dir, bootstrapTools(), "write_file", map[string]any{
+		"path":    "permissions.yaml",
+		"content": "{}\n",
+	})
+	if repair.IsError {
+		t.Fatalf("failed candidate should remain repairable: %+v", repair)
+	}
+}
+
 func TestPermissionDeniedArtifactsAndEventsAreRedacted(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "permission redaction test", ""); err != nil {

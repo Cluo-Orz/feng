@@ -25,20 +25,56 @@ var builtInDeniedCommands = []string{
 	"del /s",
 }
 
+var defaultPermissionWritePatterns = []string{
+	".gitignore", "identity.md", "goal.md", "feng.yaml", "hooks.yaml", "permissions.yaml",
+	"interface.yaml", "config.schema.yaml", "skills/**", "tools/**",
+	"world/**", "evals/**", "docs/**",
+	"cmd/**", "internal/**", "pkg/**", "scripts/**",
+	"go.mod", "go.sum", "go.work", "go.work.sum",
+}
+
+var defaultPermissionAllowedCommands = []string{
+	"git status", "git diff", "git log", "rg", "go run", "go test", "go vet", "go build",
+}
+
+func defaultPermissionsConfig() map[string]any {
+	return map[string]any{
+		"files": map[string]any{
+			"read":  []string{"**"},
+			"write": cloneStrings(defaultPermissionWritePatterns),
+		},
+		"commands": map[string]any{
+			"allow": cloneStrings(defaultPermissionAllowedCommands),
+			"deny":  cloneStrings(builtInDeniedCommands),
+		},
+	}
+}
+
+func defaultPermissions() Permissions {
+	var permissions Permissions
+	permissions.Files.Read = []string{"**"}
+	permissions.Files.Write = cloneStrings(defaultPermissionWritePatterns)
+	permissions.Commands.Allow = cloneStrings(defaultPermissionAllowedCommands)
+	permissions.Commands.Deny = cloneStrings(builtInDeniedCommands)
+	return permissions
+}
+
 func loadPermissions(workspace string) Permissions {
 	return loadPermissionsFrom(workspace)
 }
 
 func loadPermissionsFrom(root string) Permissions {
-	var permissions Permissions
 	data, err := readJSONFile(filepath.Join(root, "permissions.yaml"))
 	if err != nil {
-		permissions.Files.Read = []string{"**"}
-		return permissions
+		return defaultPermissions()
 	}
-	raw, _ := data.(map[string]any)
+	raw, ok := data.(map[string]any)
+	if !ok {
+		return defaultPermissions()
+	}
 	files, _ := raw["files"].(map[string]any)
 	commands, _ := raw["commands"].(map[string]any)
+	var permissions Permissions
 	permissions.Files.Read = stringSlice(files["read"])
 	permissions.Files.Write = stringSlice(files["write"])
 	permissions.Commands.Allow = stringSlice(commands["allow"])
@@ -47,6 +83,12 @@ func loadPermissionsFrom(root string) Permissions {
 		permissions.Files.Read = []string{"**"}
 	}
 	return permissions
+}
+
+func cloneStrings(items []string) []string {
+	out := make([]string, len(items))
+	copy(out, items)
+	return out
 }
 
 func checkFileRead(workspace, rawPath string) (string, error) {

@@ -42,23 +42,8 @@ var (
 			"on_grow":         []any{},
 			"on_check_failed": []any{},
 		},
-		"permissions.yaml": map[string]any{
-			"files": map[string]any{
-				"read": []any{"**"},
-				"write": []any{
-					".gitignore", "identity.md", "goal.md", "feng.yaml", "hooks.yaml", "permissions.yaml",
-					"interface.yaml", "config.schema.yaml", "skills/**", "tools/**",
-					"world/**", "evals/**", "docs/**",
-					"cmd/**", "internal/**", "pkg/**", "scripts/**",
-					"go.mod", "go.sum", "go.work", "go.work.sum",
-				},
-			},
-			"commands": map[string]any{
-				"allow": []any{"git status", "git diff", "git log", "rg", "go run", "go test", "go vet", "go build"},
-				"deny":  []any{"git reset --hard", "git push", "rm -rf", "Remove-Item -Recurse", "del /s"},
-			},
-		},
-		"interface.yaml": defaultInterfaceConfig(),
+		"permissions.yaml": defaultPermissionsConfig(),
+		"interface.yaml":   defaultInterfaceConfig(),
 		"config.schema.yaml": map[string]any{
 			"provider_profiles": []any{"deepseek"},
 			"env":               []any{"DEEPSEEK_API_KEY"},
