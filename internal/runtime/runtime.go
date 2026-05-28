@@ -628,14 +628,19 @@ func defaultState(goal string) State {
 		Mode:            "ready",
 		CurrentGoal:     goal,
 		CandidateStatus: "none",
-		ContextBudget: map[string]int{
-			"max_input_tokens":       0,
-			"estimated_input_tokens": 0,
-			"dynamic_suffix_tokens":  0,
-		},
-		LastRecovery:  emptyRecovery(),
-		LastArtifacts: []Artifact{},
-		Lock:          map[string]string{"owner": "", "heartbeat": ""},
+		ContextBudget:   defaultContextBudget(),
+		LastRecovery:    emptyRecovery(),
+		LastArtifacts:   []Artifact{},
+		Lock:            map[string]string{"owner": "", "heartbeat": ""},
+	}
+}
+
+func defaultContextBudget() map[string]int {
+	return map[string]int{
+		"max_input_tokens":       0,
+		"estimated_input_tokens": 0,
+		"dynamic_suffix_tokens":  0,
+		"context_pack_tokens":    0,
 	}
 }
 
@@ -655,7 +660,13 @@ func loadState(workspace string) (State, error) {
 	}
 	err = json.Unmarshal(data, &state)
 	if state.ContextBudget == nil {
-		state.ContextBudget = defaultState("").ContextBudget
+		state.ContextBudget = defaultContextBudget()
+	} else {
+		for key, value := range defaultContextBudget() {
+			if _, ok := state.ContextBudget[key]; !ok {
+				state.ContextBudget[key] = value
+			}
+		}
 	}
 	if state.LastRecovery == nil {
 		state.LastRecovery = emptyRecovery()
