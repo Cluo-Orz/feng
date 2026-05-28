@@ -30,6 +30,7 @@ workspace file index
 
 skill/world body
   只在相关时进入 cached context pack 或动态后缀。
+  MVP 用本轮 goal/request 的关键词匹配 path、标题和正文，只取少量最相关文件的 excerpt；不把整个 skills/ 或 world/ 全量塞入 message。
 
 artifact refs
   大内容只放 type/source/path/hash/summary/why_relevant/snippets。
@@ -62,10 +63,13 @@ context_pack_hash
 provider_capability_hash
 ```
 
+运行时还要记录 `context_pack_hash` 和 `context_pack_tokens`，用于观察相关 skill/world body 是否进入本轮上下文，以及它们对 token 预算的影响。
+
 ## 不变量
 
 ```text
 稳定前缀不放本轮动态错误、长日志、完整 diff。
+skill/world index 可以稳定进入 self contract；body 只能按需进入 cached context pack。
 assistant message 不保存长期推理过程。
 tool response 短结果可进 message，长结果必须 artifact 化。
 ```

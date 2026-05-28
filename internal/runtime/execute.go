@@ -149,6 +149,8 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 			"estimated_input_tokens": estimateMessageTokens(messages),
 			"tool_schema_tokens":     estimateJSONTokens(toolSchemas),
 			"active_tool_pack_hash":  shaJSON(toolSchemas),
+			"context_pack_hash":      contextPackHash(messages),
+			"context_pack_tokens":    estimateMessageTokens(contextPackMessages(messages)),
 			"selected_tools":         toolPack.SelectedTools,
 			"selection_reason":       toolPack.SelectionReason,
 		})
@@ -195,6 +197,8 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 
 func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []string, interfaceConfig map[string]any) []chatMessage {
 	state, _ := loadState(workspace)
+	requestQuery := command + " " + strings.Join(commandArgs, " ")
+	contextPack := cachedContextPack(selfRoot, requestQuery)
 	selfContract := map[string]any{
 		"self_commit":        packagedSourceCommit(selfRoot),
 		"source_self_commit": state.SourceSelfCommit,
@@ -221,7 +225,7 @@ func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []s
 	selfContractJSON, _ := json.MarshalIndent(selfContract, "", "  ")
 	stateManifestJSON, _ := json.MarshalIndent(stateManifest, "", "  ")
 	requestJSON, _ := json.MarshalIndent(request, "", "  ")
-	return []chatMessage{
+	messages := []chatMessage{
 		{
 			Role: "system",
 			Content: "You are a hatched feng agent running in execute mode. Fulfill the packaged interface command for the user. " +
@@ -232,15 +236,25 @@ func compileExecuteMessages(workspace, selfRoot, command string, commandArgs []s
 			Role:    "system",
 			Content: "self contract:\n" + string(selfContractJSON),
 		},
-		{
+	}
+	if len(contextPack) > 0 {
+		contextPackJSON, _ := json.MarshalIndent(contextPack, "", "  ")
+		messages = append(messages, chatMessage{
+			Role:    "system",
+			Content: "cached context pack:\n" + string(contextPackJSON),
+		})
+	}
+	messages = append(messages,
+		chatMessage{
 			Role:    "user",
 			Content: "state manifest:\n" + string(stateManifestJSON),
 		},
-		{
+		chatMessage{
 			Role:    "user",
 			Content: "execute request:\n" + string(requestJSON),
 		},
-	}
+	)
+	return messages
 }
 
 func parseInterfaceCommands(config map[string]any) []interfaceCommand {

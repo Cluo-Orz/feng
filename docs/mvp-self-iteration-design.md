@@ -263,6 +263,8 @@ skill body
 
 `skills/` 为空时，catalog 为空。第一个 grow 依靠通用 seed loop，而不是依靠隐藏 skill。
 
+MVP 的相关性选择保持简单：用本轮 goal/request 的关键词匹配 skill/world 文件路径、标题和正文，只取少量 excerpt 进入 cached context pack。这样 skill 长出来后能被使用，但不会因为存在很多 skill 就污染稳定前缀或撑爆上下文。
+
 ### hooks.yaml
 
 MVP hook 可以为空或只声明事件名：

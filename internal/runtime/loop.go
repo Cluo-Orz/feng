@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"strings"
 )
 
 func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
@@ -38,6 +39,8 @@ func runGrowLoop(workspace, goal string, maxTurns int, stdout io.Writer) int {
 			"estimated_input_tokens": estimateMessageTokens(messages),
 			"tool_schema_tokens":     estimateJSONTokens(toolSchemas),
 			"active_tool_pack_hash":  shaJSON(toolSchemas),
+			"context_pack_hash":      contextPackHash(messages),
+			"context_pack_tokens":    estimateMessageTokens(contextPackMessages(messages)),
 			"selected_tools":         toolPack.SelectedTools,
 			"selection_reason":       toolPack.SelectionReason,
 		})
@@ -149,6 +152,7 @@ func updateContextMetrics(workspace string, messages []chatMessage, toolSchemas 
 	}
 	state.ContextBudget["estimated_input_tokens"] = estimateMessageTokens(messages) + estimateJSONTokens(toolSchemas)
 	state.ContextBudget["dynamic_suffix_tokens"] = estimateMessageTokens(messages[minInt(2, len(messages)):])
+	state.ContextBudget["context_pack_tokens"] = estimateMessageTokens(contextPackMessages(messages))
 	saveState(workspace, state)
 }
 
@@ -164,4 +168,22 @@ func shaJSON(value any) string {
 	encoded, _ := json.Marshal(value)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
+}
+
+func contextPackMessages(messages []chatMessage) []chatMessage {
+	var out []chatMessage
+	for _, message := range messages {
+		if strings.HasPrefix(message.Content, "cached context pack:\n") {
+			out = append(out, message)
+		}
+	}
+	return out
+}
+
+func contextPackHash(messages []chatMessage) string {
+	packMessages := contextPackMessages(messages)
+	if len(packMessages) == 0 {
+		return ""
+	}
+	return shaJSON(packMessages)
 }

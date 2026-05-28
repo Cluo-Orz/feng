@@ -228,6 +228,7 @@ func firstNonEmpty(values ...string) string {
 func compileGrowMessages(workspace, goal string) []chatMessage {
 	state, _ := loadState(workspace)
 	selfCommit := currentHead(workspace)
+	contextPack := cachedContextPack(workspace, goal)
 	selfContract := map[string]any{
 		"self_commit":        selfCommit,
 		"source_self_commit": state.SourceSelfCommit,
@@ -249,7 +250,7 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 	}
 	selfContractJSON, _ := json.MarshalIndent(selfContract, "", "  ")
 	stateManifestJSON, _ := json.MarshalIndent(stateManifest, "", "  ")
-	return []chatMessage{
+	messages := []chatMessage{
 		{
 			Role: "system",
 			Content: "You are feng, a minimal self-growing agent kernel. Use tool calls when you need to inspect or change the workspace. " +
@@ -259,16 +260,26 @@ func compileGrowMessages(workspace, goal string) []chatMessage {
 			Role:    "system",
 			Content: "self contract:\n" + string(selfContractJSON),
 		},
-		{
+	}
+	if len(contextPack) > 0 {
+		contextPackJSON, _ := json.MarshalIndent(contextPack, "", "  ")
+		messages = append(messages, chatMessage{
+			Role:    "system",
+			Content: "cached context pack:\n" + string(contextPackJSON),
+		})
+	}
+	messages = append(messages,
+		chatMessage{
 			Role:    "user",
 			Content: "state manifest:\n" + string(stateManifestJSON),
 		},
-		{
+		chatMessage{
 			Role: "user",
 			Content: "Grow this feng workspace toward the goal:\n" + goal + "\n" +
 				"Use tools to inspect and modify files when useful. Stop when this turn has made coherent progress.",
 		},
-	}
+	)
+	return messages
 }
 
 func callProvider(profile ProviderProfile, messages []chatMessage, tools []map[string]any) (AssistantTurn, error) {
@@ -658,6 +669,142 @@ func skillCatalog(workspace string, limit int) []map[string]string {
 		return nil
 	})
 	return items
+}
+
+type scoredContextFile struct {
+	Path    string
+	Body    string
+	Score   int
+	Reason  string
+	Ordinal int
+}
+
+func cachedContextPack(root, query string) map[string]any {
+	terms := contextTerms(query)
+	if len(terms) == 0 {
+		return nil
+	}
+	pack := map[string]any{}
+	if skills := relevantContextFiles(root, "skills", terms, isSkillBodyFile, 3, 2500); len(skills) > 0 {
+		pack["skills"] = skills
+	}
+	if world := relevantContextFiles(root, "world", terms, func(path string) bool { return true }, 3, 1500); len(world) > 0 {
+		pack["world"] = world
+	}
+	if len(pack) == 0 {
+		return nil
+	}
+	return pack
+}
+
+func relevantContextFiles(root, dirName string, terms []string, include func(string) bool, maxItems, excerptLimit int) []map[string]any {
+	dir := filepath.Join(root, dirName)
+	if !exists(dir) {
+		return nil
+	}
+	var scored []scoredContextFile
+	ordinal := 0
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !include(path) {
+			return nil
+		}
+		info, err := os.Stat(path)
+		if err != nil || info.Size() > 256_000 {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		rel := relPath(root, path)
+		score, reason := contextMatchScore(rel, string(data), terms)
+		if score > 0 {
+			scored = append(scored, scoredContextFile{
+				Path:    rel,
+				Body:    string(data),
+				Score:   score,
+				Reason:  reason,
+				Ordinal: ordinal,
+			})
+		}
+		ordinal++
+		return nil
+	})
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].Score != scored[j].Score {
+			return scored[i].Score > scored[j].Score
+		}
+		if scored[i].Path != scored[j].Path {
+			return scored[i].Path < scored[j].Path
+		}
+		return scored[i].Ordinal < scored[j].Ordinal
+	})
+	limit := minInt(maxItems, len(scored))
+	items := make([]map[string]any, 0, limit)
+	for i := 0; i < limit; i++ {
+		items = append(items, map[string]any{
+			"path":            scored[i].Path,
+			"why_relevant":    scored[i].Reason,
+			"content_excerpt": truncateString(scored[i].Body, excerptLimit),
+		})
+	}
+	return items
+}
+
+func isSkillBodyFile(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasSuffix(strings.ToLower(path), ".md") && !strings.EqualFold(base, "README.md")
+}
+
+func contextTerms(query string) []string {
+	seen := map[string]bool{}
+	var terms []string
+	for _, term := range strings.FieldsFunc(strings.ToLower(query), splitSelectionRune) {
+		term = strings.TrimSpace(term)
+		if len(term) < 4 || seen[term] || contextStopTerm(term) {
+			continue
+		}
+		seen[term] = true
+		terms = append(terms, term)
+		if len(terms) >= 16 {
+			break
+		}
+	}
+	return terms
+}
+
+func contextStopTerm(term string) bool {
+	switch term {
+	case "this", "that", "with", "from", "into", "make", "grow", "feng", "agent", "workspace", "goal", "using", "when":
+		return true
+	default:
+		return false
+	}
+}
+
+func contextMatchScore(path, body string, terms []string) (int, string) {
+	haystackPath := strings.ToLower(path + "\n" + firstMarkdownLine(body, ""))
+	haystackBody := strings.ToLower(body)
+	var matched []string
+	score := 0
+	for _, term := range terms {
+		if strings.Contains(haystackPath, term) {
+			score += 5
+			matched = append(matched, term)
+			continue
+		}
+		if strings.Contains(haystackBody, term) {
+			score += 1
+			matched = append(matched, term)
+		}
+	}
+	if score == 0 {
+		return 0, ""
+	}
+	if len(matched) > 4 {
+		matched = matched[:4]
+	}
+	return score, "matched query terms: " + strings.Join(matched, ", ")
 }
 
 func worldIndex(workspace string, limit int) []string {

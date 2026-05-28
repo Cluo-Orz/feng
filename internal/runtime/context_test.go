@@ -81,6 +81,43 @@ func TestCompileGrowMessagesIncludesDynamicWorkspaceContext(t *testing.T) {
 	}
 }
 
+func TestCompileGrowMessagesIncludesRelevantCachedContextPack(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "cached context test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "api-testing.md"), []byte("# API testing skill\nwhen: api testing\nUse endpoint fixtures and report HTTP assertions.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "desktop.md"), []byte("# Desktop cleanup skill\nwhen: windows desktop\nDo not use for API work.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "world", "api.md"), []byte("# API world\nHTTP endpoints for testing workflow and authentication terms.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	messages := compileGrowMessages(dir, "improve api testing workflow")
+	if len(messages) != 5 {
+		t.Fatalf("expected optional cached context pack, got %d messages: %+v", len(messages), messages)
+	}
+	pack := parseCachedContextPack(t, messages[2].Content)
+	skills, _ := pack["skills"].([]any)
+	if !containsAnyString(skills, "skills/api-testing.md") || !containsAnyString(skills, "endpoint fixtures") {
+		t.Fatalf("relevant skill body missing from context pack: %+v", pack)
+	}
+	if containsAnyString(skills, "Desktop cleanup") {
+		t.Fatalf("irrelevant skill body entered context pack: %+v", pack)
+	}
+	world, _ := pack["world"].([]any)
+	if !containsAnyString(world, "world/api.md") || !containsAnyString(world, "HTTP endpoints") {
+		t.Fatalf("relevant world body missing from context pack: %+v", pack)
+	}
+	stateManifest := parseStateManifest(t, messages[3].Content)
+	if stateManifest["mode"] == nil {
+		t.Fatalf("state manifest moved or failed to parse: %+v", messages)
+	}
+}
+
 func TestWorkspaceFileIndexPrioritizesSelfRootsOverUnrelatedNoise(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "context priority test", ""); err != nil {
@@ -167,6 +204,16 @@ func TestAppendEventUsesUniqueObservableIDs(t *testing.T) {
 	if len(events) != 2 || events[0].ID == events[1].ID {
 		t.Fatalf("tail events did not preserve unique ids: %+v", events)
 	}
+}
+
+func parseCachedContextPack(t *testing.T, content string) map[string]any {
+	t.Helper()
+	raw := strings.TrimPrefix(content, "cached context pack:\n")
+	var value map[string]any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		t.Fatalf("cached context pack is not JSON: %v\n%s", err, content)
+	}
+	return value
 }
 
 func parseStateManifest(t *testing.T, content string) map[string]any {
