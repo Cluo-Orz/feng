@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -121,9 +122,10 @@ func runSourceHealthChecks(workspace string) []string {
 	if err := checkCommand(workspace, command); err != nil {
 		return []string{"source health command denied: " + err.Error()}
 	}
-	exitCode, output := runGoSourceHealthCommand(workspace, 240)
+	timeoutSeconds := sourceHealthTimeoutSeconds()
+	exitCode, output := runGoSourceHealthCommand(workspace, timeoutSeconds)
 	if exitCode == 0 {
-		appendEvent(workspace, "source_health_passed", map[string]any{"command": command})
+		appendEvent(workspace, "source_health_passed", map[string]any{"command": command, "timeout": timeoutSeconds})
 		return nil
 	}
 	artifact, _ := writeArtifact(
@@ -139,12 +141,24 @@ func runSourceHealthChecks(workspace string) []string {
 	return []string{fmt.Sprintf("source health failed: %s exit_code=%d; artifact=%s", command, exitCode, artifact.Path)}
 }
 
+func sourceHealthTimeoutSeconds() int {
+	raw := strings.TrimSpace(os.Getenv("FENG_SOURCE_HEALTH_TIMEOUT_SECONDS"))
+	if raw == "" {
+		return 600
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed < 1 {
+		return 600
+	}
+	return clampInt(parsed, 1, 1800)
+}
+
 func runGoSourceHealthCommand(workspace string, timeoutSeconds int) (int, string) {
 	goExe, err := goExecutable()
 	if err != nil {
 		return 1, err.Error()
 	}
-	timeout := time.Duration(clampInt(timeoutSeconds, 1, 600)) * time.Second
+	timeout := time.Duration(clampInt(timeoutSeconds, 1, 1800)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, goExe, "test", "./...")

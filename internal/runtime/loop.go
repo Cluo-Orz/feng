@@ -53,12 +53,22 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 		appendEvent(workspace, "llm_called", map[string]any{"provider": profile.ID, "model": profile.Model, "turn": turn, "tool_calls": len(assistant.ToolCalls), "usage": assistant.Usage})
 
 		if len(assistant.ToolCalls) == 0 {
+			assistantArtifact := recordAssistantOutputArtifact(workspace, assistant.Content)
 			state, _ := loadState(workspace)
 			state.Mode = "ready"
 			state.LastRecovery = emptyRecovery()
+			if assistantArtifact != nil {
+				state.LastArtifacts = []Artifact{*assistantArtifact}
+			}
 			saveState(workspace, state)
-			appendEvent(workspace, "run_stopped", map[string]any{"turn": turn, "reason": "assistant_done"})
-			printJSON(stdout, map[string]any{"ok": true, "turns": turn + 1, "message": assistant.Content})
+			event := map[string]any{"turn": turn, "reason": "assistant_done"}
+			response := map[string]any{"ok": true, "turns": turn + 1, "message": assistant.Content}
+			if assistantArtifact != nil {
+				event["artifact"] = assistantArtifact.Path
+				response["artifact"] = assistantArtifact
+			}
+			appendEvent(workspace, "run_stopped", event)
+			printJSON(stdout, response)
 			return 0
 		}
 
@@ -79,6 +89,27 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func recordAssistantOutputArtifact(workspace, content string) *Artifact {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	artifact, err := writeArtifact(
+		workspace,
+		"assistant-output",
+		"llm",
+		content,
+		"assistant output from grow turn",
+		"grow assistant output is durable progress material for future turns, especially when it contains a plan but no tool call",
+		"md",
+		compactLines(content, 12),
+	)
+	if err != nil {
+		appendEvent(workspace, "artifact_write_failed", map[string]any{"type": "assistant-output", "reason": err.Error()})
+		return nil
+	}
+	return &artifact
 }
 
 func recordToolResult(workspace, name string, result ToolResult) {

@@ -595,6 +595,25 @@ func TestGoRuntimeSourceHealthUsesConfiguredGoExecutableOutsidePATH(t *testing.T
 	}
 }
 
+func TestGoRuntimeSourceHealthTimeoutIsConfigurable(t *testing.T) {
+	t.Setenv("FENG_SOURCE_HEALTH_TIMEOUT_SECONDS", "")
+	if got := sourceHealthTimeoutSeconds(); got != 600 {
+		t.Fatalf("default source health timeout=%d", got)
+	}
+	t.Setenv("FENG_SOURCE_HEALTH_TIMEOUT_SECONDS", "900")
+	if got := sourceHealthTimeoutSeconds(); got != 900 {
+		t.Fatalf("configured source health timeout=%d", got)
+	}
+	t.Setenv("FENG_SOURCE_HEALTH_TIMEOUT_SECONDS", "999999")
+	if got := sourceHealthTimeoutSeconds(); got != 1800 {
+		t.Fatalf("source health timeout cap=%d", got)
+	}
+	t.Setenv("FENG_SOURCE_HEALTH_TIMEOUT_SECONDS", "bad")
+	if got := sourceHealthTimeoutSeconds(); got != 600 {
+		t.Fatalf("invalid source health timeout fallback=%d", got)
+	}
+}
+
 func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

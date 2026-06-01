@@ -61,7 +61,7 @@ blocked
 大内容写入 `.feng/artifacts/`：
 
 ```yaml
-type: test-log | diff | provider-error | check-report | hatch-preview
+type: assistant-output | tool-output | eval-output | test-log | diff | provider-error | check-report | hatch-preview
 source: ""
 path: ""
 hash: ""
@@ -69,6 +69,8 @@ summary: ""
 why_relevant: ""
 snippets: []
 ```
+
+`assistant-output` 用来保存 grow 中没有 tool call 的 assistant 计划或结论。它不是长期记忆，也不是 validated self；它只是下一轮 grow 可以通过 artifact refs 读取的进展材料。
 
 events 和 artifacts 写盘前必须做 secret-like redaction。它们用于恢复和观测，不用于保存真实密钥。
 

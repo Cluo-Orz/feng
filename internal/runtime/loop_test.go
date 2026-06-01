@@ -186,6 +186,62 @@ func TestGrowRefreshesActiveToolPackAfterToolGrowth(t *testing.T) {
 	}
 }
 
+func TestGrowPersistsAssistantOutputWithoutToolCalls(t *testing.T) {
+	plan := "# Plan\n\n1. Inspect docs.\n2. Update the MVP design.\n3. Run checks.\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		writeChatResponse(w, map[string]any{
+			"role":    "assistant",
+			"content": plan,
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "make a durable plan", "--max-turns", "1"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Mode != "ready" {
+		t.Fatalf("mode=%s", state.Mode)
+	}
+	if len(state.LastArtifacts) != 1 || state.LastArtifacts[0].Type != "assistant-output" {
+		t.Fatalf("assistant output was not exposed as latest artifact: %+v", state.LastArtifacts)
+	}
+	artifact := state.LastArtifacts[0]
+	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(artifact.Path)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != plan {
+		t.Fatalf("assistant output artifact content mismatch: %q", string(data))
+	}
+	if !strings.Contains(out.String(), `"artifact"`) || !strings.Contains(out.String(), `"assistant-output"`) {
+		t.Fatalf("grow stdout did not report assistant artifact: %s", out.String())
+	}
+	if !hasRunStoppedArtifact(dir, artifact.Path) {
+		t.Fatalf("run_stopped did not point at assistant artifact: %+v", tailEvents(dir, 20))
+	}
+	messages := compileGrowMessages(dir, "continue from durable plan")
+	stateManifest := requestStateManifest(t, messages)
+	artifactRefs, _ := stateManifest["artifact_refs"].([]any)
+	if !containsAnyString(artifactRefs, artifact.Path) || !containsAnyString(artifactRefs, "assistant output from grow turn") {
+		t.Fatalf("next grow context did not include assistant artifact ref: %+v", artifactRefs)
+	}
+}
+
 func TestGrowRecordsUnknownToolResult(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +317,15 @@ func hasToolResultEvent(workspace, name string, isError bool) bool {
 			continue
 		}
 		if event.Data["tool"] == name && event.Data["is_error"] == isError {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRunStoppedArtifact(workspace, path string) bool {
+	for _, event := range tailEvents(workspace, 20) {
+		if event.Type == "run_stopped" && event.Data["artifact"] == path {
 			return true
 		}
 	}
