@@ -19,6 +19,8 @@ self repo tools
 
 registry 是全集，active tool pack 是本轮暴露给 LLM 的子集。
 
+MVP 的四个 bootstrap tools 是常驻种子能力。它们承担最小感知和行动，不做复杂选择；active tool pack 的选择主要约束 grow 后出现的 self repo tools，避免领域工具越来越多后每轮都把全部 schema 放进 prompt。
+
 MVP 的工具不是 MCP 实现。feng 内部稳定协议是 `Tool / ToolCall / ToolResult`；bootstrap tools 和 self repo command tools 都会被归一化成这个内部协议。MCP 未来可以作为新的 tool adapter 接入 Tool Registry，但不能替代内部协议，也不能改变 loop、permission、artifact 和 active tool pack 语义。
 
 MVP 支持的 self repo tool 类型只有：
@@ -76,6 +78,7 @@ MVP 的 schema validation 只做小闭环：检查 required 字段和常见 JSON
 选择依据：
 
 ```text
+bootstrap primitives
 mode
 latest event
 hook/skill

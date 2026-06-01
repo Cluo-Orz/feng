@@ -415,9 +415,9 @@ MVP active tool pack 规则：
 
 ```text
 tool registry 保存 bootstrap tools 和 self repo tools 的全集。
-bootstrap tools 可用，但不等于每轮全量暴露。
+四个 bootstrap tools 常驻：read_file / write_file / list_files / run_command。
 领域工具由当前 hook/skill 选择；没有 skill 时由通用 seed loop 选择最小必要工具。
-每轮只暴露需要的 tool schema。
+每轮只暴露需要的 self repo tool schema。
 工具说明全文留在 tools/ 文件中，必要时 read_file。
 每次 tool call 仍经过 permissions。
 active_tool_pack_hash 写入 LLM cache key 和 .feng/events.jsonl。
@@ -853,7 +853,7 @@ review 必须证明同一机制可用于普通 agent。
 不能 check 失败还 promote。
 不能自动丢弃失败 candidate。
 不能把长日志塞进 prompt。
-不能把所有工具 schema 每轮全量暴露。
+不能把所有长出来的领域工具 schema 每轮全量暴露；四个 bootstrap primitives 是 MVP 的常驻种子能力。
 不能让 GUI 拥有 CLI 没有的能力。
 ```
 
