@@ -287,6 +287,12 @@ func TestGrowRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
 				http.Error(w, "missing tool suffix", http.StatusBadRequest)
 				return
 			}
+			last := request.Messages[len(request.Messages)-1]
+			if last.Role != "user" || !strings.Contains(last.Content, "Grow this feng workspace toward the goal:") {
+				t.Errorf("latest grow event should remain after conversation suffix: %+v", request.Messages)
+				http.Error(w, "bad message order", http.StatusBadRequest)
+				return
+			}
 			writeChatResponse(w, map[string]any{
 				"role":    "assistant",
 				"content": "done",
@@ -309,6 +315,29 @@ func TestGrowRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
 	}
 	if requests.Load() != 2 {
 		t.Fatalf("expected two provider calls, got %d", requests.Load())
+	}
+}
+
+func TestAppendCompiledMessagesKeepsLatestEventLast(t *testing.T) {
+	base := []chatMessage{
+		{Role: "system", Content: "kernel"},
+		{Role: "user", Content: "state manifest:\n{}"},
+		{Role: "user", Content: "latest event"},
+	}
+	suffix := []chatMessage{
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "call_1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{}`}}}},
+		{Role: "tool", ToolCallID: "call_1", Content: `{"content":"ok","is_error":false}`},
+	}
+
+	messages := appendCompiledMessages(base, suffix)
+	if len(messages) != 5 {
+		t.Fatalf("unexpected message count: %+v", messages)
+	}
+	if messages[2].Role != "assistant" || messages[3].Role != "tool" {
+		t.Fatalf("conversation suffix was not inserted before latest event: %+v", messages)
+	}
+	if messages[4].Role != "user" || messages[4].Content != "latest event" {
+		t.Fatalf("latest event should remain last: %+v", messages)
 	}
 }
 

@@ -415,6 +415,12 @@ func TestExecuteRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
 				http.Error(w, "missing tool suffix", http.StatusBadRequest)
 				return
 			}
+			last := request.Messages[len(request.Messages)-1]
+			if last.Role != "user" || !strings.Contains(last.Content, "execute request:") {
+				t.Errorf("execute request should remain after conversation suffix: %+v", request.Messages)
+				http.Error(w, "bad message order", http.StatusBadRequest)
+				return
+			}
 			writeChatResponse(w, map[string]any{"role": "assistant", "content": "done"})
 		default:
 			t.Errorf("unexpected extra request")

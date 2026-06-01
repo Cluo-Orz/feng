@@ -99,8 +99,13 @@ func appendCompiledMessages(base []chatMessage, suffix []chatMessage) []chatMess
 		return base
 	}
 	out := make([]chatMessage, 0, len(base)+len(suffix))
-	out = append(out, base...)
+	if len(base) == 0 {
+		out = append(out, suffix...)
+		return out
+	}
+	out = append(out, base[:len(base)-1]...)
 	out = append(out, suffix...)
+	out = append(out, base[len(base)-1])
 	return out
 }
 

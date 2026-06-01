@@ -13,6 +13,8 @@ system: self contract
 optional cached context pack
 user: state manifest
 conversation suffix
+  只保留最近必要的 assistant/tool 配对，并插在最新 user event 之前，避免 tool result 出现在时间线最后却缺少新的用户目标。
+
 user: latest event
 ```
 
