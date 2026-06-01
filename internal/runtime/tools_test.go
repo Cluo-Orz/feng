@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,6 +245,67 @@ func TestPermissionDeniedArtifactsAndEventsAreRedacted(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestToolCallLifecycleIsObservableAndCompact(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "tool lifecycle test", ""); err != nil {
+		t.Fatal(err)
+	}
+	largeContent := strings.Repeat("x", 1200)
+
+	result := executeTool(dir, bootstrapTools(), "write_file", map[string]any{
+		"path":    "docs/lifecycle.md",
+		"content": largeContent,
+	})
+	if result.IsError {
+		t.Fatalf("write_file failed: %+v", result)
+	}
+
+	var calls []Event
+	for _, event := range tailEvents(dir, 20) {
+		if event.Type == "tool_called" && event.Data["tool"] == "write_file" {
+			calls = append(calls, event)
+		}
+	}
+	if len(calls) != 1 {
+		t.Fatalf("expected one dispatcher-owned tool_called event, got %+v", calls)
+	}
+	args, _ := calls[0].Data["args"].(map[string]any)
+	if args["path"] != "docs/lifecycle.md" {
+		t.Fatalf("tool_called event lost path args: %+v", calls[0])
+	}
+	content := fmt.Sprint(args["content"])
+	if len(content) > 340 || strings.Contains(content, strings.Repeat("x", 500)) {
+		t.Fatalf("tool_called event should not store full write content: %q", content)
+	}
+}
+
+func TestPermissionDeniedResultAndEventReferenceArtifact(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "permission artifact ref test", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	result := executeTool(dir, bootstrapTools(), "run_command", map[string]any{"command": "git reset --hard"})
+	if !result.IsError {
+		t.Fatalf("expected denied command, got %+v", result)
+	}
+	if result.Artifact == nil || result.Artifact.Type != "permission-denied" {
+		t.Fatalf("permission denied result did not reference artifact: %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(result.Artifact.Path))); err != nil {
+		t.Fatalf("permission artifact missing: %v", err)
+	}
+	for _, event := range tailEvents(dir, 20) {
+		if event.Type == "tool_denied" && event.Data["tool"] == "run_command" {
+			if event.Data["artifact"] != result.Artifact.Path {
+				t.Fatalf("tool_denied event did not reference artifact: event=%+v result=%+v", event, result)
+			}
+			return
+		}
+	}
+	t.Fatalf("tool_denied event missing: %+v", tailEvents(dir, 20))
 }
 
 func TestDefaultPermissionsAllowSelfRuntimeGrowth(t *testing.T) {

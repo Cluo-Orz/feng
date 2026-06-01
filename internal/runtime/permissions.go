@@ -17,6 +17,15 @@ type Permissions struct {
 	} `json:"commands"`
 }
 
+type permissionDeniedError struct {
+	Message  string
+	Artifact Artifact
+}
+
+func (e permissionDeniedError) Error() string {
+	return e.Message
+}
+
 var builtInDeniedCommands = []string{
 	"git reset --hard",
 	"git push",
@@ -160,8 +169,11 @@ func normalizedCommand(command string) string {
 }
 
 func permissionDenied(workspace, source, attempted, message, whyRelevant string) error {
-	_, _ = writeArtifact(workspace, "permission-denied", source, attempted, message, whyRelevant, "txt", nil)
-	return errors.New(redactSecretText(message))
+	artifact, err := writeArtifact(workspace, "permission-denied", source, attempted, message, whyRelevant, "txt", nil)
+	if err != nil {
+		return errors.New(redactSecretText(message))
+	}
+	return permissionDeniedError{Message: redactSecretText(message), Artifact: artifact}
 }
 
 func safeWorkspacePath(workspace, rawPath string) (string, string, error) {

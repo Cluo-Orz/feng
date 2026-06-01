@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -180,6 +181,7 @@ func effectivePermissionsRoot(workspace, permissionsRoot string) string {
 }
 
 func executeTool(workspace string, tools []Tool, name string, args map[string]any) ToolResult {
+	appendEvent(workspace, "tool_called", map[string]any{"tool": name, "args": compactToolArgsForEvent(args)})
 	for _, tool := range tools {
 		if tool.Name == name {
 			if err := validateToolArguments(tool.Parameters, args); err != nil {
@@ -190,6 +192,31 @@ func executeTool(workspace string, tools []Tool, name string, args map[string]an
 		}
 	}
 	return ToolResult{Content: "unknown tool: " + name, IsError: true}
+}
+
+func compactToolArgsForEvent(args map[string]any) map[string]any {
+	if len(args) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(args))
+	for key, value := range args {
+		switch typed := value.(type) {
+		case string:
+			if key == "content" || len(typed) > 300 {
+				out[key] = truncateString(typed, 300)
+			} else {
+				out[key] = typed
+			}
+		default:
+			encoded, err := json.Marshal(typed)
+			if err != nil || len(encoded) <= 300 {
+				out[key] = typed
+			} else {
+				out[key] = truncateString(string(encoded), 300)
+			}
+		}
+	}
+	return out
 }
 
 func validateToolArguments(schema map[string]any, args map[string]any) error {
@@ -280,7 +307,6 @@ func runReadFileWithPermissions(workspace, permissionsRoot string, args map[stri
 	if len(content) > limit {
 		content = content[:limit] + "\n[truncated]\n"
 	}
-	appendEvent(workspace, "tool_called", map[string]any{"tool": "read_file", "path": relPath(workspace, path)})
 	return maybeArtifact(workspace, "read_file:"+relPath(workspace, path), content, "read_file output")
 }
 
@@ -297,7 +323,6 @@ func runWriteFileWithPermissions(workspace, permissionsRoot string, args map[str
 	if err := writeText(path, content); err != nil {
 		return ToolResult{Content: err.Error(), IsError: true}
 	}
-	appendEvent(workspace, "tool_called", map[string]any{"tool": "write_file", "path": relPath(workspace, path)})
 	return ToolResult{Content: fmt.Sprintf("wrote %s (%d chars)", relPath(workspace, path), len(content))}
 }
 
@@ -351,7 +376,6 @@ func runListFilesWithPermissions(workspace, permissionsRoot string, args map[str
 			files = append(files, "[truncated]")
 		}
 	}
-	appendEvent(workspace, "tool_called", map[string]any{"tool": "list_files", "path": rawPath})
 	return maybeArtifact(workspace, "list_files:"+rawPath, strings.Join(files, "\n"), "list_files output")
 }
 
@@ -381,15 +405,21 @@ func runRunCommandWithPermissions(workspace, permissionsRoot string, args map[st
 	}
 	timeout := clampInt(argInt(args, "timeout", 60), 1, 600)
 	exitCode, output := runShellCommand(workspace, command, timeout)
-	appendEvent(workspace, "tool_called", map[string]any{"tool": "run_command", "command": command, "exit_code": exitCode})
 	result := maybeArtifact(workspace, "run_command:"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), "run_command output")
 	result.IsError = exitCode != 0
 	return result
 }
 
 func deniedToolResult(workspace, tool string, err error) ToolResult {
-	appendEvent(workspace, "tool_denied", map[string]any{"tool": tool, "reason": err.Error()})
-	return ToolResult{Content: redactSecretText(err.Error()), IsError: true}
+	data := map[string]any{"tool": tool, "reason": err.Error()}
+	result := ToolResult{Content: redactSecretText(err.Error()), IsError: true}
+	var denied permissionDeniedError
+	if errors.As(err, &denied) && denied.Artifact.Path != "" {
+		data["artifact"] = denied.Artifact.Path
+		result.Artifact = &denied.Artifact
+	}
+	appendEvent(workspace, "tool_denied", data)
+	return result
 }
 
 func runShellCommand(workspace, command string, timeoutSeconds int) (int, string) {
@@ -516,8 +546,7 @@ func commandToolFromRoot(workspace, selfRoot, path string) *Tool {
 		AlwaysActive:   boolFromAny(raw["always"]),
 		Handler: func(toolWorkspace string, args map[string]any) ToolResult {
 			if err := checkCommandWithPermissions(toolWorkspace, selfRoot, command); err != nil {
-				appendEvent(toolWorkspace, "tool_denied", map[string]any{"tool": name, "reason": err.Error()})
-				return ToolResult{Content: err.Error(), IsError: true}
+				return deniedToolResult(toolWorkspace, name, err)
 			}
 			encodedArgs, _ := json.Marshal(args)
 			commandDir := toolWorkspace
@@ -531,7 +560,6 @@ func commandToolFromRoot(workspace, selfRoot, path string) *Tool {
 				"FENG_SELF_DIR":      selfRoot,
 				"FENG_WORKSPACE_DIR": toolWorkspace,
 			})
-			appendEvent(toolWorkspace, "tool_called", map[string]any{"tool": name, "command": command, "exit_code": exitCode})
 			result := maybeArtifact(toolWorkspace, name+":"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), name+" output")
 			result.IsError = exitCode != 0
 			return result

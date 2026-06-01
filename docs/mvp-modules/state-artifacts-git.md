@@ -48,6 +48,7 @@ run_started
 message_compiled
 tool_called
 tool_denied
+tool_result
 artifact_written
 provider_recovered
 provider_recovery
@@ -59,6 +60,8 @@ blocked
 ```
 
 每条 event 必须有唯一 `id`，用于 `status/watch/gui` 把 running、progress 和 artifact 变化串起来。MVP 使用时间戳加进程内序号即可，不需要引入外部事件系统。
+
+`tool_called` 在 dispatcher 开始执行工具前写入，用于让 `watch/gui` 观察长命令已经启动；参数必须压缩和脱敏，不能把 `write_file` content 或长 JSON 全量写进 event。`tool_result` 在工具结束后写入。`tool_denied` 必须指向 `permission-denied` artifact，让下一轮 grow 可以通过 artifact refs 读取拒绝原因。
 
 ## Artifacts
 

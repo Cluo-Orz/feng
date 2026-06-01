@@ -105,7 +105,7 @@ dangerous action deny/ask
 artifact logging on deny
 ```
 
-permission deny 必须生成 `permission-denied` artifact 和 `tool_denied` event；tool result、event、artifact、check report 和 stdout/stderr 写入前先做 secret-like redaction，避免把 API key 变成恢复材料。
+permission deny 必须生成 `permission-denied` artifact 和 `tool_denied` event；`tool_denied` event 和返回给 LLM 的 `ToolResult` 都要带 artifact 引用。tool result、event、artifact、check report 和 stdout/stderr 写入前先做 secret-like redaction，避免把 API key 变成恢复材料。
 
 `permissions.yaml` 可以收窄或扩展普通 allow/deny 规则，但不能关闭 runtime 的内建边界。`.git/` 和 `.feng/` 是 kernel-owned 路径，工具不能直接写入；`git reset --hard`、`git push`、`rm -rf`、`Remove-Item -Recurse`、`del /s` 这类破坏性命令也必须始终被拒绝。
 
