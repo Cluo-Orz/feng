@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -376,6 +377,71 @@ func TestGrowRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
 	}
 }
 
+func TestGrowCompactsConversationSuffixDuringLongRun(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requestNumber := requests.Add(1)
+		if requestNumber == 6 {
+			if conversationHasCallID(request.Messages, "call_1") {
+				t.Errorf("oldest tool turn should have been compacted out: %+v", request.Messages)
+				http.Error(w, "old suffix retained", http.StatusBadRequest)
+				return
+			}
+			if !messagesContainContent(request.Messages, "conversation suffix compacted:") {
+				t.Errorf("compaction summary missing from request: %+v", request.Messages)
+				http.Error(w, "missing compaction summary", http.StatusBadRequest)
+				return
+			}
+			if !conversationHasCallID(request.Messages, "call_5") {
+				t.Errorf("recent tool turn should remain visible: %+v", request.Messages)
+				http.Error(w, "recent suffix missing", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role":    "assistant",
+				"content": "done",
+			})
+			return
+		}
+		writeChatResponse(w, map[string]any{
+			"role": "assistant",
+			"tool_calls": []map[string]any{
+				{
+					"id":   fmt.Sprintf("call_%d", requestNumber),
+					"type": "function",
+					"function": map[string]any{
+						"name":      "list_files",
+						"arguments": `{"path":".","max_files":1}`,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "exercise long suffix", "--max-turns", "8"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if requests.Load() != 6 {
+		t.Fatalf("expected six provider calls, got %d", requests.Load())
+	}
+	if !hasEventType(dir, "conversation_suffix_compacted") {
+		t.Fatalf("suffix compaction was not observable: %+v", tailEvents(dir, 20))
+	}
+}
+
 func TestAppendCompiledMessagesKeepsLatestEventLast(t *testing.T) {
 	base := []chatMessage{
 		{Role: "system", Content: "kernel"},
@@ -397,6 +463,62 @@ func TestAppendCompiledMessagesKeepsLatestEventLast(t *testing.T) {
 	if messages[4].Role != "user" || messages[4].Content != "latest event" {
 		t.Fatalf("latest event should remain last: %+v", messages)
 	}
+}
+
+func TestCompactConversationSuffixKeepsRecentToolTurns(t *testing.T) {
+	var suffix []chatMessage
+	for i := 1; i <= 6; i++ {
+		callID := fmt.Sprintf("call_%d", i)
+		suffix = append(suffix,
+			chatMessage{Role: "assistant", ToolCalls: []ToolCall{{ID: callID, Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{}`}}}},
+			chatMessage{Role: "tool", ToolCallID: callID, Content: encodeToolResult(ToolResult{Content: fmt.Sprintf("result %d", i)})},
+		)
+	}
+
+	compacted, changed := compactConversationSuffix(suffix)
+	if !changed {
+		t.Fatal("expected old suffix turns to be compacted")
+	}
+	if !messagesContainContent(compacted, "conversation suffix compacted:") {
+		t.Fatalf("compaction summary missing: %+v", compacted)
+	}
+	for _, oldID := range []string{"call_1", "call_2"} {
+		if conversationHasCallID(compacted, oldID) {
+			t.Fatalf("old call %s should have been removed: %+v", oldID, compacted)
+		}
+	}
+	for _, recentID := range []string{"call_3", "call_4", "call_5", "call_6"} {
+		if !conversationHasCallID(compacted, recentID) {
+			t.Fatalf("recent call %s should remain: %+v", recentID, compacted)
+		}
+	}
+	assertNoOrphanToolMessages(t, compacted)
+}
+
+func TestCompactConversationSuffixCompactsOlderLargeToolResults(t *testing.T) {
+	large := strings.Repeat("x", maxInlineConversationToolResult+100)
+	calls := make([]ToolCall, 0, maxRecentFullConversationToolResult+1)
+	suffix := []chatMessage{{Role: "assistant"}}
+	for i := 1; i <= maxRecentFullConversationToolResult+1; i++ {
+		callID := fmt.Sprintf("call_%d", i)
+		calls = append(calls, ToolCall{ID: callID, Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{}`}})
+		suffix = append(suffix, chatMessage{Role: "tool", ToolCallID: callID, Content: encodeToolResult(ToolResult{Content: large})})
+	}
+	suffix[0].ToolCalls = calls
+
+	compacted, changed := compactConversationSuffix(suffix)
+	if !changed {
+		t.Fatal("expected older large tool result to be compacted")
+	}
+	first := toolContentForCall(compacted, "call_1")
+	if !strings.Contains(first, "compacted older tool result") || strings.Contains(first, large) {
+		t.Fatalf("old large tool result was not compacted: %s", first)
+	}
+	latest := toolContentForCall(compacted, fmt.Sprintf("call_%d", maxRecentFullConversationToolResult+1))
+	if !strings.Contains(latest, large) {
+		t.Fatalf("latest tool result should remain full: %s", latest)
+	}
+	assertNoOrphanToolMessages(t, compacted)
 }
 
 func TestGrowRecordsUnknownToolResult(t *testing.T) {
@@ -456,6 +578,54 @@ func lastToolMessage(messages []chatMessage) string {
 		}
 	}
 	return ""
+}
+
+func conversationHasCallID(messages []chatMessage, callID string) bool {
+	for _, message := range messages {
+		if message.ToolCallID == callID {
+			return true
+		}
+		for _, call := range message.ToolCalls {
+			if call.ID == callID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func messagesContainContent(messages []chatMessage, needle string) bool {
+	for _, message := range messages {
+		if strings.Contains(message.Content, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func toolContentForCall(messages []chatMessage, callID string) string {
+	for _, message := range messages {
+		if message.Role == "tool" && message.ToolCallID == callID {
+			return message.Content
+		}
+	}
+	return ""
+}
+
+func assertNoOrphanToolMessages(t *testing.T, messages []chatMessage) {
+	t.Helper()
+	seenCalls := map[string]bool{}
+	for _, message := range messages {
+		if message.Role == "assistant" {
+			for _, call := range message.ToolCalls {
+				seenCalls[call.ID] = true
+			}
+			continue
+		}
+		if message.Role == "tool" && !seenCalls[message.ToolCallID] {
+			t.Fatalf("tool message has no preceding assistant tool call: %+v in %+v", message, messages)
+		}
+	}
 }
 
 func requestHasTool(tools []map[string]any, name string) bool {

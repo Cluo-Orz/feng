@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+const (
+	maxConversationSuffixToolTurns      = 4
+	maxRecentFullConversationToolResult = 4
+	maxInlineConversationToolResult     = 1000
+)
+
 func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout io.Writer) int {
 	var messages []chatMessage
 	var conversationSuffix []chatMessage
@@ -27,6 +33,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 	}
 
 	for turn := 0; turn < maxTurns; turn++ {
+		conversationSuffix = compactConversationSuffixForTurn(workspace, "grow", turn, conversationSuffix)
 		messages = appendCompiledMessages(compileGrowMessages(workspace, goal, hookEvent), conversationSuffix)
 		refreshToolPack()
 		if compacted, changed := compactMessagesForBudget(workspace, messages, toolSchemas); changed {
@@ -95,6 +102,109 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func compactConversationSuffixForTurn(workspace, mode string, turn int, suffix []chatMessage) []chatMessage {
+	compacted, changed := compactConversationSuffix(suffix)
+	if !changed {
+		return suffix
+	}
+	appendEvent(workspace, "conversation_suffix_compacted", map[string]any{
+		"mode":            mode,
+		"turn":            turn,
+		"before_messages": len(suffix),
+		"after_messages":  len(compacted),
+		"before_tokens":   estimateMessageTokens(suffix),
+		"after_tokens":    estimateMessageTokens(compacted),
+	})
+	return compacted
+}
+
+func compactConversationSuffix(suffix []chatMessage) ([]chatMessage, bool) {
+	if len(suffix) == 0 {
+		return suffix, false
+	}
+	beforeHash := shaJSON(suffix)
+	hadSummary := false
+	var orphaned []chatMessage
+	var segments [][]chatMessage
+	var current []chatMessage
+	for _, message := range suffix {
+		if isConversationCompactionSummary(message) {
+			hadSummary = true
+			continue
+		}
+		if message.Role == "assistant" {
+			if len(current) > 0 {
+				segments = append(segments, current)
+			}
+			current = []chatMessage{message}
+			continue
+		}
+		if len(current) == 0 {
+			orphaned = append(orphaned, message)
+			continue
+		}
+		current = append(current, message)
+	}
+	if len(current) > 0 {
+		segments = append(segments, current)
+	}
+
+	droppedSegments := 0
+	if len(segments) > maxConversationSuffixToolTurns {
+		droppedSegments = len(segments) - maxConversationSuffixToolTurns
+		segments = segments[droppedSegments:]
+	}
+
+	compacted := make([]chatMessage, 0, 1+len(suffix))
+	if hadSummary || droppedSegments > 0 || len(orphaned) > 0 {
+		compacted = append(compacted, chatMessage{
+			Role:    "user",
+			Content: conversationCompactionSummaryContent(),
+		})
+	}
+	for _, segment := range segments {
+		compacted = append(compacted, segment...)
+	}
+	compactOldToolMessages(compacted)
+
+	return compacted, shaJSON(compacted) != beforeHash
+}
+
+func isConversationCompactionSummary(message chatMessage) bool {
+	return message.Role == "user" && strings.HasPrefix(message.Content, "conversation suffix compacted:")
+}
+
+func conversationCompactionSummaryContent() string {
+	return "conversation suffix compacted: older assistant/tool turns were removed from the live message list. " +
+		"Use state manifest recent_events, artifact_refs, Git status, or targeted read_file calls when older evidence is needed."
+}
+
+func compactOldToolMessages(messages []chatMessage) {
+	fullResultsRemaining := maxRecentFullConversationToolResult
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role != "tool" {
+			continue
+		}
+		if fullResultsRemaining > 0 {
+			fullResultsRemaining--
+			continue
+		}
+		if len(messages[i].Content) <= maxInlineConversationToolResult {
+			continue
+		}
+		messages[i].Content = compactToolResultContent(messages[i].Content)
+	}
+}
+
+func compactToolResultContent(content string) string {
+	var result ToolResult
+	if err := json.Unmarshal([]byte(content), &result); err == nil {
+		result.Content = "[compacted older tool result; use artifact refs, recent events, Git status, or targeted reads if needed]"
+		return encodeToolResult(result)
+	}
+	return `{"content":"[compacted older tool result; use artifact refs, recent events, Git status, or targeted reads if needed]","is_error":false}`
 }
 
 func shouldKeepCheckRecovery(state State) bool {

@@ -14,6 +14,7 @@ optional cached context pack
 user: state manifest
 conversation suffix
   只保留最近必要的 assistant/tool 配对，并插在最新 user event 之前，避免 tool result 出现在时间线最后却缺少新的用户目标。
+  每一 turn 编译前都会压缩 suffix：旧 assistant/tool turn 从 live message list 移除，只留下压缩提示；较旧的大 tool result 变成占位内容。历史证据通过 recent_events、artifact_refs、Git status 或 targeted read_file 重新感知。
 
 user: latest event
 ```
@@ -49,11 +50,12 @@ last_recovery
 ```text
 0. 如果 state/env 设置 max_input_tokens，调用 provider 前先压缩动态后缀。
 1. 大 tool output 写 artifact。
-2. 旧 tool result 占位。
-3. 历史压缩成 summary。
-4. 低相关 skill/world 出局。
-5. prompt_too_long 时 reactive compact。
-6. 仍失败则 blocked。
+2. conversation suffix 持久压缩，只保留最近 tool turn。
+3. 旧 tool result 占位。
+4. 历史压缩成 summary。
+5. 低相关 skill/world 出局。
+6. prompt_too_long 时 reactive compact。
+7. 仍失败则 blocked。
 ```
 
 ## Cache Key
@@ -78,4 +80,5 @@ provider_capability_hash
 skill/world index 可以稳定进入 self contract；body 只能按需进入 cached context pack。
 assistant message 不保存长期推理过程。
 tool response 短结果可进 message，长结果必须 artifact 化。
+conversation suffix 不能无限增长；旧结果必须通过 event/artifact/file 重新读取，而不是永久留在 message list。
 ```

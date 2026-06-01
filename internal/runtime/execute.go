@@ -136,6 +136,7 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 	}
 
 	for turn := 0; turn < executeMaxTurns(); turn++ {
+		conversationSuffix = compactConversationSuffixForTurn(workspace, "execute", turn, conversationSuffix)
 		messages = appendCompiledMessages(compileExecuteMessages(workspace, selfRoot, command, commandArgs, interfaceConfig), conversationSuffix)
 		refreshToolPack()
 		if compacted, changed := compactMessagesForBudget(workspace, messages, toolSchemas); changed {
