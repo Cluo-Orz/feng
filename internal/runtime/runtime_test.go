@@ -676,6 +676,33 @@ func TestGoRuntimeSourceHealthTimeoutIsConfigurable(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeSourceHealthFiltersProviderEnvironment(t *testing.T) {
+	env := sourceHealthEnv([]string{
+		"PATH=C:/Go/bin",
+		"GOCACHE=C:/cache",
+		"FENG_SOURCE_HEALTH_TIMEOUT_SECONDS=30",
+		"FENG_LLM_BASE_URL=http://127.0.0.1:1",
+		"FENG_LLM_MODEL=test-model",
+		"FENG_PROVIDER_CONFIG=provider.yaml",
+		"FENG_PROVIDER_RETRIES=0",
+		"FENG_HOME=C:/user/.feng",
+		"DEEPSEEK_API_KEY=sk-test",
+		"ANTHROPIC_API_KEY=sk-ant",
+		"OPENAI_API_KEY=sk-openai",
+	})
+
+	for _, key := range []string{"PATH", "GOCACHE", "FENG_SOURCE_HEALTH_TIMEOUT_SECONDS"} {
+		if !envHasKey(env, key) {
+			t.Fatalf("source health env should preserve %s: %+v", key, env)
+		}
+	}
+	for _, key := range []string{"FENG_LLM_BASE_URL", "FENG_LLM_MODEL", "FENG_PROVIDER_CONFIG", "FENG_PROVIDER_RETRIES", "FENG_HOME", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"} {
+		if envHasKey(env, key) {
+			t.Fatalf("source health env should filter %s: %+v", key, env)
+		}
+	}
+}
+
 func TestGoRuntimeTagRequiresValidatedCleanHead(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()
@@ -762,6 +789,16 @@ func exitCode(err error) int {
 		return exitErr.ExitCode()
 	}
 	return -1
+}
+
+func envHasKey(env []string, key string) bool {
+	prefix := key + "="
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {

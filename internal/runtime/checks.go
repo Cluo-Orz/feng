@@ -163,6 +163,7 @@ func runGoSourceHealthCommand(workspace string, timeoutSeconds int) (int, string
 	defer cancel()
 	cmd := exec.CommandContext(ctx, goExe, "test", "./...")
 	cmd.Dir = workspace
+	cmd.Env = sourceHealthEnv(os.Environ())
 	output, err := cmd.CombinedOutput()
 	exitCode := 0
 	if err != nil {
@@ -175,6 +176,31 @@ func runGoSourceHealthCommand(workspace string, timeoutSeconds int) (int, string
 		}
 	}
 	return exitCode, string(output)
+}
+
+func sourceHealthEnv(env []string) []string {
+	filtered := make([]string, 0, len(env))
+	for _, item := range env {
+		key := item
+		if idx := strings.IndexByte(item, '='); idx >= 0 {
+			key = item[:idx]
+		}
+		if omitSourceHealthEnv(key) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func omitSourceHealthEnv(key string) bool {
+	return strings.HasPrefix(key, "FENG_LLM_") ||
+		strings.HasPrefix(key, "FENG_PROVIDER_") ||
+		key == "FENG_HOME" ||
+		key == "DEEPSEEK_API_KEY" ||
+		key == "ANTHROPIC_API_KEY" ||
+		key == "ANTHROPIC_TEST_KEY" ||
+		key == "OPENAI_API_KEY"
 }
 
 func checkMessageCompiler(workspace string) []string {
