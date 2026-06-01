@@ -456,6 +456,29 @@ func TestGoRuntimeHatchRejectsInvalidPackageName(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "dist", "bad-name")); !os.IsNotExist(err) {
 		t.Fatalf("hatch should not slug invalid names into output directories: %v", err)
 	}
+
+	for _, item := range []struct {
+		name   string
+		reason string
+	}{
+		{"install", "reserved for package files"},
+		{"install.ps1", "reserved for package files"},
+		{"self", "reserved for package files"},
+		{"provider-examples", "reserved for package files"},
+		{"feng-runner", "reserved for package files"},
+		{"CON", "reserved on Windows"},
+		{"aux.txt", "reserved on Windows"},
+	} {
+		out.Reset()
+		errOut.Reset()
+		code := Run([]string{"hatch", "--name", item.name, "--portable"}, dir, &out, &errOut)
+		if code != 2 {
+			t.Fatalf("reserved hatch name %q should fail usage, exit=%d stdout=%s stderr=%s", item.name, code, out.String(), errOut.String())
+		}
+		if !strings.Contains(errOut.String(), item.reason) {
+			t.Fatalf("reserved hatch name %q error was unclear: %s", item.name, errOut.String())
+		}
+	}
 }
 
 func TestGoRuntimeHatchRejectsWorkspaceOutputOutsideDist(t *testing.T) {

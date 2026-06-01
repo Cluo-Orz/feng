@@ -106,10 +106,53 @@ func parseHatchArgs(args []string) (string, string, bool, error) {
 	if strings.TrimSpace(name) == "" {
 		return "", "", false, errors.New("hatch requires --name")
 	}
-	if slug(name) != name {
-		return "", "", false, errors.New("hatch name must contain only letters, numbers, dot, dash, or underscore")
+	if err := validateHatchName(name); err != nil {
+		return "", "", false, err
 	}
 	return name, outDir, portable, nil
+}
+
+func validateHatchName(name string) error {
+	if slug(name) != name {
+		return errors.New("hatch name must contain only letters, numbers, dot, dash, or underscore")
+	}
+	if reservedHatchPackageName(name) {
+		return fmt.Errorf("hatch name is reserved for package files: %s", name)
+	}
+	if reservedWindowsDeviceName(name) {
+		return fmt.Errorf("hatch name is reserved on Windows: %s", name)
+	}
+	return nil
+}
+
+func reservedHatchPackageName(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	reserved := map[string]bool{
+		"self":              true,
+		"provider-examples": true,
+		"install":           true,
+		"install.ps1":       true,
+		"feng-release.yaml": true,
+		"checksums.json":    true,
+		"feng-runner":       true,
+		"feng-runner.exe":   true,
+	}
+	return reserved[name]
+}
+
+func reservedWindowsDeviceName(name string) bool {
+	base := strings.ToLower(strings.TrimSpace(name))
+	if idx := strings.Index(base, "."); idx >= 0 {
+		base = base[:idx]
+	}
+	switch base {
+	case "con", "prn", "aux", "nul":
+		return true
+	}
+	if len(base) == 4 && (strings.HasPrefix(base, "com") || strings.HasPrefix(base, "lpt")) {
+		return base[3] >= '1' && base[3] <= '9'
+	}
+	return false
 }
 
 func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
