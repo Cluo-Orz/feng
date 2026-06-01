@@ -85,7 +85,7 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 			"write": []any{"**"},
 		},
 		"commands": map[string]any{
-			"allow": []any{"git"},
+			"allow": []any{"git", "Remove-Item", "rm", "del"},
 			"deny":  []any{},
 		},
 	}); err != nil {
@@ -94,6 +94,20 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	deniedByBuiltInRule := executeTool(dir, tools, "run_command", map[string]any{"command": "git reset   --hard"})
 	if !deniedByBuiltInRule.IsError || !strings.Contains(deniedByBuiltInRule.Content, "command denied by built-in rule") {
 		t.Fatalf("expected built-in command denial, got %+v", deniedByBuiltInRule)
+	}
+	for _, command := range []string{
+		"git -C . reset --hard",
+		"Remove-Item -LiteralPath docs -Force -Recurse",
+		"rm -r docs",
+		"del /s docs",
+	} {
+		result := executeTool(dir, tools, "run_command", map[string]any{"command": command})
+		if !result.IsError || !strings.Contains(result.Content, "command denied by built-in rule") {
+			t.Fatalf("expected token-level built-in command denial for %q, got %+v", command, result)
+		}
+	}
+	if err := checkCommand(dir, "git reset -- docs/demo.md"); err != nil {
+		t.Fatalf("non-hard git reset should remain a normal permission decision, got %v", err)
 	}
 	deniedFengByBuiltInRule := executeTool(dir, tools, "write_file", map[string]any{
 		"path":    ".feng/state.yaml",

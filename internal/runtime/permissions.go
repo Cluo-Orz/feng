@@ -142,12 +142,10 @@ func checkCommand(workspace, command string) error {
 
 func checkCommandWithPermissions(workspace, permissionsRoot, command string) error {
 	permissions := loadPermissionsFrom(permissionsRoot)
-	lowered := normalizedCommand(command)
-	for _, pattern := range builtInDeniedCommands {
-		if strings.Contains(lowered, normalizedCommand(pattern)) {
-			return permissionDenied(workspace, "run_command", command, "command denied by built-in rule: "+pattern, "dangerous command matched built-in deny rule")
-		}
+	if pattern := builtInDeniedCommand(command); pattern != "" {
+		return permissionDenied(workspace, "run_command", command, "command denied by built-in rule: "+pattern, "dangerous command matched built-in deny rule")
 	}
+	lowered := normalizedCommand(command)
 	for _, pattern := range permissions.Commands.Deny {
 		if strings.Contains(lowered, normalizedCommand(pattern)) {
 			return permissionDenied(workspace, "run_command", command, "command denied by rule: "+pattern, "dangerous command matched deny rule")
@@ -162,6 +160,114 @@ func checkCommandWithPermissions(workspace, permissionsRoot, command string) err
 		}
 	}
 	return permissionDenied(workspace, "run_command", command, "command is not in allow list: "+command, "command did not match permissions.yaml allow list")
+}
+
+func builtInDeniedCommand(command string) string {
+	tokens := commandTokens(command)
+	if containsToken(tokens, "git") && containsTokenAfter(tokens, "git", "push") {
+		return "git push"
+	}
+	if containsToken(tokens, "git") && containsTokenAfter(tokens, "git", "reset") && hasHardResetFlag(tokens) {
+		return "git reset --hard"
+	}
+	if containsToken(tokens, "remove-item") && hasPowerShellRecurseFlag(tokens) {
+		return "remove-item -recurse"
+	}
+	if containsToken(tokens, "rm") && hasRecursiveRmFlag(tokens) {
+		return "rm -rf"
+	}
+	if containsToken(tokens, "del") && containsToken(tokens, "/s") {
+		return "del /s"
+	}
+
+	lowered := normalizedCommand(command)
+	for _, pattern := range builtInDeniedCommands {
+		if strings.Contains(lowered, normalizedCommand(pattern)) {
+			return pattern
+		}
+	}
+	return ""
+}
+
+func commandTokens(command string) []string {
+	replaced := strings.NewReplacer(
+		";", " ",
+		"&&", " ",
+		"||", " ",
+		"|", " ",
+		"\r", " ",
+		"\n", " ",
+		"\t", " ",
+	).Replace(strings.ToLower(command))
+	raw := strings.Fields(replaced)
+	tokens := make([]string, 0, len(raw))
+	for _, token := range raw {
+		token = strings.Trim(token, "\"'`")
+		if token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
+func containsToken(tokens []string, candidates ...string) bool {
+	for _, token := range tokens {
+		for _, candidate := range candidates {
+			if token == candidate {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsTokenAfter(tokens []string, after string, candidates ...string) bool {
+	seenAfter := false
+	for _, token := range tokens {
+		if token == after {
+			seenAfter = true
+			continue
+		}
+		if !seenAfter {
+			continue
+		}
+		for _, candidate := range candidates {
+			if token == candidate {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasHardResetFlag(tokens []string) bool {
+	for _, token := range tokens {
+		if token == "--hard" || strings.HasPrefix(token, "--hard=") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPowerShellRecurseFlag(tokens []string) bool {
+	for _, token := range tokens {
+		if token == "-recurse" || strings.HasPrefix(token, "-recurse:") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRecursiveRmFlag(tokens []string) bool {
+	for _, token := range tokens {
+		if token == "-r" || token == "-rf" || token == "-fr" {
+			return true
+		}
+		if strings.HasPrefix(token, "-") && !strings.HasPrefix(token, "--") && strings.Contains(token, "r") {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizedCommand(command string) string {
