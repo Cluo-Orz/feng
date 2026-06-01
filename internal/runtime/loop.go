@@ -55,7 +55,9 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 			assistantArtifact := recordAssistantOutputArtifact(workspace, assistant.Content)
 			state, _ := loadState(workspace)
 			state.Mode = "ready"
-			state.LastRecovery = emptyRecovery()
+			if !shouldKeepCheckRecovery(state) {
+				state.LastRecovery = emptyRecovery()
+			}
 			if assistantArtifact != nil {
 				state.LastArtifacts = []Artifact{*assistantArtifact}
 			}
@@ -93,6 +95,13 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func shouldKeepCheckRecovery(state State) bool {
+	if state.LastRecovery["type"] != "check_failed" || state.LastRecovery["artifact"] == "" {
+		return false
+	}
+	return state.CandidateStatus == "failed" || state.CandidateStatus == "dirty"
 }
 
 func appendCompiledMessages(base []chatMessage, suffix []chatMessage) []chatMessage {

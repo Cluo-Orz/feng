@@ -35,6 +35,8 @@ Go runtime 使用 `.feng/lock` 表示 workspace 修改锁。`grow`、`check`、`
 
 `last_recovery` 表示当前需要用户或下一轮 grow 关注的最近恢复状态。check 失败时它指向 check report artifact；provider 失败时它指向 provider-error artifact。成功的 grow 或 check 会清空它；`recovery_count` 保留为累计计数，避免 status/gui 在 ready 状态下继续展示旧错误。
 
+`check_failed` recovery 不会因为下一轮 grow 只生成计划而清空。只要 candidate 仍然是 failed 或 dirty，last_recovery 继续指向最近的 check report；新的 plan 可以作为 `assistant-output` 进入 last_artifacts。只有 check 通过、或出现新的 provider/config recovery，才替换这条恢复指针。
+
 `candidate_status` 由 self roots 的 Git 状态驱动。`grow` 开始、provider 缺配置、只读工具调用或 assistant 只输出计划，都不能单独把 validated self 标记为 dirty；只有 self roots 出现未验证变化时才进入 dirty。这样一次失败的 grow 不会让仍然干净的 validated self 无法 tag/hatch。
 
 ## Events

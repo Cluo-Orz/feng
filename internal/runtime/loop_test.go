@@ -242,6 +242,64 @@ func TestGrowPersistsAssistantOutputWithoutToolCalls(t *testing.T) {
 	}
 }
 
+func TestGrowPlanAfterCheckFailureKeepsRecoveryMaterial(t *testing.T) {
+	plan := "# Repair plan\n\nRead the failed check report before editing.\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeChatResponse(w, map[string]any{
+			"role":    "assistant",
+			"content": plan,
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "failed recovery test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "interface.yaml"), map[string]any{"commands": []any{""}}); err != nil {
+		t.Fatal(err)
+	}
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected invalid interface to fail check")
+	}
+	failedState, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveryArtifact := failedState.LastRecovery["artifact"]
+	if failedState.CandidateStatus != "failed" || failedState.LastRecovery["type"] != "check_failed" || recoveryArtifact == "" {
+		t.Fatalf("check failure did not record recovery material: %+v", failedState)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"grow", "plan repair after failed check", "--max-turns", "1"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CandidateStatus != "failed" {
+		t.Fatalf("plan-only grow should not change failed candidate status: %+v", state)
+	}
+	if state.LastRecovery["type"] != "check_failed" || state.LastRecovery["artifact"] != recoveryArtifact {
+		t.Fatalf("plan-only grow cleared check recovery material: before=%s after=%+v", recoveryArtifact, state.LastRecovery)
+	}
+	if len(state.LastArtifacts) != 1 || state.LastArtifacts[0].Type != "assistant-output" {
+		t.Fatalf("assistant plan should still be latest artifact: %+v", state.LastArtifacts)
+	}
+	messages := compileGrowMessages(dir, "continue repair")
+	stateManifest := requestStateManifest(t, messages)
+	recovery, _ := stateManifest["last_recovery"].(map[string]any)
+	if recovery["artifact"] != recoveryArtifact {
+		t.Fatalf("next grow context lost check recovery ref: %+v", stateManifest)
+	}
+}
+
 func TestGrowRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
