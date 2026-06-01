@@ -498,6 +498,8 @@ MVP grow loop：
 12. release lock
 ```
 
+每一 turn 都重新读取 state、self repo、Git、artifact refs 和 workspace file index，再编译新的 messages。上一轮 assistant/tool 结果只作为必要 conversation suffix 保留。这样 `write_file` 修改 skills、world、tools、docs 或源码后，下一次 LLM 调用能看到最新文件世界。
+
 如果 LLM 在 grow 中只返回计划或结论、没有 tool call，kernel 不能只把内容打到终端。该 assistant 输出必须写成 `assistant-output` artifact，并在 `run_stopped`、`last_artifacts` 和下一轮 `artifact_refs` 中可见。这样“先形成计划，再继续孵化”的长任务不会丢失进展材料。
 
 状态写入：

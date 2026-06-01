@@ -242,6 +242,76 @@ func TestGrowPersistsAssistantOutputWithoutToolCalls(t *testing.T) {
 	}
 }
 
+func TestGrowRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requestNumber := requests.Add(1)
+		switch requestNumber {
+		case 1:
+			stateManifest := requestStateManifest(t, request.Messages)
+			files, _ := stateManifest["workspace_file_index"].([]any)
+			if containsAnyString(files, "docs/after-tool.md") {
+				t.Errorf("new file should not be visible before tool call: %+v", files)
+				http.Error(w, "unexpected file", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role": "assistant",
+				"tool_calls": []map[string]any{
+					{
+						"id":   "call_1",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "write_file",
+							"arguments": `{"path":"docs/after-tool.md","content":"visible next turn\n"}`,
+						},
+					},
+				},
+			})
+		case 2:
+			stateManifest := requestStateManifest(t, request.Messages)
+			files, _ := stateManifest["workspace_file_index"].([]any)
+			if !containsAnyString(files, "docs/after-tool.md") {
+				t.Errorf("message compiler did not reread workspace after tool call: %+v", stateManifest)
+				http.Error(w, "missing refreshed file", http.StatusBadRequest)
+				return
+			}
+			if !hasToolMessage(request.Messages) {
+				t.Errorf("conversation suffix lost prior tool result: %+v", request.Messages)
+				http.Error(w, "missing tool suffix", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role":    "assistant",
+				"content": "done",
+			})
+		default:
+			t.Errorf("unexpected extra request")
+			http.Error(w, "unexpected extra request", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "refresh after tool", "--max-turns", "3"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected two provider calls, got %d", requests.Load())
+	}
+}
+
 func TestGrowRecordsUnknownToolResult(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

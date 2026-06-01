@@ -344,6 +344,98 @@ func TestPackagedExecuteLoopCanCallFrozenSelfTool(t *testing.T) {
 	}
 }
 
+func TestExecuteRecompilesMessagesAfterToolCallChangesWorkspace(t *testing.T) {
+	seed := t.TempDir()
+	user := t.TempDir()
+	if _, err := bootstrap(seed, "seed execute refresh", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "run",
+			"usage": "refresh-agent [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"observed.txt"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git status"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requestNumber := requests.Add(1)
+		switch requestNumber {
+		case 1:
+			stateManifest := requestStateManifest(t, request.Messages)
+			files, _ := stateManifest["workspace_file_index"].([]any)
+			if containsAnyString(files, "observed.txt") {
+				t.Errorf("observed.txt should not be visible before tool call: %+v", files)
+				http.Error(w, "unexpected observed file", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{
+				"role": "assistant",
+				"tool_calls": []map[string]any{
+					{
+						"id":   "call_1",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "write_file",
+							"arguments": `{"path":"observed.txt","content":"visible to execute\n"}`,
+						},
+					},
+				},
+			})
+		case 2:
+			stateManifest := requestStateManifest(t, request.Messages)
+			files, _ := stateManifest["workspace_file_index"].([]any)
+			if !containsAnyString(files, "observed.txt") {
+				t.Errorf("execute message compiler did not reread workspace: %+v", stateManifest)
+				http.Error(w, "missing observed file", http.StatusBadRequest)
+				return
+			}
+			if !hasToolMessage(request.Messages) {
+				t.Errorf("execute conversation suffix lost prior tool result: %+v", request.Messages)
+				http.Error(w, "missing tool suffix", http.StatusBadRequest)
+				return
+			}
+			writeChatResponse(w, map[string]any{"role": "assistant", "content": "done"})
+		default:
+			t.Errorf("unexpected extra request")
+			http.Error(w, "unexpected extra request", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"--flag"}, user, &out, &errOut, "refresh-agent.exe")
+	if code != 0 {
+		t.Fatalf("execute exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected two provider calls, got %d", requests.Load())
+	}
+}
+
 func requestContains(messages []chatMessage, needle string) bool {
 	for _, message := range messages {
 		if strings.Contains(message.Content, needle) {

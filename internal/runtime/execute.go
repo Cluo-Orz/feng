@@ -118,7 +118,8 @@ func bootstrapExecuteWorkspace(workspace, goal, seedSelf string) (bool, error) {
 }
 
 func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, interfaceConfig map[string]any, stdout io.Writer) int {
-	messages := compileExecuteMessages(workspace, selfRoot, command, commandArgs, interfaceConfig)
+	var messages []chatMessage
+	var conversationSuffix []chatMessage
 	latestEvent := "execute " + command + " " + strings.Join(commandArgs, " ")
 	toolPack := activeToolPackReportFromSelf(workspace, selfRoot, "execute", latestEvent, "on_execute")
 	tools := toolPack.Tools
@@ -129,16 +130,14 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 		toolSchemas = toolSchemasForProvider(tools)
 		updateContextMetrics(workspace, messages, toolSchemas)
 	}
-	refreshToolPack()
 	profile, err := loadProviderProfile(workspace)
 	if err != nil {
 		return handleLLMError(workspace, err, stdout)
 	}
 
 	for turn := 0; turn < executeMaxTurns(); turn++ {
-		if turn > 0 {
-			refreshToolPack()
-		}
+		messages = appendCompiledMessages(compileExecuteMessages(workspace, selfRoot, command, commandArgs, interfaceConfig), conversationSuffix)
+		refreshToolPack()
 		if compacted, changed := compactMessagesForBudget(workspace, messages, toolSchemas); changed {
 			messages = compacted
 			updateContextMetrics(workspace, messages, toolSchemas)
@@ -176,12 +175,16 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 			return 0
 		}
 
-		messages = append(messages, chatMessage{Role: "assistant", Content: assistant.Content, ToolCalls: assistant.ToolCalls})
+		assistantMessage := chatMessage{Role: "assistant", Content: assistant.Content, ToolCalls: assistant.ToolCalls}
+		messages = append(messages, assistantMessage)
+		conversationSuffix = append(conversationSuffix, assistantMessage)
 		for _, call := range assistant.ToolCalls {
 			args := parseToolArguments(call.Function.Arguments)
 			result := executeTool(workspace, tools, call.Function.Name, args)
 			recordToolResult(workspace, call.Function.Name, result)
-			messages = append(messages, chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)})
+			toolMessage := chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)}
+			messages = append(messages, toolMessage)
+			conversationSuffix = append(conversationSuffix, toolMessage)
 			latestEvent = "tool " + call.Function.Name + " returned: " + truncateString(result.Content, 500)
 		}
 		updateContextMetrics(workspace, messages, toolSchemas)

@@ -9,7 +9,8 @@ import (
 )
 
 func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout io.Writer) int {
-	messages := compileGrowMessages(workspace, goal, hookEvent)
+	var messages []chatMessage
+	var conversationSuffix []chatMessage
 	latestEvent := goal
 	toolPack := activeToolPackReport(workspace, "grow", latestEvent, hookEvent)
 	tools := toolPack.Tools
@@ -20,16 +21,14 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 		toolSchemas = toolSchemasForProvider(tools)
 		updateContextMetrics(workspace, messages, toolSchemas)
 	}
-	refreshToolPack()
 	profile, err := loadProviderProfile(workspace)
 	if err != nil {
 		return handleLLMError(workspace, err, stdout)
 	}
 
 	for turn := 0; turn < maxTurns; turn++ {
-		if turn > 0 {
-			refreshToolPack()
-		}
+		messages = appendCompiledMessages(compileGrowMessages(workspace, goal, hookEvent), conversationSuffix)
+		refreshToolPack()
 		if compacted, changed := compactMessagesForBudget(workspace, messages, toolSchemas); changed {
 			messages = compacted
 			updateContextMetrics(workspace, messages, toolSchemas)
@@ -72,12 +71,16 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 			return 0
 		}
 
-		messages = append(messages, chatMessage{Role: "assistant", Content: assistant.Content, ToolCalls: assistant.ToolCalls})
+		assistantMessage := chatMessage{Role: "assistant", Content: assistant.Content, ToolCalls: assistant.ToolCalls}
+		messages = append(messages, assistantMessage)
+		conversationSuffix = append(conversationSuffix, assistantMessage)
 		for _, call := range assistant.ToolCalls {
 			args := parseToolArguments(call.Function.Arguments)
 			result := executeTool(workspace, tools, call.Function.Name, args)
 			recordToolResult(workspace, call.Function.Name, result)
-			messages = append(messages, chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)})
+			toolMessage := chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)}
+			messages = append(messages, toolMessage)
+			conversationSuffix = append(conversationSuffix, toolMessage)
 			latestEvent = "tool " + call.Function.Name + " returned: " + truncateString(result.Content, 500)
 		}
 		updateContextMetrics(workspace, messages, toolSchemas)
@@ -89,6 +92,16 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func appendCompiledMessages(base []chatMessage, suffix []chatMessage) []chatMessage {
+	if len(suffix) == 0 {
+		return base
+	}
+	out := make([]chatMessage, 0, len(base)+len(suffix))
+	out = append(out, base...)
+	out = append(out, suffix...)
+	return out
 }
 
 func recordAssistantOutputArtifact(workspace, content string) *Artifact {
