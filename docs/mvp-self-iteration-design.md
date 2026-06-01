@@ -526,6 +526,8 @@ MVP grow loop：
   diff、tool output、check report、review report、hatch preview
 ```
 
+`candidate_status` 只描述 self roots 是否存在未验证 candidate，不能把一次未执行任何修改的 grow 请求当成 dirty。provider 缺配置、纯计划输出或只读工具调用不会污染已 validated 的 self；只有 self roots 相对 Git 状态发生变化时，runtime 才把 candidate 标记为 dirty。
+
 MVP grow loop 的恢复规则：
 
 ```text

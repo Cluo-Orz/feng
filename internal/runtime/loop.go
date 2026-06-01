@@ -78,6 +78,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 			args := parseToolArguments(call.Function.Arguments)
 			result := executeTool(workspace, tools, call.Function.Name, args)
 			recordToolResult(workspace, call.Function.Name, result)
+			markCandidateDirtyIfSelfChanged(workspace)
 			toolMessage := chatMessage{Role: "tool", ToolCallID: call.ID, Content: encodeToolResult(result)}
 			messages = append(messages, toolMessage)
 			conversationSuffix = append(conversationSuffix, toolMessage)

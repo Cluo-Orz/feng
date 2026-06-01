@@ -199,7 +199,9 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 	hookEvent := growHookEvent(state)
 	state.Mode = "growing"
 	state.CurrentGoal = options.Goal
-	state.CandidateStatus = "dirty"
+	if selfRootsChanged(workspace) && state.CandidateStatus != "failed" {
+		state.CandidateStatus = "dirty"
+	}
 	saveState(workspace, state)
 	event := map[string]any{"mode": "grow", "goal": options.Goal, "active_hook": hookEvent}
 	if options.Template != "" {
@@ -437,6 +439,20 @@ func runCheck(workspace string) CheckReport {
 	saveState(workspace, state)
 	appendEvent(workspace, ternary(report.OK, "check_passed", "check_failed"), map[string]any{"ok": report.OK, "problems": report.Problems, "validated_commit": report.ValidatedCommit})
 	return report
+}
+
+func selfRootsChanged(workspace string) bool {
+	status, err := selfGitStatus(workspace)
+	return err == nil && strings.TrimSpace(status) != ""
+}
+
+func markCandidateDirtyIfSelfChanged(workspace string) {
+	if !selfRootsChanged(workspace) {
+		return
+	}
+	_ = updateState(workspace, func(state *State) {
+		state.CandidateStatus = "dirty"
+	})
 }
 
 func writeDiffSummaryArtifact(workspace string) (Artifact, bool) {

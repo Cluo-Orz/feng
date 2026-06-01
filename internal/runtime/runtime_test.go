@@ -185,6 +185,44 @@ func TestGoRuntimeCheckDoesNotCommitUnrelatedUntrackedFiles(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeGrowMissingConfigDoesNotDirtyValidatedSelf(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	if code := Run([]string{"grow", "make a stable self", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("initial grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("check exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	validated := currentHead(dir)
+	if validated == "" {
+		t.Fatal("validated commit was not created")
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"grow", "attempt without provider", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
+		t.Fatalf("second grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CandidateStatus != "validated" || state.ValidatedCommit != validated {
+		t.Fatalf("missing-config grow should not dirty validated self: %+v validated=%s", state, validated)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"hatch", "--name", "stable", "--portable"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("hatch after missing config grow should still work, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+}
+
 func TestGoRuntimeNoBootstrapCommand(t *testing.T) {
 	dir := t.TempDir()
 	var out, errOut bytes.Buffer
