@@ -334,6 +334,68 @@ func TestAppendEventCompactsAndRedactsStoredData(t *testing.T) {
 	}
 }
 
+func TestTailEventsSurvivesHistoricalLargeEventLines(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "large event line test", ""); err != nil {
+		t.Fatal(err)
+	}
+	large := Event{
+		ID:   "evt_large",
+		TS:   1,
+		Type: "old_large_event",
+		Data: map[string]any{"message": strings.Repeat("x", 70*1024)},
+	}
+	latest := Event{
+		ID:   "evt_latest",
+		TS:   2,
+		Type: "latest_event",
+		Data: map[string]any{"ok": true},
+	}
+	largeLine, _ := json.Marshal(large)
+	latestLine, _ := json.Marshal(latest)
+	content := append(append(largeLine, '\n'), append(latestLine, '\n')...)
+	if err := os.WriteFile(filepath.Join(dir, ".feng", "events.jsonl"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	events := tailEvents(dir, 1)
+	if len(events) != 1 || events[0].ID != "evt_latest" {
+		t.Fatalf("tailEvents should read past a historical large line, got %+v", events)
+	}
+}
+
+func TestRecentEventRefsRecursivelyCompactNestedData(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "nested context compaction test", ""); err != nil {
+		t.Fatal(err)
+	}
+	appendEvent(dir, "nested_event", map[string]any{
+		"outer": map[string]any{
+			"message":  strings.Repeat("n", 900),
+			"snippets": []string{"do-not-include"},
+			"items":    []any{strings.Repeat("i", 900)},
+		},
+	})
+
+	refs := recentEventRefs(dir, 1)
+	if len(refs) != 1 {
+		t.Fatalf("expected one recent event ref, got %+v", refs)
+	}
+	data, _ := refs[0]["data"].(map[string]any)
+	outer, _ := data["outer"].(map[string]any)
+	if _, ok := outer["snippets"]; ok {
+		t.Fatalf("nested snippets leaked into recent event refs: %+v", refs)
+	}
+	message := fmt.Sprint(outer["message"])
+	if len(message) > 520 || !strings.Contains(message, "[truncated]") {
+		t.Fatalf("nested message was not compacted for context: %q", message)
+	}
+	items, _ := outer["items"].([]any)
+	if len(items) != 1 || len(fmt.Sprint(items[0])) > 520 {
+		t.Fatalf("nested array item was not compacted: %+v", refs)
+	}
+}
+
 func parseCachedContextPack(t *testing.T, content string) map[string]any {
 	t.Helper()
 	raw := strings.TrimPrefix(content, "cached context pack:\n")

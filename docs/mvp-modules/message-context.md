@@ -39,6 +39,9 @@ skill/world body
 artifact refs
   大内容只放 type/source/path/hash/summary/why_relevant/snippets。
 
+recent_events
+  只作为短进展索引进入 state manifest；嵌套字段也必须递归裁剪，不能因为旧 event 里有长 map、长 array 或 snippets 就把日志正文带回 prompt。
+
 last_recovery
   进入动态 state manifest。它只放失败类型和 artifact 地址，让下一轮 grow 能从失败现场继续修复，而不是把完整日志塞进 prompt。
 ```

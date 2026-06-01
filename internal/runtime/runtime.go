@@ -788,11 +788,20 @@ func tailEvents(workspace string, limit int) []Event {
 	}
 	defer f.Close()
 	var events []Event
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		var event Event
-		if json.Unmarshal(scanner.Bytes(), &event) == nil {
-			events = append(events, event)
+	reader := bufio.NewReader(f)
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		if len(strings.TrimSpace(string(line))) > 0 {
+			var event Event
+			if json.Unmarshal(line, &event) == nil {
+				events = append(events, event)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			break
 		}
 	}
 	if len(events) > limit {

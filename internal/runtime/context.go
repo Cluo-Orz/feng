@@ -170,6 +170,36 @@ func compactContextValue(value any) any {
 	switch typed := value.(type) {
 	case string:
 		return truncateString(typed, 500)
+	case map[string]any:
+		out := map[string]any{}
+		keys := sortedKeysAny(typed)
+		limit := minInt(len(keys), 40)
+		written := 0
+		for _, key := range keys {
+			if key == "snippets" {
+				continue
+			}
+			if written >= limit {
+				break
+			}
+			out[key] = compactContextValue(typed[key])
+			written++
+		}
+		if len(keys) > limit {
+			out["_truncated"] = true
+		}
+		return out
+	case map[string]string:
+		out := map[string]any{}
+		keys := sortedKeysString(typed)
+		limit := minInt(len(keys), 40)
+		for i := 0; i < limit; i++ {
+			out[keys[i]] = compactContextValue(typed[keys[i]])
+		}
+		if len(keys) > limit {
+			out["_truncated"] = true
+		}
+		return out
 	case []string:
 		if len(typed) > 20 {
 			return append(typed[:20], "[truncated]")
