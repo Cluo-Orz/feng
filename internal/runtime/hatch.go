@@ -186,8 +186,16 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		return "", err
 	}
 	content, _ := json.MarshalIndent(manifest, "", "  ")
-	artifact, _ := writeArtifact(workspace, "hatch-preview", "feng-hatch", string(content), "hatch package created: "+output, "hatch packages a validated self into a named command", "json", nil)
-	appendEvent(workspace, "hatch_created", map[string]any{"path": output, "artifact": artifact})
+	artifact, err := writeArtifact(workspace, "hatch-preview", "feng-hatch", string(content), "hatch package created: "+output, "hatch packages a validated self into a named command", "json", nil)
+	if err != nil {
+		return "", err
+	}
+	if err := updateState(workspace, func(state *State) {
+		state.LastArtifacts = []Artifact{artifact}
+	}); err != nil {
+		return "", err
+	}
+	appendEvent(workspace, "hatch_created", map[string]any{"path": output, "artifact": artifact.Path})
 	return output, nil
 }
 

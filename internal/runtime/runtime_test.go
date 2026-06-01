@@ -284,6 +284,16 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if strings.TrimSpace(out.String()) != packagePath {
 		t.Fatalf("second hatch changed package path: %q != %q", strings.TrimSpace(out.String()), packagePath)
 	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.LastArtifacts) != 1 || state.LastArtifacts[0].Type != "hatch-preview" {
+		t.Fatalf("hatch preview was not exposed as latest artifact: %+v", state.LastArtifacts)
+	}
+	if !hasEventWithArtifactPath(dir, "hatch_created", state.LastArtifacts[0].Path) {
+		t.Fatalf("hatch_created did not reference artifact path: artifact=%s events=%+v", state.LastArtifacts[0].Path, tailEvents(dir, 20))
+	}
 	if _, err := os.Stat(filepath.Join(packagePath, "self", "identity.md")); err != nil {
 		t.Fatal(err)
 	}
@@ -745,6 +755,15 @@ func artifactTypeExists(workspace, artifactType string) bool {
 func hasEventWithTemplate(workspace, template string) bool {
 	for _, event := range tailEvents(workspace, 20) {
 		if event.Type == "run_started" && event.Data["template"] == template {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEventWithArtifactPath(workspace, eventType, path string) bool {
+	for _, event := range tailEvents(workspace, 50) {
+		if event.Type == eventType && event.Data["artifact"] == path {
 			return true
 		}
 	}

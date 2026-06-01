@@ -73,6 +73,8 @@ hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不
 
 产品级 hatch 的 runner 目标是 Go binary。hatch 不引入第二套 runner。
 
+hatch 成功后必须写入 `hatch-preview` artifact，并把它设为 `last_artifacts`；`hatch_created` event 只记录 package path 和 artifact path。这样 `status/watch/gui/artifacts` 都能解释最近一次发布结果。
+
 release package 同时生成命名 entrypoint、固定 runner 和安装脚本：
 
 ```text
