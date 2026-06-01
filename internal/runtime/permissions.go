@@ -32,6 +32,9 @@ var builtInDeniedCommands = []string{
 	"rm -rf",
 	"remove-item -recurse",
 	"del /s",
+	"rmdir /s",
+	"rd /s",
+	"erase /s",
 }
 
 var defaultPermissionWritePatterns = []string{
@@ -170,7 +173,7 @@ func builtInDeniedCommand(command string) string {
 	if containsToken(tokens, "git") && containsTokenAfter(tokens, "git", "reset") && hasHardResetFlag(tokens) {
 		return "git reset --hard"
 	}
-	if containsToken(tokens, "remove-item") && hasPowerShellRecurseFlag(tokens) {
+	if containsToken(tokens, "remove-item", "ri") && hasPowerShellRecurseFlag(tokens) {
 		return "remove-item -recurse"
 	}
 	if containsToken(tokens, "rm") && hasRecursiveRmFlag(tokens) {
@@ -178,6 +181,15 @@ func builtInDeniedCommand(command string) string {
 	}
 	if containsToken(tokens, "del") && containsToken(tokens, "/s") {
 		return "del /s"
+	}
+	if containsToken(tokens, "rmdir") && containsToken(tokens, "/s") {
+		return "rmdir /s"
+	}
+	if containsToken(tokens, "rd") && containsToken(tokens, "/s") {
+		return "rd /s"
+	}
+	if containsToken(tokens, "erase") && containsToken(tokens, "/s") {
+		return "erase /s"
 	}
 
 	lowered := normalizedCommand(command)
@@ -202,12 +214,26 @@ func commandTokens(command string) []string {
 	raw := strings.Fields(replaced)
 	tokens := make([]string, 0, len(raw))
 	for _, token := range raw {
-		token = strings.Trim(token, "\"'`")
+		token = normalizeCommandToken(token)
 		if token != "" {
 			tokens = append(tokens, token)
 		}
 	}
 	return tokens
+}
+
+func normalizeCommandToken(token string) string {
+	token = strings.Trim(token, "\"'`()[]{}")
+	token = strings.ReplaceAll(token, "\\", "/")
+	if idx := strings.LastIndex(token, "/"); idx >= 0 {
+		token = token[idx+1:]
+	}
+	for _, suffix := range []string{".exe", ".cmd", ".bat"} {
+		if strings.HasSuffix(token, suffix) {
+			return strings.TrimSuffix(token, suffix)
+		}
+	}
+	return token
 }
 
 func containsToken(tokens []string, candidates ...string) bool {
@@ -260,7 +286,7 @@ func hasPowerShellRecurseFlag(tokens []string) bool {
 
 func hasRecursiveRmFlag(tokens []string) bool {
 	for _, token := range tokens {
-		if token == "-r" || token == "-rf" || token == "-fr" {
+		if token == "--recursive" || token == "-r" || token == "-rf" || token == "-fr" {
 			return true
 		}
 		if strings.HasPrefix(token, "-") && !strings.HasPrefix(token, "--") && strings.Contains(token, "r") {

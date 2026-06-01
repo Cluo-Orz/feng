@@ -85,7 +85,7 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 			"write": []any{"**"},
 		},
 		"commands": map[string]any{
-			"allow": []any{"git", "Remove-Item", "rm", "del"},
+			"allow": []any{"git", "git.exe", "Remove-Item", "ri", "rm", "del", "rmdir", "rd", "erase"},
 			"deny":  []any{},
 		},
 	}); err != nil {
@@ -97,9 +97,15 @@ func TestBootstrapToolsEnforcePermissions(t *testing.T) {
 	}
 	for _, command := range []string{
 		"git -C . reset --hard",
+		"git.exe -C . reset --hard",
 		"Remove-Item -LiteralPath docs -Force -Recurse",
+		"ri -LiteralPath docs -Recurse",
 		"rm -r docs",
+		"rm --recursive docs",
 		"del /s docs",
+		"rmdir /s docs",
+		"rd /s docs",
+		"erase /s docs",
 	} {
 		result := executeTool(dir, tools, "run_command", map[string]any{"command": command})
 		if !result.IsError || !strings.Contains(result.Content, "command denied by built-in rule") {

@@ -112,7 +112,7 @@ permission deny 必须生成 `permission-denied` artifact 和 `tool_denied` even
 
 `permissions.yaml` 可以收窄或扩展普通 allow/deny 规则，但不能关闭 runtime 的内建边界。`.git/` 和 `.feng/` 是 kernel-owned 路径，工具不能直接写入；`git reset --hard`、`git push`、`rm -rf`、`Remove-Item -Recurse`、`del /s` 这类破坏性命令也必须始终被拒绝。
 
-内建危险命令拒绝不依赖用户写在 `permissions.yaml` 里的 deny 字符串，也不能只做连续字符串匹配。runtime 必须按命令和参数 token 识别这些危险动作，避免 `git -C . reset --hard`、`Remove-Item -LiteralPath x -Recurse` 这类参数顺序变化绕过内建边界。
+内建危险命令拒绝不依赖用户写在 `permissions.yaml` 里的 deny 字符串，也不能只做连续字符串匹配。runtime 必须按命令和参数 token 识别这些危险动作，避免 `git -C . reset --hard`、`git.exe reset --hard`、`Remove-Item -LiteralPath x -Recurse`、`rmdir /s` 这类参数顺序、别名或可执行扩展名变化绕过内建边界。
 
 如果 candidate 把 `permissions.yaml` 删除或写到无法解析，runtime 使用内置 bootstrap 权限作为恢复地板：读 workspace、写 self roots、运行基础 git/go/rg 命令。这个 fallback 只用于让下一轮 grow 修复 self，不允许写 `.git/.feng`，也不能绕过内建危险命令拒绝。一个能解析的自定义 `permissions.yaml` 仍然按文件内容执行。
 
