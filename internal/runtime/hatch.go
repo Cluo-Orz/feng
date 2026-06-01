@@ -142,10 +142,11 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err := writeText(filepath.Join(output, hatchPackageMarker), "feng hatch package directory\n"); err != nil {
 		return "", err
 	}
-	if err := copySelf(workspace, filepath.Join(output, "self")); err != nil {
+	selfRoot := filepath.Join(output, "self")
+	if err := copySelf(workspace, selfRoot, state.ValidatedCommit); err != nil {
 		return "", err
 	}
-	runnerName, entrypoints, err := buildOrCopyRunner(workspace, output, cleanName)
+	runnerName, entrypoints, err := buildOrCopyRunner(selfRoot, output, cleanName)
 	if err != nil {
 		return "", err
 	}
@@ -156,7 +157,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	interfaceConfig, err := loadInterfaceConfig(workspace)
+	interfaceConfig, err := loadInterfaceConfig(selfRoot)
 	if err != nil {
 		return "", err
 	}
@@ -257,38 +258,70 @@ func replaceableHatchOutput(output string) (bool, error) {
 	return exists(filepath.Join(output, "feng-release.yaml")) || exists(filepath.Join(output, hatchPackageMarker)), nil
 }
 
-func copySelf(workspace, dst string) error {
+func copySelf(workspace, dst, commit string) error {
+	if strings.TrimSpace(commit) == "" {
+		return errors.New("copy self requires a validated commit")
+	}
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
-	for _, name := range selfNames {
-		src := filepath.Join(workspace, name)
-		target := filepath.Join(dst, name)
-		if !exists(src) {
-			continue
-		}
-		info, err := os.Stat(src)
+	files, err := committedSelfFiles(workspace, commit)
+	if err != nil {
+		return err
+	}
+	for _, rel := range files {
+		data, err := gitShowFile(workspace, commit, rel)
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			if err := os.RemoveAll(target); err != nil {
-				return err
-			}
-			if err := copyDir(src, target); err != nil {
-				return err
-			}
-		} else if err := copyFile(src, target); err != nil {
+		target := filepath.Join(dst, filepath.FromSlash(rel))
+		if err := writeBytes(target, data); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func buildOrCopyRunner(workspace, output, cleanName string) (string, []string, error) {
+func committedSelfFiles(workspace, commit string) ([]string, error) {
+	roots := selfGitPathspecs(workspace)
+	if len(roots) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"ls-tree", "-r", "--name-only", commit, "--"}, roots...)
+	output, err := runGit(workspace, args...)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, line := range strings.Split(output, "\n") {
+		rel := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if rel == "" || !pathUnderRoots(rel, roots) {
+			continue
+		}
+		files = append(files, filepath.ToSlash(rel))
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func gitShowFile(workspace, commit, rel string) ([]byte, error) {
+	rel = filepath.ToSlash(rel)
+	cmd := exec.Command("git", "show", commit+":"+rel)
+	cmd.Dir = workspace
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("git show %s:%s failed: %s", commit, rel, strings.TrimSpace(string(output)))
+	}
+	return output, nil
+}
+
+func buildOrCopyRunner(selfRoot, output, cleanName string) (string, []string, error) {
 	runnerName := packageRunnerBinaryName()
-	if hasGoRunnerSource(workspace) {
-		if err := buildRunnerFromSource(workspace, output, runnerName); err != nil {
+	if hasGoRunnerSource(selfRoot) {
+		if err := buildRunnerFromSource(selfRoot, output, runnerName); err != nil {
 			return "", nil, err
 		}
 	} else if err := copyRunner(output, runnerName); err != nil {

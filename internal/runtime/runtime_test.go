@@ -201,6 +201,20 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if code := Run([]string{"grow", "make a portable agent", "--max-turns", "1"}, dir, &out, &errOut); code != 2 {
 		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
+	gitignorePath := filepath.Join(dir, ".gitignore")
+	gitignore, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(gitignorePath, append(gitignore, []byte("docs/ignored-note.md\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs", "ignored-note.md"), []byte("ignored workspace note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
 	errOut.Reset()
 	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
@@ -264,12 +278,22 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(packagePath, "self", "outside-world", "keep.txt")); !os.IsNotExist(err) {
 		t.Fatalf("hatch copied unrelated workspace content: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(packagePath, "self", "docs", "ignored-note.md")); !os.IsNotExist(err) {
+		t.Fatalf("hatch copied ignored workspace content from outside validated commit: %v", err)
+	}
 	tracked, err := runGit(dir, "ls-files", "--", "outside-world/keep.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.TrimSpace(tracked) != "" {
 		t.Fatalf("unrelated file was committed: %s", tracked)
+	}
+	tracked, err = runGit(dir, "ls-files", "--", "docs/ignored-note.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(tracked) != "" {
+		t.Fatalf("ignored file was committed: %s", tracked)
 	}
 	anthropicExample, err := os.ReadFile(filepath.Join(packagePath, "provider-examples", "deepseek-anthropic.yaml"))
 	if err != nil {
