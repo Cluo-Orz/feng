@@ -118,6 +118,12 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 	if state.Mode != "ready" || state.CurrentGoal == "" {
 		t.Fatalf("execute state not recorded: %+v", state)
 	}
+	if len(state.LastArtifacts) != 1 || state.LastArtifacts[0].Type != "execute-output" {
+		t.Fatalf("execute output was not exposed as latest artifact: %+v", state.LastArtifacts)
+	}
+	if !hasRunStoppedArtifact(dir, state.LastArtifacts[0].Path) {
+		t.Fatalf("execute run_stopped did not point at output artifact: %+v", tailEvents(dir, 20))
+	}
 	if _, err := os.Stat(filepath.Join(dir, ".feng", "state.yaml")); err != nil {
 		t.Fatalf("execute did not create runtime state: %v", err)
 	}
@@ -125,6 +131,63 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, rel)); !os.IsNotExist(err) {
 			t.Fatalf("execute exposed self repo in user workspace at %s: %v", rel, err)
 		}
+	}
+}
+
+func TestPackagedExecutePersistsAssistantOutputArtifact(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeChatResponse(w, map[string]any{
+			"role":    "assistant",
+			"content": "direct packaged result\n",
+		})
+	}))
+	defer server.Close()
+
+	seed := t.TempDir()
+	if _, err := bootstrap(seed, "seed direct execute output", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "run",
+			"usage": "direct-agent [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	user := t.TempDir()
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"--quick"}, user, &out, &errOut, "direct-agent.exe")
+	if code != 0 {
+		t.Fatalf("execute exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != "direct packaged result" {
+		t.Fatalf("execute stdout mismatch: %s", out.String())
+	}
+	state, err := loadState(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.LastArtifacts) != 1 || state.LastArtifacts[0].Type != "execute-output" {
+		t.Fatalf("execute output artifact missing from state: %+v", state.LastArtifacts)
+	}
+	artifact := state.LastArtifacts[0]
+	data, err := os.ReadFile(filepath.Join(user, filepath.FromSlash(artifact.Path)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "direct packaged result\n" {
+		t.Fatalf("execute artifact content mismatch: %q", string(data))
+	}
+	messages := compileExecuteMessages(user, seed, "run", []string{"--quick"}, map[string]any{"commands": []any{"run"}})
+	stateManifest := requestStateManifest(t, messages)
+	artifactRefs, _ := stateManifest["artifact_refs"].([]any)
+	if !containsAnyString(artifactRefs, artifact.Path) || !containsAnyString(artifactRefs, "assistant output from execute command") {
+		t.Fatalf("next execute context did not include output artifact ref: %+v", artifactRefs)
 	}
 }
 

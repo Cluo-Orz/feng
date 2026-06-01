@@ -230,21 +230,41 @@ func appendCompiledMessages(base []chatMessage, suffix []chatMessage) []chatMess
 }
 
 func recordAssistantOutputArtifact(workspace, content string) *Artifact {
+	return recordLLMOutputArtifact(
+		workspace,
+		"assistant-output",
+		content,
+		"assistant output from grow turn",
+		"grow assistant output is durable progress material for future turns, especially when it contains a plan but no tool call",
+	)
+}
+
+func recordExecuteOutputArtifact(workspace, content string) *Artifact {
+	return recordLLMOutputArtifact(
+		workspace,
+		"execute-output",
+		content,
+		"assistant output from execute command",
+		"execute assistant output is the user-visible result of a hatched agent command",
+	)
+}
+
+func recordLLMOutputArtifact(workspace, artifactType, content, summary, whyRelevant string) *Artifact {
 	if strings.TrimSpace(content) == "" {
 		return nil
 	}
 	artifact, err := writeArtifact(
 		workspace,
-		"assistant-output",
+		artifactType,
 		"llm",
 		content,
-		"assistant output from grow turn",
-		"grow assistant output is durable progress material for future turns, especially when it contains a plan but no tool call",
+		summary,
+		whyRelevant,
 		"md",
 		compactLines(content, 12),
 	)
 	if err != nil {
-		appendEvent(workspace, "artifact_write_failed", map[string]any{"type": "assistant-output", "reason": err.Error()})
+		appendEvent(workspace, "artifact_write_failed", map[string]any{"type": artifactType, "reason": err.Error()})
 		return nil
 	}
 	return &artifact

@@ -163,11 +163,19 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 		appendEvent(workspace, "llm_called", map[string]any{"provider": profile.ID, "model": profile.Model, "mode": "execute", "turn": turn, "tool_calls": len(assistant.ToolCalls), "usage": assistant.Usage})
 
 		if len(assistant.ToolCalls) == 0 {
+			executeArtifact := recordExecuteOutputArtifact(workspace, assistant.Content)
 			state, _ := loadState(workspace)
 			state.Mode = "ready"
 			state.LastRecovery = emptyRecovery()
+			if executeArtifact != nil {
+				state.LastArtifacts = []Artifact{*executeArtifact}
+			}
 			saveState(workspace, state)
-			appendEvent(workspace, "run_stopped", map[string]any{"mode": "execute", "turn": turn, "reason": "assistant_done"})
+			event := map[string]any{"mode": "execute", "turn": turn, "reason": "assistant_done"}
+			if executeArtifact != nil {
+				event["artifact"] = executeArtifact.Path
+			}
+			appendEvent(workspace, "run_stopped", event)
 			if strings.TrimSpace(assistant.Content) == "" {
 				printJSON(stdout, map[string]any{"ok": true, "turns": turn + 1})
 			} else {
