@@ -443,6 +443,21 @@ func TestGoRuntimeHatchRejectsExistingNonPackageOutput(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeHatchRejectsInvalidPackageName(t *testing.T) {
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	code := Run([]string{"hatch", "--name", "bad name", "--portable"}, dir, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("invalid hatch name should fail usage, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "hatch name must contain only letters, numbers, dot, dash, or underscore") {
+		t.Fatalf("invalid hatch name error was unclear: %s", errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dist", "bad-name")); !os.IsNotExist(err) {
+		t.Fatalf("hatch should not slug invalid names into output directories: %v", err)
+	}
+}
+
 func TestGoRuntimeHatchRejectsWorkspaceOutputOutsideDist(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

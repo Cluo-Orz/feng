@@ -106,6 +106,9 @@ func parseHatchArgs(args []string) (string, string, bool, error) {
 	if strings.TrimSpace(name) == "" {
 		return "", "", false, errors.New("hatch requires --name")
 	}
+	if slug(name) != name {
+		return "", "", false, errors.New("hatch name must contain only letters, numbers, dot, dash, or underscore")
+	}
 	return name, outDir, portable, nil
 }
 

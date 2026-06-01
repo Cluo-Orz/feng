@@ -71,6 +71,8 @@ hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 w
 
 hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts/gui/tag/config。
 
+`hatch --name NAME` 的 NAME 就是用户安装后运行的命令名。runtime 必须显式拒绝非法名字，不能静默 slug 成另一个名字；允许字符只包含字母、数字、dot、dash 和 underscore。
+
 产品级 hatch 的 runner 目标是 Go binary。hatch 不引入第二套 runner。
 
 hatch 成功后必须写入 `hatch-preview` artifact，并把它设为 `last_artifacts`；`hatch_created` event 只记录 package path 和 artifact path。这样 `status/watch/gui/artifacts` 都能解释最近一次发布结果。
