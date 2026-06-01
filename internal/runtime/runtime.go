@@ -22,6 +22,10 @@ import (
 )
 
 const stateVersion = 1
+const (
+	maxEventStringLength = 2000
+	maxEventArrayItems   = 50
+)
 
 var (
 	eventSequence atomic.Uint64
@@ -744,17 +748,25 @@ func redactEventData(data map[string]any) map[string]any {
 func redactValue(value any) any {
 	switch typed := value.(type) {
 	case string:
-		return redactSecretText(typed)
+		return truncateString(redactSecretText(typed), maxEventStringLength)
 	case []string:
-		out := make([]string, len(typed))
-		for i, item := range typed {
-			out[i] = redactSecretText(item)
+		limit := minInt(len(typed), maxEventArrayItems)
+		out := make([]string, 0, limit+1)
+		for i := 0; i < limit; i++ {
+			out = append(out, truncateString(redactSecretText(typed[i]), maxEventStringLength))
+		}
+		if len(typed) > limit {
+			out = append(out, "[truncated]")
 		}
 		return out
 	case []any:
-		out := make([]any, len(typed))
-		for i, item := range typed {
-			out[i] = redactValue(item)
+		limit := minInt(len(typed), maxEventArrayItems)
+		out := make([]any, 0, limit+1)
+		for i := 0; i < limit; i++ {
+			out = append(out, redactValue(typed[i]))
+		}
+		if len(typed) > limit {
+			out = append(out, "[truncated]")
 		}
 		return out
 	case map[string]any:

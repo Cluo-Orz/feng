@@ -293,6 +293,47 @@ func TestAppendEventUsesUniqueObservableIDs(t *testing.T) {
 	}
 }
 
+func TestAppendEventCompactsAndRedactsStoredData(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "event compaction test", ""); err != nil {
+		t.Fatal(err)
+	}
+	secretLike := "sk-" + "eventsecret1234567890"
+	longValue := secretLike + " " + strings.Repeat("x", maxEventStringLength+100)
+	manyItems := make([]any, 0, maxEventArrayItems+10)
+	for i := 0; i < maxEventArrayItems+10; i++ {
+		manyItems = append(manyItems, "item")
+	}
+
+	appendEvent(dir, "large_event", map[string]any{
+		"message": longValue,
+		"items":   manyItems,
+		"nested": map[string]any{
+			"secret": longValue,
+		},
+	})
+
+	events := tailEvents(dir, 1)
+	if len(events) != 1 {
+		t.Fatalf("event missing: %+v", events)
+	}
+	message := fmt.Sprint(events[0].Data["message"])
+	if strings.Contains(message, secretLike) {
+		t.Fatalf("event leaked secret-looking value: %s", message)
+	}
+	if !strings.Contains(message, "[redacted-secret]") || !strings.Contains(message, "[truncated]") {
+		t.Fatalf("event message was not redacted and compacted: %s", message)
+	}
+	items, _ := events[0].Data["items"].([]any)
+	if len(items) != maxEventArrayItems+1 || items[len(items)-1] != "[truncated]" {
+		t.Fatalf("event array was not compacted: %+v", items)
+	}
+	nested, _ := events[0].Data["nested"].(map[string]any)
+	if strings.Contains(fmt.Sprint(nested["secret"]), secretLike) {
+		t.Fatalf("nested event value leaked secret-looking value: %+v", nested)
+	}
+}
+
 func parseCachedContextPack(t *testing.T, content string) map[string]any {
 	t.Helper()
 	raw := strings.TrimPrefix(content, "cached context pack:\n")
