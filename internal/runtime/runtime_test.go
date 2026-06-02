@@ -457,6 +457,30 @@ func TestGoRuntimeHatchManifestUsesInterfaceFile(t *testing.T) {
 	}
 }
 
+func TestPackageIntegrityRejectsUnexpectedFiles(t *testing.T) {
+	packageRoot := t.TempDir()
+	if err := writeText(filepath.Join(packageRoot, "self", "identity.md"), "packaged self\n"); err != nil {
+		t.Fatal(err)
+	}
+	checksums, err := packageChecksums(packageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(packageRoot, "checksums.json"), checksums); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyPackageIntegrity(packageRoot); err != nil {
+		t.Fatalf("valid package should verify: %v", err)
+	}
+	if err := writeText(filepath.Join(packageRoot, "self", "tools", "extra.tool.yaml"), `{"type":"command","name":"extra","command":"git status --short"}`+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	err = verifyPackageIntegrity(packageRoot)
+	if err == nil || !strings.Contains(err.Error(), "unexpected package file: self/tools/extra.tool.yaml") {
+		t.Fatalf("unexpected file should fail package integrity, got %v", err)
+	}
+}
+
 func TestGoRuntimeHatchRejectsExistingNonPackageOutput(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

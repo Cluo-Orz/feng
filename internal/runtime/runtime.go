@@ -141,6 +141,10 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 			return 1
 		}
 	}
+	if err := verifyCurrentPackageIntegrity(); err != nil {
+		fmt.Fprintf(stderr, "package integrity check failed: %v\n", err)
+		return 1
+	}
 	if len(args) > 0 && args[0] == "config" {
 		return cmdConfig(args[1:], cwd, stdout, stderr)
 	}

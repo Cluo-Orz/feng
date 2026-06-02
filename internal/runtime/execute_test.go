@@ -219,6 +219,52 @@ func TestPackagedExecuteHelpUsesInterface(t *testing.T) {
 	}
 }
 
+func TestPackagedRunnerRejectsChecksumMismatch(t *testing.T) {
+	packageRoot := t.TempDir()
+	seed := filepath.Join(packageRoot, "self")
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "run",
+			"usage": "agent [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	checksums, err := packageChecksums(packageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(packageRoot, "checksums.json"), checksums); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"--help"}, t.TempDir(), &out, &errOut, "agent.exe")
+	if code != 0 {
+		t.Fatalf("valid package should start, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "tampered",
+			"usage": "agent [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	code = RunWithExecutable([]string{"--help"}, t.TempDir(), &out, &errOut, "agent.exe")
+	if code != 1 {
+		t.Fatalf("tampered package should fail, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "package integrity check failed") ||
+		!strings.Contains(errOut.String(), "self/interface.yaml") {
+		t.Fatalf("checksum mismatch error was unclear: %s", errOut.String())
+	}
+}
+
 func TestDefaultKernelInterfaceDoesNotEnterExecuteMode(t *testing.T) {
 	seed := t.TempDir()
 	if _, err := bootstrap(seed, "seed kernel", ""); err != nil {

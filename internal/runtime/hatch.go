@@ -616,6 +616,60 @@ func packageChecksums(root string) (map[string]string, error) {
 	return checksums, nil
 }
 
+func verifyCurrentPackageIntegrity() error {
+	seedSelf := packagedSeedSelf()
+	if seedSelf == "" {
+		return nil
+	}
+	return verifyPackageIntegrity(filepath.Dir(seedSelf))
+}
+
+func verifyPackageIntegrity(root string) error {
+	checksumPath := filepath.Join(root, "checksums.json")
+	if !exists(checksumPath) {
+		return nil
+	}
+	data, err := os.ReadFile(checksumPath)
+	if err != nil {
+		return err
+	}
+	var expected map[string]string
+	if err := json.Unmarshal(data, &expected); err != nil {
+		return fmt.Errorf("checksums.json is not valid: %w", err)
+	}
+	actual, err := packageChecksums(root)
+	if err != nil {
+		return err
+	}
+	expectedKeys := sortedStringMapKeys(expected)
+	for _, rel := range expectedKeys {
+		want := strings.TrimSpace(expected[rel])
+		got, ok := actual[rel]
+		if !ok {
+			return fmt.Errorf("package file missing: %s", rel)
+		}
+		if got != want {
+			return fmt.Errorf("package file checksum mismatch: %s", rel)
+		}
+	}
+	actualKeys := sortedStringMapKeys(actual)
+	for _, rel := range actualKeys {
+		if _, ok := expected[rel]; !ok {
+			return fmt.Errorf("unexpected package file: %s", rel)
+		}
+	}
+	return nil
+}
+
+func sortedStringMapKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func packagedSeedSelf() string {
 	if explicit := strings.TrimSpace(os.Getenv("FENG_PACKAGED_SELF")); explicit != "" && exists(explicit) {
 		return explicit
