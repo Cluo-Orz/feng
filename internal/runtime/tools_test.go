@@ -13,6 +13,15 @@ func TestBootstrapToolsReadWriteListAndCommand(t *testing.T) {
 	if _, err := bootstrap(dir, "tool test", ""); err != nil {
 		t.Fatal(err)
 	}
+	toolsReadme, err := os.ReadFile(filepath.Join(dir, "tools", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"internal Tool/ToolCall/ToolResult", "MCP is a future adapter"} {
+		if !strings.Contains(string(toolsReadme), expected) {
+			t.Fatalf("tools README did not expose MVP tool boundary %q: %s", expected, string(toolsReadme))
+		}
+	}
 	tools := bootstrapTools()
 
 	write := executeTool(dir, tools, "write_file", map[string]any{

@@ -15,7 +15,7 @@ permissions.yaml
 interface.yaml
 config.schema.yaml
 skills/
-tools/
+tools/    # feng 内部 Tool 声明；MVP 不是 MCP 配置目录
 world/
 evals/
 ```

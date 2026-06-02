@@ -56,7 +56,7 @@ var (
 
 	selfDirs = map[string]string{
 		"skills": "Skills grow from candidate files. This directory may be empty.\n",
-		"tools":  "Tool declarations grow here. MVP supports JSON-compatible *.tool.yaml command wrappers.\n",
+		"tools":  "Tool declarations grow here. MVP tools use feng's internal Tool/ToolCall/ToolResult protocol and JSON-compatible *.tool.yaml command wrappers. MCP is a future adapter, not an MVP tool type.\n",
 		"world":  "Stable world descriptions live here. Runtime logs do not.\n",
 		"evals":  "Candidate and baseline evals live here.\n",
 	}
