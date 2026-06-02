@@ -212,6 +212,10 @@ func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	if err := rejectPackageWorkspace(cwd, options.SeedSelf); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	workspace := workspaceOrCwd(cwd)
 	if _, err := bootstrap(workspace, options.Goal, options.SeedSelf); err != nil {
 		fmt.Fprintln(stderr, err)

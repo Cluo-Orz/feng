@@ -265,6 +265,45 @@ func TestPackagedRunnerRejectsChecksumMismatch(t *testing.T) {
 	}
 }
 
+func TestPackagedExecuteRefusesPackageDirectoryAsWorkspace(t *testing.T) {
+	packageRoot := t.TempDir()
+	seed := filepath.Join(packageRoot, "self")
+	if err := writeText(filepath.Join(packageRoot, hatchPackageMarker), "package marker\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "run",
+			"usage": "agent [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"--help"}, packageRoot, &out, &errOut, "agent.exe")
+	if code != 0 {
+		t.Fatalf("execute help in package dir should work, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(packageRoot, ".feng")); !os.IsNotExist(err) {
+		t.Fatalf("execute help should not create package runtime state: %v", err)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = RunWithExecutable([]string{"--quick"}, packageRoot, &out, &errOut, "agent.exe")
+	if code != 1 {
+		t.Fatalf("execute in package dir should fail, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "hatch package directory cannot be used as a workspace") {
+		t.Fatalf("package workspace refusal was unclear: %s", errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(packageRoot, ".feng")); !os.IsNotExist(err) {
+		t.Fatalf("execute mutated package root: %v", err)
+	}
+}
+
 func TestDefaultKernelInterfaceDoesNotEnterExecuteMode(t *testing.T) {
 	seed := t.TempDir()
 	if _, err := bootstrap(seed, "seed kernel", ""); err != nil {

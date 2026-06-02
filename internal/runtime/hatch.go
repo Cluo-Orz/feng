@@ -621,7 +621,11 @@ func verifyCurrentPackageIntegrity() error {
 	if seedSelf == "" {
 		return nil
 	}
-	return verifyPackageIntegrity(filepath.Dir(seedSelf))
+	root := packageRootForSeedSelf(seedSelf)
+	if root == "" {
+		return nil
+	}
+	return verifyPackageIntegrity(root)
 }
 
 func verifyPackageIntegrity(root string) error {
@@ -668,6 +672,47 @@ func sortedStringMapKeys(values map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func rejectPackageWorkspace(cwd, seedSelf string) error {
+	root := packageRootForSeedSelf(seedSelf)
+	if root == "" {
+		return nil
+	}
+	if pathInsideRoot(cwd, root) {
+		return errors.New("hatch package directory cannot be used as a workspace; run the command from a separate workspace directory")
+	}
+	return nil
+}
+
+func packageRootForSeedSelf(seedSelf string) string {
+	if strings.TrimSpace(seedSelf) == "" {
+		return ""
+	}
+	root := filepath.Dir(seedSelf)
+	if exists(filepath.Join(root, hatchPackageMarker)) ||
+		exists(filepath.Join(root, "feng-release.yaml")) ||
+		exists(filepath.Join(root, "checksums.json")) {
+		return root
+	}
+	return ""
+}
+
+func pathInsideRoot(path, root string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return false
+	}
+	relSlash := filepath.ToSlash(rel)
+	return rel == "." || (rel != ".." && !strings.HasPrefix(relSlash, "../"))
 }
 
 func packagedSeedSelf() string {

@@ -53,6 +53,10 @@ func cmdExecute(args []string, cwd string, stdout, stderr io.Writer, executable 
 		printExecuteHelp(stdout, executableCommandName(executable), commands)
 		return 0
 	}
+	if err := rejectPackageWorkspace(cwd, seedSelf); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	workspace := executeWorkspace(cwd)
 	goal := strings.TrimSpace("execute " + command + " " + strings.Join(commandArgs, " "))

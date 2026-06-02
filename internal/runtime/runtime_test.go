@@ -481,6 +481,34 @@ func TestPackageIntegrityRejectsUnexpectedFiles(t *testing.T) {
 	}
 }
 
+func TestPackagedGrowRefusesPackageDirectoryAsWorkspace(t *testing.T) {
+	packageRoot := t.TempDir()
+	seed := filepath.Join(packageRoot, "self")
+	if err := os.MkdirAll(seed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(packageRoot, hatchPackageMarker), "package marker\n"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+
+	for _, cwd := range []string{packageRoot, seed} {
+		var out, errOut bytes.Buffer
+		code := Run([]string{"grow", "do not mutate package", "--max-turns", "1"}, cwd, &out, &errOut)
+		if code != 1 {
+			t.Fatalf("grow in package cwd %s should fail, exit=%d stdout=%s stderr=%s", cwd, code, out.String(), errOut.String())
+		}
+		if !strings.Contains(errOut.String(), "hatch package directory cannot be used as a workspace") {
+			t.Fatalf("package workspace refusal was unclear: %s", errOut.String())
+		}
+	}
+	for _, rel := range []string{".feng", ".git", "identity.md"} {
+		if _, err := os.Stat(filepath.Join(packageRoot, rel)); !os.IsNotExist(err) {
+			t.Fatalf("grow mutated package root at %s: %v", rel, err)
+		}
+	}
+}
+
 func TestGoRuntimeHatchRejectsExistingNonPackageOutput(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

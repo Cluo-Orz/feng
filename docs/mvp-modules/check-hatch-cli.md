@@ -73,6 +73,8 @@ hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不
 
 `checksums.json` 是 package 的完整性边界。packaged runner 启动时如果发现 package 根目录存在 checksums，就必须校验 frozen self、runner、entrypoint、installer、provider examples 和 manifest 没有缺失、变更或出现未记录文件；校验失败时拒绝运行。没有 checksums 的本地测试 seed/template 不触发 package integrity。
 
+package 根目录是发布物，不是用户 workspace。packaged runner 可以在 package 目录里显示 help，但 `grow` 或 execute 任务不能把 package 根目录或其中的 `self/` 当作 workspace 写入 `.feng`、`.git` 或顶层 self 文件；用户应从目标 workspace 目录运行命名命令。
+
 `hatch --name NAME` 的 NAME 就是用户安装后运行的命令名。runtime 必须显式拒绝非法名字，不能静默 slug 成另一个名字；允许字符只包含字母、数字、dot、dash 和 underscore。NAME 也不能和 package 内部文件或目录冲突，例如 `self`、`install`、`install.ps1`、`provider-examples`、`feng-runner`、`feng-release.yaml`、`checksums.json`，也不能使用 Windows 设备保留名。
 
 产品级 hatch 的 runner 目标是 Go binary。hatch 不引入第二套 runner。
