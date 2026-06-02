@@ -155,12 +155,24 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 	case "grow":
 		return cmdGrow(args[1:], cwd, stdout, stderr)
 	case "check":
+		if err := noExtraArgs("check", args[1:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
 		return cmdCheck(cwd, stdout, stderr)
 	case "status":
+		if err := noExtraArgs("status", args[1:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
 		return cmdStatus(cwd, stdout, stderr)
 	case "watch":
 		return cmdWatch(args[1:], cwd, stdout, stderr)
 	case "artifacts":
+		if err := noExtraArgs("artifacts", args[1:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
 		return cmdArtifacts(cwd, stdout, stderr)
 	case "hatch":
 		return cmdHatch(args[1:], cwd, stdout, stderr)
@@ -175,6 +187,13 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 		printHelp(stderr)
 		return 2
 	}
+}
+
+func noExtraArgs(command string, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	return fmt.Errorf("unknown %s argument: %s", command, args[0])
 }
 
 func printHelp(w io.Writer) {

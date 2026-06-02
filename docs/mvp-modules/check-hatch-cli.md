@@ -122,6 +122,8 @@ feng config
 
 `watch --limit N` 只接受正整数 N，未知参数或无效 N 必须报错。可观测命令不能静默回退默认值，否则用户无法判断自己看到的是完整进展还是默认窗口。
 
+`check`、`status` 和 `artifacts` 是无参数命令，传入多余参数必须报错，不能静默忽略。CLI 的每个入口都要让用户明确知道自己运行的到底是什么。
+
 ## Execute Mode
 
 hatch 出来的命名 runner 先读取 packaged `self/interface.yaml`。

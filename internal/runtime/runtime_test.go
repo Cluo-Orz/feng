@@ -112,6 +112,26 @@ func TestGoRuntimeWatchValidatesLimitArgs(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeNoArgCommandsRejectExtraArgs(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		args    []string
+		message string
+	}{
+		{[]string{"check", "--bad"}, "unknown check argument: --bad"},
+		{[]string{"status", "--bad"}, "unknown status argument: --bad"},
+		{[]string{"artifacts", "--bad"}, "unknown artifacts argument: --bad"},
+	} {
+		var out, errOut bytes.Buffer
+		if code := Run(tc.args, dir, &out, &errOut); code != 2 {
+			t.Fatalf("%v should fail usage, exit=%d stdout=%s stderr=%s", tc.args, code, out.String(), errOut.String())
+		}
+		if !strings.Contains(errOut.String(), tc.message) {
+			t.Fatalf("%v did not explain rejected argument: %s", tc.args, errOut.String())
+		}
+	}
+}
+
 func TestGoRuntimeGrowCanSeedFromLocalTemplate(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	root := t.TempDir()
