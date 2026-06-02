@@ -81,6 +81,37 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeWatchValidatesLimitArgs(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "watch args test", ""); err != nil {
+		t.Fatal(err)
+	}
+	appendEvent(dir, "first_event", map[string]any{"n": 1})
+	appendEvent(dir, "second_event", map[string]any{"n": 2})
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"watch", "--limit=1"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("watch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if strings.Contains(out.String(), "first_event") || !strings.Contains(out.String(), "second_event") {
+		t.Fatalf("watch --limit=1 did not return only the latest event: %s", out.String())
+	}
+
+	for _, args := range [][]string{
+		{"watch", "--limit"},
+		{"watch", "--limit", "abc"},
+		{"watch", "--limit=0"},
+		{"watch", "--unknown"},
+	} {
+		out.Reset()
+		errOut.Reset()
+		if code := Run(args, dir, &out, &errOut); code != 2 {
+			t.Fatalf("%v should fail usage, exit=%d stdout=%s stderr=%s", args, code, out.String(), errOut.String())
+		}
+	}
+}
+
 func TestGoRuntimeGrowCanSeedFromLocalTemplate(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	root := t.TempDir()

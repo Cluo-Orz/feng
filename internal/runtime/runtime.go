@@ -180,6 +180,7 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag,config} ...")
 	fmt.Fprintln(w, "       feng grow [--template PATH|builtin] [--max-turns N] [--] \"goal\"")
+	fmt.Fprintln(w, "       feng watch [--limit N]")
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
@@ -366,19 +367,44 @@ func cmdWatch(args []string, cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "not a feng workspace")
 		return 1
 	}
-	limit := 20
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--limit" && i+1 < len(args) {
-			if parsed, err := strconv.Atoi(args[i+1]); err == nil {
-				limit = parsed
-			}
-			i++
-		}
+	limit, err := parseWatchLimit(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
 	}
 	for _, event := range tailEvents(workspace, limit) {
 		printJSON(stdout, event)
 	}
 	return 0
+}
+
+func parseWatchLimit(args []string) (int, error) {
+	limit := 20
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--limit" {
+			if i+1 >= len(args) {
+				return 0, errors.New("--limit requires a positive integer")
+			}
+			parsed, err := strconv.Atoi(args[i+1])
+			if err != nil || parsed < 1 {
+				return 0, fmt.Errorf("--limit must be a positive integer: %s", args[i+1])
+			}
+			limit = parsed
+			i++
+			continue
+		}
+		if strings.HasPrefix(args[i], "--limit=") {
+			raw := strings.TrimPrefix(args[i], "--limit=")
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 1 {
+				return 0, fmt.Errorf("--limit must be a positive integer: %s", raw)
+			}
+			limit = parsed
+			continue
+		}
+		return 0, fmt.Errorf("unknown watch argument: %s", args[i])
+	}
+	return limit, nil
 }
 
 func cmdArtifacts(cwd string, stdout, stderr io.Writer) int {

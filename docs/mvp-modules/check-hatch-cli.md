@@ -120,6 +120,8 @@ feng config
 
 `grow` 参数解析必须显式失败，而不是静默忽略错误。`--max-turns` 需要整数，未知 `--flag` 需要报错；如果 goal 文本本身以 `--` 开头，用户可以写 `feng grow -- "--开头的目标"`。
 
+`watch --limit N` 只接受正整数 N，未知参数或无效 N 必须报错。可观测命令不能静默回退默认值，否则用户无法判断自己看到的是完整进展还是默认窗口。
+
 ## Execute Mode
 
 hatch 出来的命名 runner 先读取 packaged `self/interface.yaml`。
