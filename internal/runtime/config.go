@@ -22,7 +22,7 @@ func cmdConfig(args []string, cwd string, stdout, stderr io.Writer) int {
 		printConfigHelp(stdout)
 		return 0
 	case "init":
-		return cmdConfigInit(args[1:], workspace, stdout, stderr)
+		return cmdConfigInit(args[1:], workspace, cwd, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown config argument: %s\n", args[0])
 		printConfigHelp(stderr)
@@ -57,7 +57,7 @@ func configWorkspace(cwd string) string {
 	return abs
 }
 
-func cmdConfigInit(args []string, workspace string, stdout, stderr io.Writer) int {
+func cmdConfigInit(args []string, workspace, cwd string, stdout, stderr io.Writer) int {
 	scope := "workspace"
 	provider := "deepseek"
 	force := false
@@ -78,6 +78,12 @@ func cmdConfigInit(args []string, workspace string, stdout, stderr io.Writer) in
 			fmt.Fprintf(stderr, "unknown config init argument: %s\n", args[i])
 			printConfigHelp(stderr)
 			return 2
+		}
+	}
+	if scope == "workspace" {
+		if err := rejectPackageWorkspace(cwd, packagedSeedSelf()); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	}
 	profile, err := providerTemplate(provider)
