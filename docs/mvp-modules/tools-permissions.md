@@ -71,6 +71,8 @@ FENG_WORKSPACE_DIR
 
 这样 hatch 后的业务命令可以调用 frozen self 里的工具实现，同时把实际读写动作作用到用户当前目录。
 
+如果 `workdir: self` 工具来自 hatch package，命令执行后必须重新校验 package integrity。工具可以通过 `FENG_WORKSPACE_DIR` 修改用户 workspace，但不能把 packaged `self/` 当作可写状态；一旦 package 被改动，tool result 必须标记为错误，让下一轮 LLM 立即感知问题。
+
 MVP 的 schema validation 只做小闭环：检查 required 字段和常见 JSON 类型（string、integer、number、boolean、object、array）。校验失败时不执行工具命令，写入 `tool_argument_invalid` event，并把错误作为 tool result 返回给 LLM。
 
 ## Active Tool Pack

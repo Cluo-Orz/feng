@@ -558,6 +558,92 @@ func TestSelfRepoCommandToolLoadsExecutesAndChecks(t *testing.T) {
 	}
 }
 
+func TestPackagedSelfCommandToolReportsPackageMutation(t *testing.T) {
+	packageRoot := t.TempDir()
+	selfRoot := filepath.Join(packageRoot, "self")
+	user := t.TempDir()
+	if err := writeText(filepath.Join(packageRoot, hatchPackageMarker), "package marker\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(selfRoot, "permissions.yaml"), defaultPermissionsConfig()); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(selfRoot, "scripts", "mutate_self.go"), "package main\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\t_ = os.WriteFile(filepath.Join(os.Getenv(\"FENG_SELF_DIR\"), \"identity.md\"), []byte(\"mutated\\n\"), 0o644)\n}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(selfRoot, "tools", "mutate.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "package_mutator",
+		"description": "Mutate the frozen self.",
+		"command":     "go run scripts/mutate_self.go",
+		"workdir":     "self",
+		"always":      true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	checksums, err := packageChecksums(packageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(packageRoot, "checksums.json"), checksums); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := activeToolPackReportFromSelf(user, selfRoot, "execute", "run package mutator").Tools
+	result := executeTool(user, tools, "package_mutator", map[string]any{})
+	if !result.IsError || !strings.Contains(result.Content, "package integrity check failed after tool package_mutator") ||
+		!strings.Contains(result.Content, "self/identity.md") {
+		t.Fatalf("packaged self mutation should be surfaced as tool error: %+v", result)
+	}
+	if err := verifyPackageIntegrity(packageRoot); err == nil {
+		t.Fatal("package should remain detectably tampered after self mutation")
+	}
+}
+
+func TestPackagedSelfCommandToolCanWriteWorkspaceWithoutPackageMutation(t *testing.T) {
+	packageRoot := t.TempDir()
+	selfRoot := filepath.Join(packageRoot, "self")
+	user := t.TempDir()
+	if err := writeText(filepath.Join(packageRoot, hatchPackageMarker), "package marker\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(selfRoot, "permissions.yaml"), defaultPermissionsConfig()); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(selfRoot, "scripts", "write_workspace.go"), "package main\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\t_ = os.WriteFile(filepath.Join(os.Getenv(\"FENG_WORKSPACE_DIR\"), \"marker.txt\"), []byte(\"ok\\n\"), 0o644)\n}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(selfRoot, "tools", "workspace.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "workspace_writer",
+		"description": "Write into the user workspace from frozen self.",
+		"command":     "go run scripts/write_workspace.go",
+		"workdir":     "self",
+		"always":      true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	checksums, err := packageChecksums(packageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(packageRoot, "checksums.json"), checksums); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := activeToolPackReportFromSelf(user, selfRoot, "execute", "run workspace writer").Tools
+	result := executeTool(user, tools, "workspace_writer", map[string]any{})
+	if result.IsError {
+		t.Fatalf("workspace write should not fail package integrity: %+v", result)
+	}
+	if data, err := os.ReadFile(filepath.Join(user, "marker.txt")); err != nil || string(data) != "ok\n" {
+		t.Fatalf("workspace writer did not write user workspace: data=%q err=%v", string(data), err)
+	}
+	if err := verifyPackageIntegrity(packageRoot); err != nil {
+		t.Fatalf("workspace writer should not mutate package: %v", err)
+	}
+}
+
 func TestActiveToolPackSelectsRelevantSelfRepoTools(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "tool selection test", ""); err != nil {

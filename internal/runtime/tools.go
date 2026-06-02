@@ -560,11 +560,24 @@ func commandToolFromRoot(workspace, selfRoot, path string) *Tool {
 				"FENG_SELF_DIR":      selfRoot,
 				"FENG_WORKSPACE_DIR": toolWorkspace,
 			})
+			if err := verifyToolPackageIntegrity(selfRoot); err != nil {
+				result := maybeArtifact(toolWorkspace, name+":package-integrity", fmt.Sprintf("package integrity check failed after tool %s: %v\nexit_code=%d\n%s", name, err, exitCode, output), name+" package integrity failure")
+				result.IsError = true
+				return result
+			}
 			result := maybeArtifact(toolWorkspace, name+":"+command, fmt.Sprintf("exit_code=%d\n%s", exitCode, output), name+" output")
 			result.IsError = exitCode != 0
 			return result
 		},
 	}
+}
+
+func verifyToolPackageIntegrity(selfRoot string) error {
+	root := packageRootForSeedSelf(selfRoot)
+	if root == "" {
+		return nil
+	}
+	return verifyPackageIntegrity(root)
 }
 
 func selectionQuery(_workspace, mode, latestEvent string) string {
