@@ -179,7 +179,7 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "usage: feng {grow,check,hatch,status,watch,artifacts,gui,tag,config} ...")
-	fmt.Fprintln(w, "       feng grow [--template PATH|builtin] [--max-turns N] \"goal\"")
+	fmt.Fprintln(w, "       feng grow [--template PATH|builtin] [--max-turns N] [--] \"goal\"")
 }
 
 func cmdGrow(args []string, cwd string, stdout, stderr io.Writer) int {
@@ -232,19 +232,29 @@ func parseGrowOptions(args []string, cwd string) (GrowOptions, error) {
 	var parts []string
 	options := GrowOptions{MaxTurns: 12}
 	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			parts = append(parts, args[i+1:]...)
+			break
+		}
 		if args[i] == "--max-turns" {
-			if i+1 < len(args) {
-				if parsed, err := strconv.Atoi(args[i+1]); err == nil {
-					options.MaxTurns = parsed
-				}
+			if i+1 >= len(args) {
+				return options, errors.New("--max-turns requires an integer")
 			}
+			parsed, err := strconv.Atoi(args[i+1])
+			if err != nil {
+				return options, fmt.Errorf("--max-turns must be an integer: %s", args[i+1])
+			}
+			options.MaxTurns = parsed
 			i++
 			continue
 		}
 		if strings.HasPrefix(args[i], "--max-turns=") {
-			if parsed, err := strconv.Atoi(strings.TrimPrefix(args[i], "--max-turns=")); err == nil {
-				options.MaxTurns = parsed
+			raw := strings.TrimPrefix(args[i], "--max-turns=")
+			parsed, err := strconv.Atoi(raw)
+			if err != nil {
+				return options, fmt.Errorf("--max-turns must be an integer: %s", raw)
 			}
+			options.MaxTurns = parsed
 			continue
 		}
 		if args[i] == "--template" {
@@ -257,7 +267,13 @@ func parseGrowOptions(args []string, cwd string) (GrowOptions, error) {
 		}
 		if strings.HasPrefix(args[i], "--template=") {
 			options.Template = strings.TrimPrefix(args[i], "--template=")
+			if strings.TrimSpace(options.Template) == "" {
+				return options, errors.New("--template requires a path or builtin")
+			}
 			continue
+		}
+		if strings.HasPrefix(args[i], "--") {
+			return options, fmt.Errorf("unknown grow argument: %s", args[i])
 		}
 		parts = append(parts, args[i])
 	}

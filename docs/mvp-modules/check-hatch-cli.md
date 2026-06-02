@@ -118,6 +118,8 @@ feng config
 
 `grow --template ./path "..."` 是 bootstrap 的可选 seed，不是新的生命周期命令。template 目录只补缺失的 self 文件，不覆盖已有 workspace 内容。
 
+`grow` 参数解析必须显式失败，而不是静默忽略错误。`--max-turns` 需要整数，未知 `--flag` 需要报错；如果 goal 文本本身以 `--` 开头，用户可以写 `feng grow -- "--开头的目标"`。
+
 ## Execute Mode
 
 hatch 出来的命名 runner 先读取 packaged `self/interface.yaml`。

@@ -438,9 +438,28 @@ func TestParseGrowArgs(t *testing.T) {
 		t.Fatalf("goal=%q turns=%d", goal, turns)
 	}
 
+	goal, turns, err = parseGrowArgs([]string{"--max-turns", "2", "--", "--inspect dashed goal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if goal != "--inspect dashed goal" || turns != 2 {
+		t.Fatalf("goal=%q turns=%d", goal, turns)
+	}
+
 	_, _, err = parseGrowArgs(nil)
 	if err == nil {
 		t.Fatal("expected missing goal error")
+	}
+	for _, args := range [][]string{
+		{"--max-turns"},
+		{"--max-turns", "abc", "goal"},
+		{"--max-turns=abc", "goal"},
+		{"--template=", "goal"},
+		{"--unknown", "goal"},
+	} {
+		if _, _, err := parseGrowArgs(args); err == nil {
+			t.Fatalf("expected grow args %v to fail", args)
+		}
 	}
 }
 
