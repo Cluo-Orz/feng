@@ -376,6 +376,7 @@ func cmdStatus(cwd string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	state.Lock = currentLockSnapshot(workspace)
 	printJSON(stdout, StatusSnapshot{State: state, Provider: providerStatus(workspace)})
 	return 0
 }
@@ -703,7 +704,7 @@ func defaultState(goal string) State {
 		ContextBudget:   defaultContextBudget(),
 		LastRecovery:    emptyRecovery(),
 		LastArtifacts:   []Artifact{},
-		Lock:            map[string]string{"owner": "", "heartbeat": ""},
+		Lock:            emptyLockSnapshot(),
 	}
 }
 

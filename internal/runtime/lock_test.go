@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,6 +34,69 @@ func TestWorkspaceLockBlocksMutatingCommands(t *testing.T) {
 	code = Run([]string{"grow", "continue", "--max-turns", "1"}, dir, &out, &errOut)
 	if code != 2 || !strings.Contains(out.String(), "workspace_locked") {
 		t.Fatalf("grow was not blocked by lock: code=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+}
+
+func TestStatusReportsCurrentWorkspaceLock(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "observable lock test", ""); err != nil {
+		t.Fatal(err)
+	}
+	release, err := acquireWorkspaceLock(dir, "observer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"status"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("status exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	var snapshot StatusSnapshot
+	if err := json.Unmarshal(out.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Lock["active"] != "true" || snapshot.Lock["stale"] != "false" || snapshot.Lock["owner"] != "observer" || snapshot.Lock["pid"] == "" {
+		t.Fatalf("status did not expose active lock: %+v", snapshot.Lock)
+	}
+
+	release()
+	out.Reset()
+	errOut.Reset()
+	code = Run([]string{"status"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("status after release exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if err := json.Unmarshal(out.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Lock["active"] != "false" || snapshot.Lock["owner"] != "" {
+		t.Fatalf("status did not clear released lock: %+v", snapshot.Lock)
+	}
+}
+
+func TestStatusReportsStaleWorkspaceLock(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "stale observable lock test", ""); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, ".feng", "lock")
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"old","pid":1,"started_at":1,"heartbeat":1}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_LOCK_STALE_SECONDS", "1")
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"status"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("status exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	var snapshot StatusSnapshot
+	if err := json.Unmarshal(out.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Lock["active"] != "false" || snapshot.Lock["stale"] != "true" || snapshot.Lock["owner"] != "old" {
+		t.Fatalf("status did not expose stale lock: %+v", snapshot.Lock)
 	}
 }
 

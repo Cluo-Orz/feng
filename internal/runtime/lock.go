@@ -62,20 +62,28 @@ func removeStaleLock(lockPath string) bool {
 	if err != nil {
 		return false
 	}
-	staleAfter := int64(86400)
-	if raw := os.Getenv("FENG_LOCK_STALE_SECONDS"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
-			staleAfter = int64(parsed)
-		}
+	if !lockIsStale(lockPath, info) {
+		return false
 	}
+	return os.Remove(lockPath) == nil
+}
+
+func lockIsStale(lockPath string, info os.FileInfo) bool {
 	heartbeat := info.ModTime()
 	if record, ok := readLockRecord(lockPath); ok && record.Heartbeat > 0 {
 		heartbeat = time.Unix(record.Heartbeat, 0)
 	}
-	if time.Since(heartbeat) < time.Duration(staleAfter)*time.Second {
-		return false
+	return time.Since(heartbeat) >= lockStaleAfter()
+}
+
+func lockStaleAfter() time.Duration {
+	staleAfter := 86400
+	if raw := os.Getenv("FENG_LOCK_STALE_SECONDS"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			staleAfter = parsed
+		}
 	}
-	return os.Remove(lockPath) == nil
+	return time.Duration(staleAfter) * time.Second
 }
 
 func describeLock(lockPath string) error {
@@ -96,7 +104,7 @@ func releaseWorkspaceLock(workspace, owner string, pid int) {
 		}
 	}
 	_ = updateState(workspace, func(state *State) {
-		state.Lock = map[string]string{"owner": "", "heartbeat": ""}
+		state.Lock = emptyLockSnapshot()
 	})
 }
 
@@ -172,11 +180,39 @@ func readLockRecord(lockPath string) (lockRecord, bool) {
 
 func markStateLocked(workspace string, record lockRecord) {
 	_ = updateState(workspace, func(state *State) {
-		state.Lock = map[string]string{
-			"owner":      record.Owner,
-			"pid":        strconv.Itoa(record.PID),
-			"heartbeat":  time.Unix(record.Heartbeat, 0).Format(time.RFC3339),
-			"started_at": time.Unix(record.StartedAt, 0).Format(time.RFC3339),
-		}
+		state.Lock = lockRecordSnapshot(record, true, false)
 	})
+}
+
+func currentLockSnapshot(workspace string) map[string]string {
+	lockPath := filepath.Join(workspace, ".feng", "lock")
+	info, statErr := os.Stat(lockPath)
+	record, ok := readLockRecord(lockPath)
+	if statErr != nil || !ok {
+		return emptyLockSnapshot()
+	}
+	stale := lockIsStale(lockPath, info)
+	return lockRecordSnapshot(record, !stale, stale)
+}
+
+func emptyLockSnapshot() map[string]string {
+	return map[string]string{
+		"active":     "false",
+		"stale":      "false",
+		"owner":      "",
+		"pid":        "",
+		"started_at": "",
+		"heartbeat":  "",
+	}
+}
+
+func lockRecordSnapshot(record lockRecord, active, stale bool) map[string]string {
+	return map[string]string{
+		"active":     strconv.FormatBool(active),
+		"stale":      strconv.FormatBool(stale),
+		"owner":      record.Owner,
+		"pid":        strconv.Itoa(record.PID),
+		"started_at": time.Unix(record.StartedAt, 0).Format(time.RFC3339),
+		"heartbeat":  time.Unix(record.Heartbeat, 0).Format(time.RFC3339),
+	}
 }
