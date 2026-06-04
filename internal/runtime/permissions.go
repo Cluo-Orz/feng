@@ -166,6 +166,9 @@ func checkCommandWithPermissions(workspace, permissionsRoot, command string) err
 			return permissionDenied(workspace, "run_command", command, "command denied by rule: "+pattern, "dangerous command matched deny rule")
 		}
 	}
+	if operator := shellBoundaryOperator(command); operator != "" {
+		return permissionDenied(workspace, "run_command", command, "command denied by shell boundary: "+operator, "shell control operators and redirection can bypass command or file permissions")
+	}
 	if len(permissions.Commands.Allow) == 0 {
 		return nil
 	}
@@ -310,6 +313,48 @@ func hasRecursiveRmFlag(tokens []string) bool {
 
 func normalizedCommand(command string) string {
 	return strings.Join(strings.Fields(strings.ToLower(command)), " ")
+}
+
+func shellBoundaryOperator(command string) string {
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i, r := range command {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && !inSingle {
+			escaped = true
+			continue
+		}
+		switch r {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		}
+		if inSingle || inDouble {
+			continue
+		}
+		switch r {
+		case '\r', '\n':
+			return "newline"
+		case ';', '|', '>', '<', '`':
+			return string(r)
+		case '&':
+			return "&"
+		case '$':
+			if i+1 < len(command) && command[i+1] == '(' {
+				return "$("
+			}
+		}
+	}
+	return ""
 }
 
 func samePath(left, right string) bool {

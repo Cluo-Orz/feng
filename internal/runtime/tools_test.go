@@ -208,6 +208,50 @@ func TestEmptyCommandAllowUsesDefaultCommandBoundary(t *testing.T) {
 	}
 }
 
+func TestCommandAllowListRejectsShellBoundaryBypass(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "shell boundary permission test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"docs/**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git status", "git diff", "go test", "rg"},
+			"deny":  []any{},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	allowed := executeTool(dir, bootstrapTools(), "run_command", map[string]any{"command": "git status --short"})
+	if allowed.IsError {
+		t.Fatalf("baseline allowed command failed: %+v", allowed)
+	}
+	for _, command := range []string{
+		"git status --short && echo bypass",
+		"git status --short & echo bypass",
+		"git status --short ; echo bypass",
+		"git status --short | more",
+		"git status --short > docs/status.txt",
+		"git status --short < input.txt",
+		"git status --short `echo bypass`",
+		"git status --short $(echo bypass)",
+		"git status --short\necho bypass",
+	} {
+		result := executeTool(dir, bootstrapTools(), "run_command", map[string]any{"command": command})
+		if !result.IsError || !strings.Contains(result.Content, "command denied by shell boundary") {
+			t.Fatalf("expected shell boundary denial for %q, got %+v", command, result)
+		}
+	}
+	quoted := executeTool(dir, bootstrapTools(), "run_command", map[string]any{"command": `rg "a|b" docs`})
+	if quoted.IsError && strings.Contains(quoted.Content, "command denied by shell boundary") {
+		t.Fatalf("quoted operator should not be treated as shell boundary: %+v", quoted)
+	}
+}
+
 func TestLocalGrowPermissionsKeepSelfRepairWriteFloor(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "self repair write floor test", ""); err != nil {
@@ -920,6 +964,28 @@ func TestCheckRejectsDeniedSelfRepoTool(t *testing.T) {
 	}
 	if !hasArtifactType(state.LastArtifacts, "diff") {
 		t.Fatalf("expected failed check to expose diff artifact, got %+v", state.LastArtifacts)
+	}
+}
+
+func TestCheckRejectsSelfRepoToolShellBoundaryBypass(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "bad shell tool test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "chain.tool.yaml"), map[string]any{
+		"type":    "command",
+		"name":    "chain_tool",
+		"command": "git status --short && echo bypass",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject shell boundary in self repo tool")
+	}
+	if !containsProblem(report.Problems, "command denied by shell boundary") {
+		t.Fatalf("expected shell boundary problem, got %+v", report.Problems)
 	}
 }
 

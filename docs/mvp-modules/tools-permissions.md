@@ -122,6 +122,8 @@ permission deny 必须生成 `permission-denied` artifact 和 `tool_denied` even
 
 `commands.allow` 缺失或为空时不能表示 allow-all。runtime 使用内置基础命令 allow list 作为默认边界，例如 `git status`、`git diff`、`git log`、`rg` 和基础 `go` 验证命令。需要扩展命令能力时，必须显式写入 allow list。
 
+`commands.allow` 只允许单条命令及其普通参数，不允许把 allow 前缀当成 shell 片段。`&&`、`&`、`;`、`|`、重定向、命令替换和换行这类 shell 边界必须被拒绝，避免 `git status && ...` 或 `git status > file` 绕过命令权限或文件写权限。需要复杂组合时，应把逻辑写入 self repo 的 `scripts/`，再通过受 `check` 和 `permissions` 管住的显式命令运行。
+
 在 grow workspace 中，`files.write` 不能撤销 self 修复地板：identity、goal、hooks、permissions、skills、tools、world、evals、docs/source roots 和 Go module 文件仍可被 `write_file` 修复。这条修复地板只存在于本地 grow/check self 语义中；hatch 后的 execute mode 使用 frozen self 的 `permissions.yaml` 精确约束使用者 workspace，不继承 grow 的 self 修复写权限。
 
 如果 candidate 把 `permissions.yaml` 删除或写到无法解析，runtime 使用内置 bootstrap 权限作为恢复地板：读 workspace、写 self roots、运行基础 git/go/rg 命令。这个 fallback 只用于让下一轮 grow 修复 self，不允许写 `.git/.feng`，也不能绕过内建危险命令拒绝。一个能解析的自定义 `permissions.yaml` 仍然按文件内容执行。
