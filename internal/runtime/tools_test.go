@@ -870,6 +870,29 @@ func TestCheckRejectsBrokenHookSkillReferences(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsUnsupportedHookEvent(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "bad hook event test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "reviewer.md"), []byte("# Reviewer\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "hooks.yaml"), map[string]any{
+		"on_startup": []any{"reviewer"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject unsupported hook event")
+	}
+	if !containsProblem(report.Problems, "hooks.on_startup is not a supported MVP hook event") {
+		t.Fatalf("expected unsupported hook event problem, got %+v", report.Problems)
+	}
+}
+
 func TestCheckRejectsHookSkillUnknownTool(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "bad hook tool test", ""); err != nil {

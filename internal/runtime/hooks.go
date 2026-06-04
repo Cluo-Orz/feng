@@ -138,6 +138,10 @@ func checkHooksConfig(workspace string) []string {
 		toolNames[tool.Name] = true
 	}
 	for event, rawItems := range raw {
+		if !validHookEvent(event) {
+			problems = append(problems, "hooks."+event+" is not a supported MVP hook event")
+			continue
+		}
 		items, ok := rawItems.([]any)
 		if !ok {
 			problems = append(problems, "hooks."+event+" must be a list")
@@ -166,6 +170,15 @@ func checkHooksConfig(workspace string) []string {
 		}
 	}
 	return problems
+}
+
+func validHookEvent(event string) bool {
+	switch event {
+	case "on_grow", "on_check_failed", "on_execute":
+		return true
+	default:
+		return false
+	}
 }
 
 func hookRefFromItem(item any) string {
