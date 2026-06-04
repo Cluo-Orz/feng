@@ -468,30 +468,16 @@ func runCheck(workspace string) CheckReport {
 	state.Mode = "checking"
 	saveState(workspace, state)
 
-	for name := range selfFiles {
-		if !exists(filepath.Join(workspace, name)) {
-			problems = append(problems, "missing self file: "+name)
-		}
+	problems = append(problems, runStaticSelfChecks(workspace)...)
+	if len(problems) == 0 {
+		problems = append(problems, runSourceHealthChecks(workspace)...)
 	}
-	for name := range selfDirs {
-		if !exists(filepath.Join(workspace, name)) {
-			problems = append(problems, "missing self directory: "+name)
-		}
+	if len(problems) == 0 {
+		problems = append(problems, runCommandEvals(workspace)...)
 	}
-	for _, name := range []string{"feng.yaml", "hooks.yaml", "permissions.yaml", "interface.yaml", "config.schema.yaml"} {
-		if _, err := readJSONFile(filepath.Join(workspace, name)); err != nil {
-			problems = append(problems, err.Error())
-		}
+	if len(problems) == 0 {
+		problems = append(problems, runStaticSelfChecks(workspace)...)
 	}
-	problems = append(problems, scanSecrets(workspace)...)
-	problems = append(problems, checkNoSpecialRuntime(workspace)...)
-	problems = append(problems, checkHooksConfig(workspace)...)
-	problems = append(problems, checkInterfaceConfig(workspace)...)
-	problems = append(problems, checkSelfRepoTools(workspace)...)
-	problems = append(problems, checkMessageCompiler(workspace)...)
-	problems = append(problems, checkProviderProfile(workspace)...)
-	problems = append(problems, runSourceHealthChecks(workspace)...)
-	problems = append(problems, runCommandEvals(workspace)...)
 
 	report := CheckReport{OK: len(problems) == 0, Problems: problems, ValidatedCommit: state.ValidatedCommit}
 	if report.OK {
@@ -528,6 +514,33 @@ func runCheck(workspace string) CheckReport {
 	saveState(workspace, state)
 	appendEvent(workspace, ternary(report.OK, "check_passed", "check_failed"), map[string]any{"ok": report.OK, "problems": report.Problems, "validated_commit": report.ValidatedCommit})
 	return report
+}
+
+func runStaticSelfChecks(workspace string) []string {
+	var problems []string
+	for name := range selfFiles {
+		if !exists(filepath.Join(workspace, name)) {
+			problems = append(problems, "missing self file: "+name)
+		}
+	}
+	for name := range selfDirs {
+		if !exists(filepath.Join(workspace, name)) {
+			problems = append(problems, "missing self directory: "+name)
+		}
+	}
+	for _, name := range []string{"feng.yaml", "hooks.yaml", "permissions.yaml", "interface.yaml", "config.schema.yaml"} {
+		if _, err := readJSONFile(filepath.Join(workspace, name)); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	problems = append(problems, scanSecrets(workspace)...)
+	problems = append(problems, checkNoSpecialRuntime(workspace)...)
+	problems = append(problems, checkHooksConfig(workspace)...)
+	problems = append(problems, checkInterfaceConfig(workspace)...)
+	problems = append(problems, checkSelfRepoTools(workspace)...)
+	problems = append(problems, checkMessageCompiler(workspace)...)
+	problems = append(problems, checkProviderProfile(workspace)...)
+	return problems
 }
 
 func selfRootsChanged(workspace string) bool {

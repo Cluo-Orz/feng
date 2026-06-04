@@ -236,6 +236,38 @@ func TestGoRuntimeCheckDoesNotCommitUnrelatedUntrackedFiles(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeCheckRejectsEvalMutatingRequiredSelfFile(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "eval mutation test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(dir, "go.mod"), "module evalmutation\n\ngo 1.26\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(dir, "scripts", "delete_goal.go"), "package main\n\nimport \"os\"\n\nfunc main() { _ = os.Remove(\"goal.md\") }\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "evals", "delete-goal.eval.yaml"), map[string]any{
+		"type":    "command",
+		"command": "go run ./scripts/delete_goal.go",
+		"timeout": 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"check"}, dir, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("check should reject eval-mutated self, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "missing self file: goal.md") {
+		t.Fatalf("check did not revalidate self after eval mutation: %s", out.String())
+	}
+	if head := currentHead(dir); head != "" {
+		t.Fatalf("mutated self should not be checkpointed, head=%s", head)
+	}
+}
+
 func TestGoRuntimeGrowMissingConfigDoesNotDirtyValidatedSelf(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()
