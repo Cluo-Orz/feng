@@ -688,6 +688,7 @@ func handleLLMError(workspace string, err error, stdout io.Writer) int {
 		llmErr = LLMError{Kind: "provider_error", Message: err.Error()}
 	}
 	state, _ := loadState(workspace)
+	mode := runModeFromState(state.Mode)
 	if llmErr.Kind == "missing_config" {
 		state.Mode = "missing_config"
 	} else {
@@ -699,6 +700,7 @@ func handleLLMError(workspace string, err error, stdout io.Writer) int {
 	state.LastArtifacts = []Artifact{artifact}
 	saveState(workspace, state)
 	appendEvent(workspace, "blocked", map[string]any{"reason": llmErr.Kind, "message": llmErr.Message})
+	appendRunStopped(workspace, mode, llmErr.Kind, map[string]any{"artifact": artifact.Path})
 	response := map[string]any{"ok": false, "reason": llmErr.Kind, "message": llmErr.Message}
 	if llmErr.Kind == "missing_config" {
 		response["provider"] = providerStatus(workspace)

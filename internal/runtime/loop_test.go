@@ -123,6 +123,45 @@ func TestGrowRunsOpenAIToolCallLoop(t *testing.T) {
 	}
 }
 
+func TestGrowBudgetReachedWritesRunStoppedEvent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeChatResponse(w, map[string]any{
+			"role": "assistant",
+			"tool_calls": []map[string]any{
+				{
+					"id":   "call_1",
+					"type": "function",
+					"function": map[string]any{
+						"name":      "list_files",
+						"arguments": `{"path":".","max_files":5}`,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	code := Run([]string{"grow", "force budget stop", "--max-turns", "1"}, dir, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Mode != "blocked" {
+		t.Fatalf("mode=%s state=%+v", state.Mode, state)
+	}
+	if !hasRunStoppedReason(dir, "grow", "budget_reached") {
+		t.Fatalf("budget stop did not emit terminal run_stopped event: %+v", tailEvents(dir, 20))
+	}
+}
+
 func TestGrowRecordsContextPackHashInStateStatusAndGUI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request chatRequest
@@ -750,6 +789,15 @@ func hasToolResultEvent(workspace, name string, isError bool) bool {
 func hasRunStoppedArtifact(workspace, path string) bool {
 	for _, event := range tailEvents(workspace, 20) {
 		if event.Type == "run_stopped" && event.Data["artifact"] == path {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRunStoppedReason(workspace, mode, reason string) bool {
+	for _, event := range tailEvents(workspace, 20) {
+		if event.Type == "run_stopped" && event.Data["mode"] == mode && event.Data["reason"] == reason {
 			return true
 		}
 	}

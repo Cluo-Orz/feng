@@ -179,7 +179,7 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 			if executeArtifact != nil {
 				event["artifact"] = executeArtifact.Path
 			}
-			appendEvent(workspace, "run_stopped", event)
+			appendRunStopped(workspace, "execute", "assistant_done", event)
 			if strings.TrimSpace(assistant.Content) == "" {
 				printJSON(stdout, map[string]any{"ok": true, "turns": turn + 1})
 			} else {
@@ -207,6 +207,7 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 	state.Mode = "blocked"
 	saveState(workspace, state)
 	appendEvent(workspace, "blocked", map[string]any{"mode": "execute", "reason": "budget_reached", "max_turns": executeMaxTurns()})
+	appendRunStopped(workspace, "execute", "budget_reached", map[string]any{"max_turns": executeMaxTurns()})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": executeMaxTurns()})
 	return 2
 }

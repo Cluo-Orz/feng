@@ -75,7 +75,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 				event["artifact"] = assistantArtifact.Path
 				response["artifact"] = assistantArtifact
 			}
-			appendEvent(workspace, "run_stopped", event)
+			appendRunStopped(workspace, "grow", "assistant_done", event)
 			printJSON(stdout, response)
 			return 0
 		}
@@ -100,8 +100,31 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 	state.Mode = "blocked"
 	saveState(workspace, state)
 	appendEvent(workspace, "blocked", map[string]any{"reason": "budget_reached", "max_turns": maxTurns})
+	appendRunStopped(workspace, "grow", "budget_reached", map[string]any{"max_turns": maxTurns})
 	printJSON(stdout, map[string]any{"ok": false, "reason": "budget_reached", "max_turns": maxTurns})
 	return 2
+}
+
+func appendRunStopped(workspace, mode, reason string, data map[string]any) {
+	event := map[string]any{"reason": reason}
+	if strings.TrimSpace(mode) != "" {
+		event["mode"] = mode
+	}
+	for key, value := range data {
+		event[key] = value
+	}
+	appendEvent(workspace, "run_stopped", event)
+}
+
+func runModeFromState(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "growing":
+		return "grow"
+	case "executing":
+		return "execute"
+	default:
+		return strings.TrimSpace(mode)
+	}
 }
 
 func compactConversationSuffixForTurn(workspace, mode string, turn int, suffix []chatMessage) []chatMessage {

@@ -28,6 +28,9 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 		!strings.Contains(out.String(), `"required_env"`) {
 		t.Fatalf("grow did not expose provider setup hints: %s", out.String())
 	}
+	if !hasRunStoppedReason(dir, "grow", "missing_config") {
+		t.Fatalf("missing_config grow did not emit terminal run_stopped event: %+v", tailEvents(dir, 20))
+	}
 	if _, err := os.Stat(filepath.Join(dir, ".feng", "state.yaml")); err != nil {
 		t.Fatal(err)
 	}
