@@ -336,6 +336,7 @@ func updateContextMetrics(workspace string, messages []chatMessage, toolSchemas 
 	}
 	state.ActiveToolPackHash = shaJSON(toolSchemas)
 	state.StablePrefixHash = shaJSON(messages[:minInt(2, len(messages))])
+	state.ContextPackHash = contextPackHash(messages)
 	if maxTokens := maxInputTokensFromState(state); maxTokens > 0 {
 		state.ContextBudget["max_input_tokens"] = maxTokens
 	}

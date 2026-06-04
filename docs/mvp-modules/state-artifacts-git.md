@@ -14,10 +14,12 @@ source_self_commit: ""
 candidate_status: none | dirty | failed | validated
 active_tool_pack_hash: ""
 stable_prefix_hash: ""
+context_pack_hash: ""
 context_budget:
   max_input_tokens: 0
   estimated_input_tokens: 0
   dynamic_suffix_tokens: 0
+  context_pack_tokens: 0
 last_recovery:
   type: ""
   artifact: ""

@@ -92,6 +92,7 @@ type State struct {
 	CandidateStatus    string            `json:"candidate_status"`
 	ActiveToolPackHash string            `json:"active_tool_pack_hash"`
 	StablePrefixHash   string            `json:"stable_prefix_hash"`
+	ContextPackHash    string            `json:"context_pack_hash"`
 	ContextBudget      map[string]int    `json:"context_budget"`
 	LastRecovery       map[string]string `json:"last_recovery"`
 	RecoveryCount      int               `json:"recovery_count"`

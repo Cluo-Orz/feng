@@ -123,6 +123,71 @@ func TestGrowRunsOpenAIToolCallLoop(t *testing.T) {
 	}
 }
 
+func TestGrowRecordsContextPackHashInStateStatusAndGUI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !requestHasCachedContextPack(request.Messages) {
+			t.Errorf("request did not include cached context pack: %+v", request.Messages)
+			http.Error(w, "missing context pack", http.StatusBadRequest)
+			return
+		}
+		writeChatResponse(w, map[string]any{
+			"role":    "assistant",
+			"content": "context observed",
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "api context hash test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "api.md"), []byte("# API skill\nwhen: api context\nUse cached context material.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"grow", "improve api context", "--max-turns", "1"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	state, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ContextPackHash == "" || state.ContextBudget["context_pack_tokens"] == 0 {
+		t.Fatalf("context pack metrics were not recorded in state: %+v", state)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"status"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("status exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), `"context_pack_hash": "`) {
+		t.Fatalf("status did not expose context_pack_hash: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"gui"}, dir, &out, &errOut); code != 0 {
+		t.Fatalf("gui exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	html, err := os.ReadFile(strings.TrimSpace(out.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), "context pack") || !strings.Contains(string(html), state.ContextPackHash) {
+		t.Fatalf("gui did not expose context pack hash: %s", string(html))
+	}
+}
+
 func TestGrowRefreshesActiveToolPackAfterToolGrowth(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -565,6 +630,15 @@ func TestGrowRecordsUnknownToolResult(t *testing.T) {
 func hasToolMessage(messages []chatMessage) bool {
 	for _, message := range messages {
 		if message.Role == "tool" {
+			return true
+		}
+	}
+	return false
+}
+
+func requestHasCachedContextPack(messages []chatMessage) bool {
+	for _, message := range messages {
+		if strings.HasPrefix(message.Content, "cached context pack:\n") {
 			return true
 		}
 	}

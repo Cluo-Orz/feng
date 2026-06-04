@@ -189,6 +189,8 @@ func renderGUIDashboard(state State, events []Event, artifacts []Artifact, provi
 	writeKV(&b, "validated", state.ValidatedCommit)
 	writeKV(&b, "last event", state.LastEventID)
 	writeKV(&b, "tool pack", state.ActiveToolPackHash)
+	writeKV(&b, "stable prefix", state.StablePrefixHash)
+	writeKV(&b, "context pack", state.ContextPackHash)
 	b.WriteString("</div>")
 	b.WriteString("<div class=\"panel\"><h2>Lock</h2>")
 	writeKV(&b, "active", state.Lock["active"])
