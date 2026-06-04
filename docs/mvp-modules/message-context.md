@@ -25,6 +25,9 @@ user: latest event
 skill/world index
   进入稳定 self contract，可缓存。
 
+self_files
+  进入稳定 self contract，只作为 self repo 的均衡文件索引。每个 self root 有固定预算，目录过长时写入 path/[truncated]，避免一个目录挤掉 tools/world/evals 等其他可感知面。
+
 source_self_commit
   如果当前 workspace 来自 hatch package，进入 self contract，用于让 agent 感知这一代 self 的来源版本。
 

@@ -38,6 +38,8 @@ type chatMessage struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 }
 
+const maxSelfFileIndexPerRoot = 40
+
 type chatRequest struct {
 	Model      string           `json:"model"`
 	Messages   []chatMessage    `json:"messages"`
@@ -709,29 +711,40 @@ func handleLLMError(workspace string, err error, stdout io.Writer) int {
 
 func selfFileIndex(workspace string) []string {
 	var names []string
-	for name := range selfFiles {
+	for _, name := range sortedKeysAny(selfFiles) {
 		if exists(filepath.Join(workspace, name)) {
 			names = append(names, name)
 		}
 	}
-	for name := range selfDirs {
+	for _, name := range sortedKeysString(selfDirs) {
 		root := filepath.Join(workspace, name)
 		if !exists(root) {
 			continue
 		}
+		var rootFiles []string
 		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+			if err != nil {
 				return nil
 			}
-			if rel, err := filepath.Rel(workspace, path); err == nil {
-				names = append(names, filepath.ToSlash(rel))
+			rel := relPath(workspace, path)
+			if d.IsDir() {
+				if rel != name && shouldSkipContextDir(rel) {
+					return filepath.SkipDir
+				}
+				return nil
 			}
+			if shouldSkipContextFile(rel) {
+				return nil
+			}
+			rootFiles = append(rootFiles, rel)
 			return nil
 		})
-	}
-	sort.Strings(names)
-	if len(names) > 200 {
-		return names[:200]
+		sort.Strings(rootFiles)
+		limit := minInt(len(rootFiles), maxSelfFileIndexPerRoot)
+		names = append(names, rootFiles[:limit]...)
+		if len(rootFiles) > limit {
+			names = append(names, filepath.ToSlash(filepath.Join(name, "[truncated]")))
+		}
 	}
 	return names
 }

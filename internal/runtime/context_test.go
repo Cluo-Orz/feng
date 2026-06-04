@@ -242,6 +242,45 @@ func TestWorkspaceFileIndexPrioritizesSelfRootsOverUnrelatedNoise(t *testing.T) 
 	}
 }
 
+func TestSelfFileIndexBalancesSelfRoots(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "self index balance test", ""); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 80; i++ {
+		name := filepath.Join(dir, "skills", fmt.Sprintf("skill-%03d.md", i))
+		if err := os.WriteFile(name, []byte("# skill\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, root := range []string{"tools", "world", "evals"} {
+		for i := 0; i < 3; i++ {
+			name := filepath.Join(dir, root, fmt.Sprintf("%s-%03d.md", root, i))
+			if err := os.WriteFile(name, []byte(root+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	files := selfFileIndex(dir)
+	for _, want := range []string{
+		"identity.md",
+		"goal.md",
+		"skills/skill-000.md",
+		"skills/[truncated]",
+		"tools/tools-000.md",
+		"world/world-000.md",
+		"evals/evals-000.md",
+	} {
+		if !containsString(files, want) {
+			t.Fatalf("self file index missing %q in %+v", want, files)
+		}
+	}
+	if containsString(files, "skills/skill-079.md") {
+		t.Fatalf("self file index should cap dense roots before late skill files: %+v", files)
+	}
+}
+
 func TestGitContextDoesNotReportCleanStatusAsTruncated(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "clean git context test", ""); err != nil {
