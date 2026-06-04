@@ -180,6 +180,111 @@ func TestBrokenPermissionsFallbackKeepsSelfRepairable(t *testing.T) {
 	}
 }
 
+func TestEmptyCommandAllowUsesDefaultCommandBoundary(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "empty command allow test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{},
+			"deny":  []any{},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	baseline := executeTool(dir, bootstrapTools(), "run_command", map[string]any{"command": "git status --short"})
+	if baseline.IsError {
+		t.Fatalf("empty allow should keep baseline git command available: %+v", baseline)
+	}
+	arbitrary := executeTool(dir, bootstrapTools(), "run_command", map[string]any{"command": "echo hello"})
+	if !arbitrary.IsError || !strings.Contains(arbitrary.Content, "command is not in allow list") {
+		t.Fatalf("empty allow must not become allow-all: %+v", arbitrary)
+	}
+}
+
+func TestLocalGrowPermissionsKeepSelfRepairWriteFloor(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "self repair write floor test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"reports/**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git status"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	selfRepair := executeTool(dir, bootstrapTools(), "write_file", map[string]any{
+		"path":    "docs/repair.md",
+		"content": "repairable\n",
+	})
+	if selfRepair.IsError {
+		t.Fatalf("local grow should retain self repair write floor: %+v", selfRepair)
+	}
+	declared := executeTool(dir, bootstrapTools(), "write_file", map[string]any{
+		"path":    "reports/out.txt",
+		"content": "report\n",
+	})
+	if declared.IsError {
+		t.Fatalf("declared custom write path should remain allowed: %+v", declared)
+	}
+	private := executeTool(dir, bootstrapTools(), "write_file", map[string]any{
+		"path":    "private.txt",
+		"content": "nope\n",
+	})
+	if !private.IsError || !strings.Contains(private.Content, "file write denied") {
+		t.Fatalf("repair floor should not allow arbitrary files: %+v", private)
+	}
+}
+
+func TestPackagedPermissionsDoNotInheritGrowRepairWriteFloor(t *testing.T) {
+	seed := t.TempDir()
+	user := t.TempDir()
+	if _, err := bootstrap(seed, "packaged permission floor test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"**"},
+			"write": []any{"reports/**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git status"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := bootstrapToolsWithPermissions(seed)
+	denied := executeTool(user, tools, "write_file", map[string]any{
+		"path":    "docs/repair.md",
+		"content": "nope\n",
+	})
+	if !denied.IsError || !strings.Contains(denied.Content, "file write denied") {
+		t.Fatalf("packaged execute should obey frozen permissions exactly: %+v", denied)
+	}
+	allowed := executeTool(user, tools, "write_file", map[string]any{
+		"path":    "reports/out.txt",
+		"content": "ok\n",
+	})
+	if allowed.IsError {
+		t.Fatalf("packaged declared write path should be allowed: %+v", allowed)
+	}
+}
+
 func TestCheckRejectsBrokenPermissionsWithoutBlockingRepair(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "broken permission check test", ""); err != nil {
@@ -207,6 +312,68 @@ func TestCheckRejectsBrokenPermissionsWithoutBlockingRepair(t *testing.T) {
 	})
 	if repair.IsError {
 		t.Fatalf("failed candidate should remain repairable: %+v", repair)
+	}
+}
+
+func TestCheckRejectsInvalidPermissionsSchema(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		permissions map[string]any
+		problem     string
+	}{
+		{
+			name: "files_not_object",
+			permissions: map[string]any{
+				"files": "bad",
+			},
+			problem: "permissions.yaml files must be an object",
+		},
+		{
+			name: "write_not_list",
+			permissions: map[string]any{
+				"files": map[string]any{"write": "docs/**"},
+			},
+			problem: "permissions.yaml files.write must be a list of strings",
+		},
+		{
+			name: "allow_not_list",
+			permissions: map[string]any{
+				"commands": map[string]any{"allow": "git status"},
+			},
+			problem: "permissions.yaml commands.allow must be a list of strings",
+		},
+		{
+			name: "deny_non_string",
+			permissions: map[string]any{
+				"commands": map[string]any{"deny": []any{42}},
+			},
+			problem: "permissions.yaml commands.deny item 0 must be a string",
+		},
+		{
+			name: "empty_item",
+			permissions: map[string]any{
+				"files": map[string]any{"read": []any{""}},
+			},
+			problem: "permissions.yaml files.read item 0 is empty",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := bootstrap(dir, "invalid permissions schema test", ""); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeJSONFile(filepath.Join(dir, "permissions.yaml"), tc.permissions); err != nil {
+				t.Fatal(err)
+			}
+
+			report := runCheck(dir)
+			if report.OK {
+				t.Fatal("expected check to reject invalid permissions schema")
+			}
+			if !containsProblem(report.Problems, tc.problem) {
+				t.Fatalf("expected permissions problem %q, got %+v", tc.problem, report.Problems)
+			}
+		})
 	}
 }
 

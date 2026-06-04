@@ -537,6 +537,7 @@ func runStaticSelfChecks(workspace string) []string {
 	problems = append(problems, scanSecrets(workspace)...)
 	problems = append(problems, checkNoSpecialRuntime(workspace)...)
 	problems = append(problems, checkHooksConfig(workspace)...)
+	problems = append(problems, checkPermissionsConfig(workspace)...)
 	problems = append(problems, checkInterfaceConfig(workspace)...)
 	problems = append(problems, checkSelfRepoTools(workspace)...)
 	problems = append(problems, checkMessageCompiler(workspace)...)

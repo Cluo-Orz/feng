@@ -94,6 +94,9 @@ func loadPermissionsFrom(root string) Permissions {
 	if len(permissions.Files.Read) == 0 {
 		permissions.Files.Read = []string{"**"}
 	}
+	if len(permissions.Commands.Allow) == 0 {
+		permissions.Commands.Allow = cloneStrings(defaultPermissionAllowedCommands)
+	}
 	return permissions
 }
 
@@ -133,10 +136,19 @@ func checkFileWriteWithPermissions(workspace, permissionsRoot, rawPath string) (
 	if rel == ".feng" || strings.HasPrefix(rel, ".feng/") {
 		return "", permissionDenied(workspace, "file_write", rel, "writing .feng is denied", "runtime owns .feng state/events/artifacts; tools cannot write .feng directly")
 	}
-	if !matchesAny(rel, loadPermissionsFrom(permissionsRoot).Files.Write) {
+	permissions := loadPermissionsFrom(permissionsRoot)
+	writePatterns := effectiveWritePatterns(workspace, permissionsRoot, permissions.Files.Write)
+	if !matchesAny(rel, writePatterns) {
 		return "", permissionDenied(workspace, "file_write", rel, "file write denied: "+rel, "file write path did not match permissions.yaml")
 	}
 	return target, nil
+}
+
+func effectiveWritePatterns(workspace, permissionsRoot string, declared []string) []string {
+	if !samePath(workspace, permissionsRoot) {
+		return declared
+	}
+	return unionStrings(defaultPermissionWritePatterns, declared)
 }
 
 func checkCommand(workspace, command string) error {
@@ -298,6 +310,36 @@ func hasRecursiveRmFlag(tokens []string) bool {
 
 func normalizedCommand(command string) string {
 	return strings.Join(strings.Fields(strings.ToLower(command)), " ")
+}
+
+func samePath(left, right string) bool {
+	leftAbs, err := filepath.Abs(left)
+	if err != nil {
+		return false
+	}
+	rightAbs, err := filepath.Abs(right)
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+}
+
+func unionStrings(first, second []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(first)+len(second))
+	add := func(values []string) {
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value == "" || seen[value] {
+				continue
+			}
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	add(first)
+	add(second)
+	return out
 }
 
 func permissionDenied(workspace, source, attempted, message, whyRelevant string) error {

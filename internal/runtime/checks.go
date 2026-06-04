@@ -307,6 +307,60 @@ func checkProviderProfile(workspace string) []string {
 	return nil
 }
 
+func checkPermissionsConfig(workspace string) []string {
+	data, err := readJSONFile(filepath.Join(workspace, "permissions.yaml"))
+	if err != nil {
+		return nil
+	}
+	config, ok := data.(map[string]any)
+	if !ok {
+		return []string{"permissions.yaml must be an object"}
+	}
+	var problems []string
+	if rawFiles, ok := config["files"]; ok {
+		files, ok := rawFiles.(map[string]any)
+		if !ok {
+			problems = append(problems, "permissions.yaml files must be an object")
+		} else {
+			problems = append(problems, checkPermissionStringList(files, "files.read")...)
+			problems = append(problems, checkPermissionStringList(files, "files.write")...)
+		}
+	}
+	if rawCommands, ok := config["commands"]; ok {
+		commands, ok := rawCommands.(map[string]any)
+		if !ok {
+			problems = append(problems, "permissions.yaml commands must be an object")
+		} else {
+			problems = append(problems, checkPermissionStringList(commands, "commands.allow")...)
+			problems = append(problems, checkPermissionStringList(commands, "commands.deny")...)
+		}
+	}
+	return problems
+}
+
+func checkPermissionStringList(parent map[string]any, field string) []string {
+	parts := strings.Split(field, ".")
+	key := parts[len(parts)-1]
+	raw, ok := parent[key]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return []string{"permissions.yaml " + field + " must be a list of strings"}
+	}
+	for i, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return []string{fmt.Sprintf("permissions.yaml %s item %d must be a string", field, i)}
+		}
+		if strings.TrimSpace(text) == "" {
+			return []string{fmt.Sprintf("permissions.yaml %s item %d is empty", field, i)}
+		}
+	}
+	return nil
+}
+
 func loadInterfaceConfig(workspace string) (map[string]any, error) {
 	data, err := readJSONFile(filepath.Join(workspace, "interface.yaml"))
 	if err != nil {
