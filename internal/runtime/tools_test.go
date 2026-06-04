@@ -894,20 +894,64 @@ func TestCheckRejectsHookSkillUnknownTool(t *testing.T) {
 }
 
 func TestCheckRejectsInvalidInterface(t *testing.T) {
-	dir := t.TempDir()
-	if _, err := bootstrap(dir, "bad interface test", ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeJSONFile(filepath.Join(dir, "interface.yaml"), map[string]any{"commands": []any{""}}); err != nil {
-		t.Fatal(err)
-	}
+	for _, tc := range []struct {
+		name     string
+		commands []any
+		problem  string
+	}{
+		{
+			name:     "empty",
+			commands: []any{""},
+			problem:  "interface.yaml command 0 is empty",
+		},
+		{
+			name:     "space",
+			commands: []any{"bad command"},
+			problem:  "must contain only letters, numbers, dot, dash, or underscore",
+		},
+		{
+			name:     "help",
+			commands: []any{"help"},
+			problem:  "help is reserved for command help",
+		},
+		{
+			name:     "duplicate",
+			commands: []any{"review", "review"},
+			problem:  "duplicates command name: review",
+		},
+		{
+			name:     "non_string_object_name",
+			commands: []any{map[string]any{"name": 42}},
+			problem:  "name must be a string",
+		},
+		{
+			name:     "non_string_usage",
+			commands: []any{map[string]any{"name": "review", "usage": 42}},
+			problem:  "usage must be a string",
+		},
+		{
+			name:     "non_string_description",
+			commands: []any{map[string]any{"name": "review", "description": 42}},
+			problem:  "description must be a string",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := bootstrap(dir, "bad interface test", ""); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeJSONFile(filepath.Join(dir, "interface.yaml"), map[string]any{"commands": tc.commands}); err != nil {
+				t.Fatal(err)
+			}
 
-	report := runCheck(dir)
-	if report.OK {
-		t.Fatal("expected check to reject invalid interface")
-	}
-	if !containsProblem(report.Problems, "interface.yaml command 0 is empty") {
-		t.Fatalf("expected invalid interface problem, got %+v", report.Problems)
+			report := runCheck(dir)
+			if report.OK {
+				t.Fatal("expected check to reject invalid interface")
+			}
+			if !containsProblem(report.Problems, tc.problem) {
+				t.Fatalf("expected invalid interface problem %q, got %+v", tc.problem, report.Problems)
+			}
+		})
 	}
 }
 

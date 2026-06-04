@@ -315,21 +315,58 @@ func checkInterfaceConfig(workspace string) []string {
 		return []string{"interface.yaml commands must be a non-empty list"}
 	}
 	var problems []string
+	seen := map[string]bool{}
 	for i, command := range commands {
+		var name string
 		switch typed := command.(type) {
 		case string:
-			if strings.TrimSpace(typed) == "" {
-				problems = append(problems, fmt.Sprintf("interface.yaml command %d is empty", i))
-			}
+			name = strings.TrimSpace(typed)
 		case map[string]any:
-			if strings.TrimSpace(argString(typed, "name")) == "" {
+			rawName, ok := typed["name"]
+			if !ok {
 				problems = append(problems, fmt.Sprintf("interface.yaml command %d missing name", i))
+				continue
+			}
+			textName, ok := rawName.(string)
+			if !ok {
+				problems = append(problems, fmt.Sprintf("interface.yaml command %d name must be a string", i))
+				continue
+			}
+			name = strings.TrimSpace(textName)
+			for _, field := range []string{"description", "usage"} {
+				if value, ok := typed[field]; ok {
+					if _, ok := value.(string); !ok {
+						problems = append(problems, fmt.Sprintf("interface.yaml command %d %s must be a string", i, field))
+					}
+				}
 			}
 		default:
 			problems = append(problems, fmt.Sprintf("interface.yaml command %d must be a string or object", i))
+			continue
 		}
+		if name == "" {
+			problems = append(problems, fmt.Sprintf("interface.yaml command %d is empty", i))
+			continue
+		}
+		if err := validateInterfaceCommandName(name); err != nil {
+			problems = append(problems, fmt.Sprintf("interface.yaml command %d invalid name %q: %s", i, name, err.Error()))
+		}
+		if seen[name] {
+			problems = append(problems, fmt.Sprintf("interface.yaml command %d duplicates command name: %s", i, name))
+		}
+		seen[name] = true
 	}
 	return problems
+}
+
+func validateInterfaceCommandName(name string) error {
+	if slug(name) != name {
+		return fmt.Errorf("must contain only letters, numbers, dot, dash, or underscore")
+	}
+	if strings.EqualFold(name, "help") {
+		return fmt.Errorf("help is reserved for command help")
+	}
+	return nil
 }
 
 func checkNoSpecialRuntime(workspace string) []string {
