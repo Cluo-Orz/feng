@@ -584,6 +584,33 @@ func TestGoRuntimeHatchRejectsInvalidPackageName(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeHatchRequiresOptionValues(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		args    []string
+		message string
+	}{
+		{[]string{"hatch", "--name"}, "--name requires a value"},
+		{[]string{"hatch", "--name="}, "--name requires a value"},
+		{[]string{"hatch", "--name", "--portable"}, "--name requires a value"},
+		{[]string{"hatch", "--name", "sample", "--out"}, "--out requires a path"},
+		{[]string{"hatch", "--name", "sample", "--out="}, "--out requires a path"},
+		{[]string{"hatch", "--name", "sample", "--out", "--portable"}, "--out requires a path"},
+	} {
+		var out, errOut bytes.Buffer
+		code := Run(tc.args, dir, &out, &errOut)
+		if code != 2 {
+			t.Fatalf("%v should fail usage, exit=%d stdout=%s stderr=%s", tc.args, code, out.String(), errOut.String())
+		}
+		if !strings.Contains(errOut.String(), tc.message) {
+			t.Fatalf("%v error was unclear: %s", tc.args, errOut.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dist")); !os.IsNotExist(err) {
+		t.Fatalf("invalid hatch args should not create default output: %v", err)
+	}
+}
+
 func TestGoRuntimeHatchRejectsWorkspaceOutputOutsideDist(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	dir := t.TempDir()

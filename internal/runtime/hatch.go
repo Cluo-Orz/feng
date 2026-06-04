@@ -88,17 +88,33 @@ func parseHatchArgs(args []string) (string, string, bool, error) {
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--name" && i+1 < len(args):
+			if strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "--") {
+				return "", "", false, errors.New("--name requires a value")
+			}
 			name = args[i+1]
 			i++
 		case strings.HasPrefix(args[i], "--name="):
 			name = strings.TrimPrefix(args[i], "--name=")
+			if strings.TrimSpace(name) == "" {
+				return "", "", false, errors.New("--name requires a value")
+			}
 		case args[i] == "--out" && i+1 < len(args):
+			if strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "--") {
+				return "", "", false, errors.New("--out requires a path")
+			}
 			outDir = args[i+1]
 			i++
 		case strings.HasPrefix(args[i], "--out="):
 			outDir = strings.TrimPrefix(args[i], "--out=")
+			if strings.TrimSpace(outDir) == "" {
+				return "", "", false, errors.New("--out requires a path")
+			}
 		case args[i] == "--portable":
 			portable = true
+		case args[i] == "--name":
+			return "", "", false, errors.New("--name requires a value")
+		case args[i] == "--out":
+			return "", "", false, errors.New("--out requires a path")
 		default:
 			return "", "", false, fmt.Errorf("unknown hatch argument: %s", args[i])
 		}
