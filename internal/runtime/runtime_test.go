@@ -1042,6 +1042,29 @@ func TestGoRuntimeGUIOutputInsideWorkspaceStaysUnderFeng(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeGUIOutRequiresPath(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "gui out arg test", ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"gui", "--out"},
+		{"gui", "--out="},
+	} {
+		var out, errOut bytes.Buffer
+		code := Run(args, dir, &out, &errOut)
+		if code != 2 {
+			t.Fatalf("%v should fail usage, exit=%d stdout=%s stderr=%s", args, code, out.String(), errOut.String())
+		}
+		if !strings.Contains(errOut.String(), "--out requires a path") {
+			t.Fatalf("%v error was unclear: %s", args, errOut.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".feng", "gui.html")); !os.IsNotExist(err) {
+		t.Fatalf("invalid gui --out should not write default dashboard: %v", err)
+	}
+}
+
 func TestListArtifactsSkipsJSONContentFiles(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "artifact metadata test", ""); err != nil {

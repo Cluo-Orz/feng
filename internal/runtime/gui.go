@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -45,10 +46,18 @@ func parseGUIArgs(args []string) (string, error) {
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--out" && i+1 < len(args):
+			if strings.TrimSpace(args[i+1]) == "" {
+				return "", errors.New("--out requires a path")
+			}
 			outPath = args[i+1]
 			i++
 		case strings.HasPrefix(args[i], "--out="):
 			outPath = strings.TrimPrefix(args[i], "--out=")
+			if strings.TrimSpace(outPath) == "" {
+				return "", errors.New("--out requires a path")
+			}
+		case args[i] == "--out":
+			return "", errors.New("--out requires a path")
 		default:
 			return "", fmt.Errorf("unknown gui argument: %s", args[i])
 		}
