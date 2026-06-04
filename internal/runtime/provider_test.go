@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,6 +123,75 @@ func TestProviderProfileEnvOverrides(t *testing.T) {
 	}
 	if profile.Model != "override-model" || profile.BaseURL != "http://new.example" {
 		t.Fatalf("env overrides not applied: %+v", profile)
+	}
+}
+
+func TestProviderProfileRejectsStoredSecrets(t *testing.T) {
+	secretLike := "sk-" + "providersecret1234567890"
+	for _, tc := range []struct {
+		name    string
+		extra   map[string]any
+		problem string
+	}{
+		{
+			name:    "direct_api_key",
+			extra:   map[string]any{"api_key": secretLike},
+			problem: "provider profile must not store API keys or tokens; remove api_key and use api_key_env",
+		},
+		{
+			name: "nested_authorization",
+			extra: map[string]any{
+				"headers": map[string]any{
+					"Authorization": "Bearer " + secretLike,
+				},
+			},
+			problem: "provider profile must not store API keys or tokens; remove headers.Authorization and use api_key_env",
+		},
+		{
+			name:    "secret_like_value",
+			extra:   map[string]any{"note": "do not store " + secretLike},
+			problem: "provider profile contains a secret-like value in note; use api_key_env instead",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := bootstrap(dir, "provider secret boundary test", ""); err != nil {
+				t.Fatal(err)
+			}
+			profile := map[string]any{
+				"id":            "local",
+				"protocol":      "openai_chat",
+				"base_url":      "http://127.0.0.1:9999",
+				"api_key_env":   "LOCAL_LLM_KEY",
+				"default_model": "local-model",
+			}
+			for key, value := range tc.extra {
+				profile[key] = value
+			}
+			if err := writeJSONFile(filepath.Join(dir, ".feng", "provider.yaml"), profile); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := loadProviderProfile(dir); err == nil || !strings.Contains(err.Error(), tc.problem) || strings.Contains(err.Error(), secretLike) {
+				t.Fatalf("provider secret error not enforced/redacted: err=%v", err)
+			}
+			status := providerStatus(dir)
+			if fmt.Sprint(status["error"]) == "" || strings.Contains(fmt.Sprint(status), secretLike) {
+				t.Fatalf("provider status did not expose redacted config error: %+v", status)
+			}
+			report := runCheck(dir)
+			if report.OK {
+				t.Fatal("check should reject provider profiles that store secrets")
+			}
+			for _, problem := range report.Problems {
+				if strings.Contains(problem, secretLike) {
+					t.Fatalf("check problem leaked secret-like value: %s", problem)
+				}
+			}
+			if !containsProblem(report.Problems, tc.problem) {
+				t.Fatalf("expected provider secret problem %q, got %+v", tc.problem, report.Problems)
+			}
+		})
 	}
 }
 

@@ -142,6 +142,9 @@ func loadProviderProfile(workspace string) (ProviderProfile, error) {
 			return ProviderProfile{}, err
 		}
 		raw, _ := value.(map[string]any)
+		if err := validateProviderProfileStorage(raw); err != nil {
+			return ProviderProfile{}, err
+		}
 		profile := ProviderProfile{
 			ID:        firstNonEmpty(argString(raw, "id"), "provider"),
 			Protocol:  firstNonEmpty(argString(raw, "protocol"), "openai_chat"),
@@ -153,6 +156,91 @@ func loadProviderProfile(workspace string) (ProviderProfile, error) {
 		return validateProviderProfile(profile)
 	}
 	return validateProviderProfile(defaultProviderProfile())
+}
+
+func validateProviderProfileStorage(raw map[string]any) error {
+	if field := providerProfileSecretField("", raw); field != "" {
+		return LLMError{
+			Kind:    "request_error",
+			Message: "provider profile must not store API keys or tokens; remove " + field + " and use api_key_env",
+		}
+	}
+	if field := providerProfileSecretLikeValue("", raw); field != "" {
+		return LLMError{
+			Kind:    "request_error",
+			Message: "provider profile contains a secret-like value in " + field + "; use api_key_env instead",
+		}
+	}
+	return nil
+}
+
+func providerProfileSecretField(prefix string, value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		keys := sortedKeysAny(typed)
+		for _, key := range keys {
+			field := joinProfileField(prefix, key)
+			if isProviderSecretField(key) {
+				return field
+			}
+			if found := providerProfileSecretField(field, typed[key]); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for i, item := range typed {
+			if found := providerProfileSecretField(fmt.Sprintf("%s[%d]", prefix, i), item); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+func providerProfileSecretLikeValue(prefix string, value any) string {
+	switch typed := value.(type) {
+	case string:
+		if secretPattern.MatchString(typed) {
+			return prefix
+		}
+	case map[string]any:
+		keys := sortedKeysAny(typed)
+		for _, key := range keys {
+			if found := providerProfileSecretLikeValue(joinProfileField(prefix, key), typed[key]); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for i, item := range typed {
+			if found := providerProfileSecretLikeValue(fmt.Sprintf("%s[%d]", prefix, i), item); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+func joinProfileField(prefix, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
+}
+
+func isProviderSecretField(key string) bool {
+	normalized := normalizeProviderProfileKey(key)
+	switch normalized {
+	case "apikey", "key", "secret", "token", "accesstoken", "bearertoken", "authorization", "auth", "password", "xapikey":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeProviderProfileKey(key string) string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	replacer := strings.NewReplacer("_", "", "-", "", ".", "", " ", "")
+	return replacer.Replace(key)
 }
 
 func providerProfileCandidates(workspace string) []string {
