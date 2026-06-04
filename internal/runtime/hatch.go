@@ -42,18 +42,35 @@ var selfNames = []string{
 const hatchPackageMarker = ".feng-package-dir"
 
 type HatchManifest struct {
-	Name                     string         `json:"name"`
-	Portable                 bool           `json:"portable"`
-	SelfCommit               string         `json:"self_commit"`
-	SelfTag                  string         `json:"self_tag,omitempty"`
-	RunnerVersion            string         `json:"runner_version"`
-	Runner                   string         `json:"runner"`
-	RequiredProviderProfiles []string       `json:"required_provider_profiles"`
-	RequiredEnv              []string       `json:"required_env"`
-	Entrypoints              []string       `json:"entrypoints"`
-	Installers               []string       `json:"installers,omitempty"`
-	Interface                map[string]any `json:"interface"`
-	Excludes                 []string       `json:"excludes"`
+	Name                     string            `json:"name"`
+	Portable                 bool              `json:"portable"`
+	SelfCommit               string            `json:"self_commit"`
+	SelfTag                  string            `json:"self_tag,omitempty"`
+	RunnerVersion            string            `json:"runner_version"`
+	Runner                   string            `json:"runner"`
+	RequiredProviderProfiles []string          `json:"required_provider_profiles"`
+	RequiredEnv              []string          `json:"required_env"`
+	Entrypoints              []string          `json:"entrypoints"`
+	Installers               []string          `json:"installers,omitempty"`
+	Interface                map[string]any    `json:"interface"`
+	PermissionsSummary       PermissionSummary `json:"permissions_summary"`
+	Excludes                 []string          `json:"excludes"`
+}
+
+type PermissionSummary struct {
+	Source   string                   `json:"source"`
+	Files    PermissionFileSummary    `json:"files"`
+	Commands PermissionCommandSummary `json:"commands"`
+}
+
+type PermissionFileSummary struct {
+	Read  []string `json:"read"`
+	Write []string `json:"write"`
+}
+
+type PermissionCommandSummary struct {
+	Allow []string `json:"allow"`
+	Deny  []string `json:"deny"`
 }
 
 func cmdHatch(args []string, cwd string, stdout, stderr io.Writer) int {
@@ -235,6 +252,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		Entrypoints:              entrypoints,
 		Installers:               installers,
 		Interface:                interfaceConfig,
+		PermissionsSummary:       packagePermissionsSummary(selfRoot),
 		Excludes:                 []string{"API keys", "local provider profile", ".feng/cache", ".feng/runs", "unvalidated candidate"},
 	}
 	if err := writeJSONFile(filepath.Join(output, "feng-release.yaml"), manifest); err != nil {
@@ -595,6 +613,21 @@ func writeProviderExample(output string) error {
 		"default_model": "deepseek-chat",
 	}
 	return writeJSONFile(filepath.Join(output, "provider-examples", "deepseek-anthropic.yaml"), deepseekAnthropic)
+}
+
+func packagePermissionsSummary(selfRoot string) PermissionSummary {
+	permissions := loadPermissionsFrom(selfRoot)
+	return PermissionSummary{
+		Source: "self/permissions.yaml",
+		Files: PermissionFileSummary{
+			Read:  cloneStrings(permissions.Files.Read),
+			Write: cloneStrings(permissions.Files.Write),
+		},
+		Commands: PermissionCommandSummary{
+			Allow: cloneStrings(permissions.Commands.Allow),
+			Deny:  cloneStrings(permissions.Commands.Deny),
+		},
+	}
 }
 
 func packageChecksums(root string) (map[string]string, error) {

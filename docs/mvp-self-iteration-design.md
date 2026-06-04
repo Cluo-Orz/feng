@@ -667,7 +667,14 @@ required_provider_profiles:
   - deepseek
 required_env:
   - DEEPSEEK_API_KEY
-permissions_summary: "..."
+permissions_summary:
+  source: self/permissions.yaml
+  files:
+    read: []
+    write: []
+  commands:
+    allow: []
+    deny: []
 interface:
   commands:
     - grow

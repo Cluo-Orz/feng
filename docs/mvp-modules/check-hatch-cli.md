@@ -71,6 +71,8 @@ hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 w
 
 hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts/gui/tag/config。
 
+hatch manifest 必须包含 frozen self 的 `permissions_summary`，列出 `permissions.yaml` 中的文件读写范围和命令 allow/deny。它只是发布物说明，不授予额外权限；真正执行时仍由 runtime 读取 packaged self 的权限并逐次检查 tool call。
+
 `checksums.json` 是 package 的完整性边界。packaged runner 启动时如果发现 package 根目录存在 checksums，就必须校验 frozen self、runner、entrypoint、installer、provider examples 和 manifest 没有缺失、变更或出现未记录文件；校验失败时拒绝运行。没有 checksums 的本地测试 seed/template 不触发 package integrity。
 
 package 根目录是发布物，不是用户 workspace。packaged runner 可以在 package 目录里显示 help，但 `grow` 或 execute 任务不能把 package 根目录或其中的 `self/` 当作 workspace 写入 `.feng`、`.git` 或顶层 self 文件；用户应从目标 workspace 目录运行命名命令。

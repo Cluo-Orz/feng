@@ -414,6 +414,14 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if !strings.Contains(string(manifest), `"installers"`) || !strings.Contains(string(manifest), `"install.ps1"`) {
 		t.Fatalf("hatch manifest did not include installers: %s", string(manifest))
 	}
+	if !strings.Contains(string(manifest), `"permissions_summary"`) ||
+		!strings.Contains(string(manifest), `"source": "self/permissions.yaml"`) ||
+		!strings.Contains(string(manifest), `"read"`) ||
+		!strings.Contains(string(manifest), `"write"`) ||
+		!strings.Contains(string(manifest), `"allow"`) ||
+		!strings.Contains(string(manifest), `"deny"`) {
+		t.Fatalf("hatch manifest did not include permissions summary: %s", string(manifest))
+	}
 	checksums, err := os.ReadFile(filepath.Join(packagePath, "checksums.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -431,6 +439,18 @@ func TestGoRuntimeHatchManifestUsesInterfaceFile(t *testing.T) {
 		t.Fatalf("grow exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
 	if err := writeJSONFile(filepath.Join(dir, "interface.yaml"), map[string]any{"commands": []any{"review"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "permissions.yaml"), map[string]any{
+		"files": map[string]any{
+			"read":  []any{"docs/**"},
+			"write": []any{"reports/**"},
+		},
+		"commands": map[string]any{
+			"allow": []any{"git status"},
+			"deny":  []any{"git reset --hard"},
+		},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
@@ -454,6 +474,13 @@ func TestGoRuntimeHatchManifestUsesInterfaceFile(t *testing.T) {
 	commands, _ := manifest.Interface["commands"].([]any)
 	if len(commands) != 1 || commands[0] != "review" {
 		t.Fatalf("hatch manifest did not use interface.yaml: %+v", manifest.Interface)
+	}
+	if manifest.PermissionsSummary.Source != "self/permissions.yaml" ||
+		!stringSliceEqual(manifest.PermissionsSummary.Files.Read, []string{"docs/**"}) ||
+		!stringSliceEqual(manifest.PermissionsSummary.Files.Write, []string{"reports/**"}) ||
+		!stringSliceEqual(manifest.PermissionsSummary.Commands.Allow, []string{"git status"}) ||
+		!stringSliceEqual(manifest.PermissionsSummary.Commands.Deny, []string{"git reset --hard"}) {
+		t.Fatalf("hatch manifest did not use frozen permissions.yaml: %+v", manifest.PermissionsSummary)
 	}
 }
 
@@ -986,6 +1013,18 @@ func envHasKey(env []string, key string) bool {
 		}
 	}
 	return false
+}
+
+func stringSliceEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {
