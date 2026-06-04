@@ -790,6 +790,9 @@ func loadStateUnlocked(workspace string) (State, error) {
 	if state.Lock == nil {
 		state.Lock = defaultState("").Lock
 	}
+	if strings.TrimSpace(state.ContextPackHash) == "" {
+		state.ContextBudget["context_pack_tokens"] = 0
+	}
 	return state, err
 }
 

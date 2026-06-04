@@ -277,6 +277,27 @@ func TestAppendEventUpdatesObservableLastEventID(t *testing.T) {
 	}
 }
 
+func TestLoadStateNormalizesEmptyContextPackTokens(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".feng"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	state := defaultState("legacy context metrics")
+	state.ContextPackHash = ""
+	state.ContextBudget["context_pack_tokens"] = 1
+	if err := saveState(dir, state); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := loadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ContextBudget["context_pack_tokens"] != 0 {
+		t.Fatalf("empty context_pack_hash should normalize context_pack_tokens to zero: %+v", loaded.ContextBudget)
+	}
+}
+
 func TestAppendEventUsesUniqueObservableIDs(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "event id test", ""); err != nil {
