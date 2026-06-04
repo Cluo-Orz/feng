@@ -1,14 +1,30 @@
+# Go binaries and test artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Local environment and editor files
+.env
+# .idea/
+# .vscode/
+
+# feng local runtime and build outputs
 dist/
 bin/
-*.test
 feng.exe
+.feng/lock
+.feng/provider.yaml
+.feng/provider.json
+.feng/gui.html
 .feng/state.yaml
 .feng/events.jsonl
 .feng/artifacts/
 .feng/cache/
 .feng/runs/
-# feng runtime
-.feng/lock
-.feng/provider.yaml
-.feng/provider.json
-.feng/gui.html
