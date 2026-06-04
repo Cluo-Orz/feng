@@ -778,6 +778,78 @@ func TestCheckRejectsMCPToolTypeInMVP(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsInvalidSelfRepoToolInputSchema(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		schema  any
+		problem string
+	}{
+		{
+			name:    "non_object_schema",
+			schema:  "bad",
+			problem: "tool input_schema must be an object",
+		},
+		{
+			name: "non_object_root_type",
+			schema: map[string]any{
+				"type": "array",
+			},
+			problem: "tool input_schema root type must be object",
+		},
+		{
+			name: "required_string",
+			schema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"subject": map[string]any{"type": "string"}},
+				"required":   "subject",
+			},
+			problem: "tool input_schema required must be a list of strings",
+		},
+		{
+			name: "missing_required_property",
+			schema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+				"required":   []any{"subject"},
+			},
+			problem: "tool input_schema required field has no property schema",
+		},
+		{
+			name: "unsupported_property_type",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"subject": map[string]any{"type": "date"},
+				},
+			},
+			problem: "tool input_schema property has unsupported type",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := bootstrap(dir, "bad tool schema test", ""); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeJSONFile(filepath.Join(dir, "tools", "bad-schema.tool.yaml"), map[string]any{
+				"type":         "command",
+				"name":         "bad_schema_tool",
+				"command":      "git status --short",
+				"input_schema": tc.schema,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			report := runCheck(dir)
+			if report.OK {
+				t.Fatal("expected check to reject invalid tool input_schema")
+			}
+			if !containsProblem(report.Problems, tc.problem) {
+				t.Fatalf("expected schema problem %q, got %+v", tc.problem, report.Problems)
+			}
+		})
+	}
+}
+
 func TestCheckRejectsBrokenHookSkillReferences(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "bad hook test", ""); err != nil {

@@ -75,6 +75,8 @@ FENG_WORKSPACE_DIR
 
 MVP 的 schema validation 只做小闭环：检查 required 字段和常见 JSON 类型（string、integer、number、boolean、object、array）。校验失败时不执行工具命令，写入 `tool_argument_invalid` event，并把错误作为 tool result 返回给 LLM。
 
+`check` 也必须验证 self repo tool 的 `input_schema` 本身：根必须是 object，`properties` 必须是 object，`required` 必须是字符串列表，属性类型只能使用 MVP 支持的常见 JSON 类型。坏 schema 不能进入 validated self。
+
 ## Active Tool Pack
 
 选择依据：

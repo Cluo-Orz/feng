@@ -289,6 +289,15 @@ func argumentMatchesType(value any, expected string) bool {
 	}
 }
 
+func supportedToolSchemaType(value string) bool {
+	switch value {
+	case "string", "integer", "number", "boolean", "object", "array":
+		return true
+	default:
+		return false
+	}
+}
+
 func runReadFile(workspace string, args map[string]any) ToolResult {
 	return runReadFileWithPermissions(workspace, workspace, args)
 }

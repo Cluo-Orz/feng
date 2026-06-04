@@ -49,6 +49,9 @@ func checkSelfRepoTools(workspace string) []string {
 			problems = append(problems, "tool command is empty in "+rel)
 			return nil
 		}
+		if inputSchema, ok := raw["input_schema"]; ok {
+			problems = append(problems, checkToolInputSchema(rel, inputSchema)...)
+		}
 		workdir := strings.ToLower(strings.TrimSpace(argString(raw, "workdir")))
 		if workdir != "" && workdir != "workspace" && workdir != "self" {
 			problems = append(problems, "tool workdir must be workspace or self in "+rel)
@@ -59,6 +62,70 @@ func checkSelfRepoTools(workspace string) []string {
 		return nil
 	})
 	return problems
+}
+
+func checkToolInputSchema(rel string, raw any) []string {
+	schema, ok := raw.(map[string]any)
+	if !ok {
+		return []string{"tool input_schema must be an object in " + rel}
+	}
+	var problems []string
+	if schemaType := strings.TrimSpace(argString(schema, "type")); schemaType != "" && schemaType != "object" {
+		problems = append(problems, "tool input_schema root type must be object in "+rel)
+	}
+	properties := map[string]any{}
+	if rawProperties, ok := schema["properties"]; ok {
+		var propertiesOK bool
+		properties, propertiesOK = rawProperties.(map[string]any)
+		if !propertiesOK {
+			problems = append(problems, "tool input_schema properties must be an object in "+rel)
+		}
+	}
+	if rawRequired, ok := schema["required"]; ok {
+		required, ok := stringSliceFromSchemaList(rawRequired)
+		if !ok {
+			problems = append(problems, "tool input_schema required must be a list of strings in "+rel)
+		}
+		for _, name := range required {
+			if strings.TrimSpace(name) == "" {
+				problems = append(problems, "tool input_schema required contains an empty field in "+rel)
+				continue
+			}
+			if _, ok := properties[name]; !ok {
+				problems = append(problems, "tool input_schema required field has no property schema in "+rel+": "+name)
+			}
+		}
+	}
+	for name, rawProperty := range properties {
+		property, ok := rawProperty.(map[string]any)
+		if !ok {
+			problems = append(problems, "tool input_schema property must be an object in "+rel+": "+name)
+			continue
+		}
+		if propertyType := strings.TrimSpace(argString(property, "type")); propertyType != "" && !supportedToolSchemaType(propertyType) {
+			problems = append(problems, "tool input_schema property has unsupported type in "+rel+": "+name+"="+propertyType)
+		}
+	}
+	return problems
+}
+
+func stringSliceFromSchemaList(raw any) ([]string, bool) {
+	switch typed := raw.(type) {
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, text)
+		}
+		return out, true
+	case []string:
+		return typed, true
+	default:
+		return nil, false
+	}
 }
 
 func runCommandEvals(workspace string) []string {
