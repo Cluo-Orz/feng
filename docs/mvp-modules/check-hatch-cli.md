@@ -158,4 +158,4 @@ Progress
 Artifacts
 ```
 
-Running 必须包含当前 lock 的 active/stale/owner/pid/heartbeat 视图，和 `feng status` 使用同一套 lock snapshot。GUI 只可视化 `.feng/` 文件，不绕过 CLI、permissions 或 Git 语义。
+Running 必须包含当前 lock 的 active/stale/owner/pid/heartbeat 视图，和 `feng status` 使用同一套 lock snapshot。GUI 只可视化 `.feng/` 文件，不绕过 CLI、permissions 或 Git 语义；如果显式指定 `--out` 且输出仍在当前 workspace 内，路径必须位于 `.feng/` 下，不能写入 self roots。

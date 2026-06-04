@@ -994,6 +994,54 @@ func TestGoRuntimeGUIWritesReadOnlyDashboard(t *testing.T) {
 	}
 }
 
+func TestGoRuntimeGUIOutputInsideWorkspaceStaysUnderFeng(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "gui output boundary test", ""); err != nil {
+		t.Fatal(err)
+	}
+	identityBefore, err := os.ReadFile(filepath.Join(dir, "identity.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"gui", "--out", "identity.md"}, dir, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("gui should reject self root output, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "gui output inside workspace must be under .feng/") {
+		t.Fatalf("gui output boundary error was unclear: %s", errOut.String())
+	}
+	identityAfter, err := os.ReadFile(filepath.Join(dir, "identity.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(identityAfter) != string(identityBefore) {
+		t.Fatalf("gui mutated identity.md: before=%q after=%q", string(identityBefore), string(identityAfter))
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = Run([]string{"gui", "--out", ".feng/custom-dashboard.html"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("gui should allow .feng output, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".feng", "custom-dashboard.html")); err != nil {
+		t.Fatalf("gui did not write .feng output: %v", err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "dashboard.html")
+	out.Reset()
+	errOut.Reset()
+	code = Run([]string{"gui", "--out", outside}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("gui should allow outside-workspace export, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("gui did not write outside export: %v", err)
+	}
+}
+
 func TestListArtifactsSkipsJSONContentFiles(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "artifact metadata test", ""); err != nil {

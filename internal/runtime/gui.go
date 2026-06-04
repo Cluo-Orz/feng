@@ -27,6 +27,10 @@ func cmdGUI(args []string, cwd string, stdout, stderr io.Writer) int {
 	} else if !filepath.IsAbs(outPath) {
 		outPath = filepath.Join(cwd, outPath)
 	}
+	if err := validateGUIOutputPath(workspace, outPath); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	path, err := writeGUIDashboard(workspace, outPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "gui failed: %v\n", err)
@@ -50,6 +54,29 @@ func parseGUIArgs(args []string) (string, error) {
 		}
 	}
 	return outPath, nil
+}
+
+func validateGUIOutputPath(workspace, outPath string) error {
+	absPath, err := filepath.Abs(outPath)
+	if err != nil {
+		return err
+	}
+	absWorkspace, err := filepath.Abs(workspace)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(absWorkspace, absPath)
+	if err != nil {
+		return err
+	}
+	relSlash := filepath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(relSlash, "../") {
+		return nil
+	}
+	if relSlash == ".feng" || strings.HasPrefix(relSlash, ".feng/") {
+		return nil
+	}
+	return fmt.Errorf("gui output inside workspace must be under .feng/: %s", relSlash)
 }
 
 func writeGUIDashboard(workspace, outPath string) (string, error) {
