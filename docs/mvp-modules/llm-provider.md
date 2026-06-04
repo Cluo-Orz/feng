@@ -74,6 +74,8 @@ feng config init --user
 
 `config init` 只写 provider profile 模板，例如 base URL、protocol、model 和 `api_key_env`。真实 API key 仍然只通过环境变量提供，不写入 self repo、`.feng/provider.yaml`、artifact 或 hatch package。
 
+`config status` 是无参数命令；传入多余参数必须报错，不能静默忽略。配置入口和其他 CLI 入口一样，必须让用户明确知道自己运行的到底是什么。
+
 从 hatch package 目录运行时，workspace scope 的 `config init` 必须拒绝写入 package 根目录；package 是发布物，不是 provider workspace。用户可以运行 `config init --user` 写入用户级 provider profile，或切换到目标 workspace 目录再运行 workspace scope。
 
 ## Recovery

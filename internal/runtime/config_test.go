@@ -40,6 +40,26 @@ func TestConfigInitWritesWorkspaceProviderProfileWithoutSecret(t *testing.T) {
 		!strings.Contains(out.String(), `"provider_config_paths"`) {
 		t.Fatalf("config status missing provider hints: %s", out.String())
 	}
+
+	out.Reset()
+	errOut.Reset()
+	code = Run([]string{"config"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("config default status exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), `"provider":`) {
+		t.Fatalf("config default did not show status: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = Run([]string{"config", "status", "--bad"}, dir, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("config status extra arg should fail, exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "unknown config status argument: --bad") {
+		t.Fatalf("config status extra arg error was unclear: %s", errOut.String())
+	}
 }
 
 func TestConfigInitUserScopeUsesFengHome(t *testing.T) {

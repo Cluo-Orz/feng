@@ -9,12 +9,16 @@ import (
 
 func cmdConfig(args []string, cwd string, stdout, stderr io.Writer) int {
 	workspace := configWorkspace(cwd)
-	if len(args) == 0 || args[0] == "status" {
-		printJSON(stdout, map[string]any{
-			"ok":       true,
-			"provider": providerStatus(workspace),
-			"commands": []string{"config", "config status", "config init"},
-		})
+	if len(args) == 0 {
+		printConfigStatus(workspace, stdout)
+		return 0
+	}
+	if args[0] == "status" {
+		if err := noExtraArgs("config status", args[1:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		printConfigStatus(workspace, stdout)
 		return 0
 	}
 	switch args[0] {
@@ -28,6 +32,14 @@ func cmdConfig(args []string, cwd string, stdout, stderr io.Writer) int {
 		printConfigHelp(stderr)
 		return 2
 	}
+}
+
+func printConfigStatus(workspace string, stdout io.Writer) {
+	printJSON(stdout, map[string]any{
+		"ok":       true,
+		"provider": providerStatus(workspace),
+		"commands": []string{"config", "config status", "config init"},
+	})
 }
 
 func printConfigHelp(w io.Writer) {
