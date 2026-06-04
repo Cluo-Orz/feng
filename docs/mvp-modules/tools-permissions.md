@@ -31,6 +31,8 @@ type: command
 
 如果出现 `type: mcp` 或其他类型，`check` 必须拒绝。这样可以避免 validated self 声明了 runtime 还不会执行的工具。
 
+self repo tool 名必须唯一，也不能和四个 bootstrap tool 重名。`check` 必须拒绝重复或 shadow bootstrap 的 tool 名，避免 registry 静默忽略某个工具，导致 self repo 里出现声明了但不可调用的能力。
+
 `list_files` 默认跳过 `.git`、`.feng` 运行目录、依赖目录和构建/cache 目录，避免第一次感知就被噪声吃掉 token；如果明确把这些目录作为 `path` 传入，仍允许在权限范围内列出。
 
 self repo tool 可以带少量选择提示：

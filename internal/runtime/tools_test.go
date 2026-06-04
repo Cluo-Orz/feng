@@ -778,6 +778,50 @@ func TestCheckRejectsMCPToolTypeInMVP(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsShadowedOrDuplicateSelfRepoToolNames(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		files   map[string]string
+		problem string
+	}{
+		{
+			name: "bootstrap_shadow",
+			files: map[string]string{
+				"tools/read.tool.yaml": `{"type":"command","name":"read_file","command":"git status --short"}`,
+			},
+			problem: "tool name shadows bootstrap tool",
+		},
+		{
+			name: "duplicate_self_tool",
+			files: map[string]string{
+				"tools/a.tool.yaml": `{"type":"command","name":"review_gate","command":"git status --short"}`,
+				"tools/b.tool.yaml": `{"type":"command","name":"review_gate","command":"git status --short"}`,
+			},
+			problem: "tool name duplicates another self repo tool",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := bootstrap(dir, "tool name boundary test", ""); err != nil {
+				t.Fatal(err)
+			}
+			for rel, content := range tc.files {
+				if err := writeText(filepath.Join(dir, filepath.FromSlash(rel)), content+"\n"); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			report := runCheck(dir)
+			if report.OK {
+				t.Fatal("expected check to reject ambiguous tool registry")
+			}
+			if !containsProblem(report.Problems, tc.problem) {
+				t.Fatalf("expected problem %q, got %+v", tc.problem, report.Problems)
+			}
+		})
+	}
+}
+
 func TestCheckRejectsInvalidSelfRepoToolInputSchema(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

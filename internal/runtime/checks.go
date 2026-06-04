@@ -18,6 +18,11 @@ func checkSelfRepoTools(workspace string) []string {
 	if !exists(toolsDir) {
 		return problems
 	}
+	bootstrapNames := map[string]bool{}
+	for _, tool := range bootstrapTools() {
+		bootstrapNames[tool.Name] = true
+	}
+	seenToolNames := map[string]string{}
 	_ = filepath.WalkDir(toolsDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !isToolFile(path) {
 			return nil
@@ -44,6 +49,15 @@ func checkSelfRepoTools(workspace string) []string {
 		command := strings.TrimSpace(argString(raw, "command"))
 		if !validToolName(name) {
 			problems = append(problems, "tool has invalid name in "+rel+": "+name)
+		} else {
+			if bootstrapNames[name] {
+				problems = append(problems, "tool name shadows bootstrap tool in "+rel+": "+name)
+			}
+			if firstRel, ok := seenToolNames[name]; ok {
+				problems = append(problems, "tool name duplicates another self repo tool in "+rel+": "+name+"; first declared in "+firstRel)
+			} else {
+				seenToolNames[name] = rel
+			}
 		}
 		if command == "" {
 			problems = append(problems, "tool command is empty in "+rel)
