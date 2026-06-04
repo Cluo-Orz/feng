@@ -71,6 +71,9 @@ func removeStaleLock(lockPath string) bool {
 func lockIsStale(lockPath string, info os.FileInfo) bool {
 	heartbeat := info.ModTime()
 	if record, ok := readLockRecord(lockPath); ok && record.Heartbeat > 0 {
+		if record.PID > 0 && !processAlive(record.PID) {
+			return true
+		}
 		heartbeat = time.Unix(record.Heartbeat, 0)
 	}
 	return time.Since(heartbeat) >= lockStaleAfter()

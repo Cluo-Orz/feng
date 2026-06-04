@@ -31,7 +31,7 @@ lock:
 
 Go runtime 使用 `.feng/lock` 表示 workspace 修改锁。`grow`、`check`、`hatch` 这类会修改 workspace 的命令必须先拿锁；`status/watch/artifacts/gui` 只读命令不需要拿锁。
 
-拿到锁的进程会持续刷新 `.feng/lock` 和 `.feng/state.yaml` 里的 heartbeat。stale lock 判断以 heartbeat 为准，而不是只看 lock 文件 mtime，避免长任务运行中被误判为失效。
+拿到锁的进程会持续刷新 `.feng/lock` 和 `.feng/state.yaml` 里的 heartbeat。stale lock 判断以 heartbeat 为准，而不是只看 lock 文件 mtime，避免长任务运行中被误判为失效；但如果 lock 记录的 PID 已经不存在，即使 heartbeat 看起来很新，也必须视为 stale，让下一轮命令可以恢复 workspace。
 
 `status` 和 GUI 的 running 视图必须从当前 `.feng/lock` 文件即时计算，并标出 `active/stale/owner/pid/started_at/heartbeat`。`.feng/state.yaml` 里的 `lock` 是 heartbeat 写入的观测副本，不能作为判断当前是否仍在运行的唯一依据。
 

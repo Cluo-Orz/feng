@@ -224,7 +224,7 @@ func TestWorkspaceLockStaleRecoveryUsesHeartbeatNotModTime(t *testing.T) {
 	}
 	lockPath := filepath.Join(dir, ".feng", "lock")
 	freshHeartbeat := time.Now().Add(60 * time.Second).Unix()
-	if err := os.WriteFile(lockPath, []byte(`{"owner":"fresh","pid":1,"started_at":1,"heartbeat":`+strconv.FormatInt(freshHeartbeat, 10)+`}`+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"fresh","pid":`+strconv.Itoa(os.Getpid())+`,"started_at":1,"heartbeat":`+strconv.FormatInt(freshHeartbeat, 10)+`}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-2 * time.Second)
@@ -248,6 +248,28 @@ func TestWorkspaceLockStaleRecoveryUsesHeartbeatNotModTime(t *testing.T) {
 	release, err = acquireWorkspaceLock(dir, "second")
 	if err != nil {
 		t.Fatalf("stale heartbeat lock was not recovered: %v", err)
+	}
+	release()
+}
+
+func TestWorkspaceLockStaleRecoveryRemovesDeadProcessLock(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "dead pid lock test", ""); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, ".feng", "lock")
+	freshHeartbeat := time.Now().Add(60 * time.Second).Unix()
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"dead","pid":999999999,"started_at":1,"heartbeat":`+strconv.FormatInt(freshHeartbeat, 10)+`}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot := currentLockSnapshot(dir)
+	if snapshot["active"] != "false" || snapshot["stale"] != "true" || snapshot["owner"] != "dead" {
+		t.Fatalf("dead pid lock should be stale despite fresh heartbeat: %+v", snapshot)
+	}
+	release, err := acquireWorkspaceLock(dir, "recovered")
+	if err != nil {
+		t.Fatalf("dead pid lock was not recovered: %v", err)
 	}
 	release()
 }
