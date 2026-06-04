@@ -33,7 +33,7 @@ Go runtime 使用 `.feng/lock` 表示 workspace 修改锁。`grow`、`check`、`
 
 拿到锁的进程会持续刷新 `.feng/lock` 和 `.feng/state.yaml` 里的 heartbeat。stale lock 判断以 heartbeat 为准，而不是只看 lock 文件 mtime，避免长任务运行中被误判为失效。
 
-`status` 的 running 视图必须从当前 `.feng/lock` 文件即时计算，并标出 `active/stale/owner/pid/started_at/heartbeat`。`.feng/state.yaml` 里的 `lock` 是 heartbeat 写入的观测副本，不能作为判断当前是否仍在运行的唯一依据。
+`status` 和 GUI 的 running 视图必须从当前 `.feng/lock` 文件即时计算，并标出 `active/stale/owner/pid/started_at/heartbeat`。`.feng/state.yaml` 里的 `lock` 是 heartbeat 写入的观测副本，不能作为判断当前是否仍在运行的唯一依据。
 
 `last_recovery` 表示当前需要用户或下一轮 grow 关注的最近恢复状态。check 失败时它指向 check report artifact；provider 失败时它指向 provider-error artifact。成功的 grow 或 check 会清空它；`recovery_count` 保留为累计计数，避免 status/gui 在 ready 状态下继续展示旧错误。
 

@@ -100,6 +100,60 @@ func TestStatusReportsStaleWorkspaceLock(t *testing.T) {
 	}
 }
 
+func TestGUIReportsCurrentWorkspaceLock(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "gui lock test", ""); err != nil {
+		t.Fatal(err)
+	}
+	release, err := acquireWorkspaceLock(dir, "gui-observer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"gui"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("gui exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	html, err := os.ReadFile(strings.TrimSpace(out.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"gui-observer running", "Lock", "active", "true", "gui-observer"} {
+		if !strings.Contains(string(html), expected) {
+			t.Fatalf("gui did not expose active lock %q:\n%s", expected, string(html))
+		}
+	}
+}
+
+func TestGUIReportsStaleWorkspaceLock(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "gui stale lock test", ""); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, ".feng", "lock")
+	if err := os.WriteFile(lockPath, []byte(`{"owner":"old-gui","pid":1,"started_at":1,"heartbeat":1}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_LOCK_STALE_SECONDS", "1")
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"gui"}, dir, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("gui exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	html, err := os.ReadFile(strings.TrimSpace(out.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"stale lock", "Lock", "stale", "true", "old-gui"} {
+		if !strings.Contains(string(html), expected) {
+			t.Fatalf("gui did not expose stale lock %q:\n%s", expected, string(html))
+		}
+	}
+}
+
 func TestWorkspaceLockReleaseAndStaleRecovery(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "stale lock test", ""); err != nil {
