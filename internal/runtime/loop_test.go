@@ -188,6 +188,29 @@ func TestGrowRecordsContextPackHashInStateStatusAndGUI(t *testing.T) {
 	}
 }
 
+func TestContextPackTokensAreZeroWhenPackAbsent(t *testing.T) {
+	messages := []chatMessage{
+		{Role: "system", Content: "kernel"},
+		{Role: "system", Content: "self contract"},
+		{Role: "user", Content: "state manifest"},
+	}
+	if hash := contextPackHash(messages); hash != "" {
+		t.Fatalf("context pack hash should be empty without context pack, got %s", hash)
+	}
+	if tokens := contextPackTokens(messages); tokens != 0 {
+		t.Fatalf("context pack tokens should be zero without context pack, got %d", tokens)
+	}
+
+	withPack := append([]chatMessage{}, messages...)
+	withPack = append(withPack, chatMessage{Role: "system", Content: "cached context pack:\n{\"skills\":[\"x\"]}"})
+	if hash := contextPackHash(withPack); hash == "" {
+		t.Fatal("context pack hash should be present when context pack exists")
+	}
+	if tokens := contextPackTokens(withPack); tokens == 0 {
+		t.Fatal("context pack tokens should be positive when context pack exists")
+	}
+}
+
 func TestGrowRefreshesActiveToolPackAfterToolGrowth(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

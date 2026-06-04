@@ -154,7 +154,7 @@ func runExecuteLoop(workspace, selfRoot, command string, commandArgs []string, i
 			"tool_schema_tokens":     estimateJSONTokens(toolSchemas),
 			"active_tool_pack_hash":  shaJSON(toolSchemas),
 			"context_pack_hash":      contextPackHash(messages),
-			"context_pack_tokens":    estimateMessageTokens(contextPackMessages(messages)),
+			"context_pack_tokens":    contextPackTokens(messages),
 			"selected_tools":         toolPack.SelectedTools,
 			"selection_reason":       toolPack.SelectionReason,
 		})

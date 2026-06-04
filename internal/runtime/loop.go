@@ -46,7 +46,7 @@ func runGrowLoop(workspace, goal string, maxTurns int, hookEvent string, stdout 
 			"tool_schema_tokens":     estimateJSONTokens(toolSchemas),
 			"active_tool_pack_hash":  shaJSON(toolSchemas),
 			"context_pack_hash":      contextPackHash(messages),
-			"context_pack_tokens":    estimateMessageTokens(contextPackMessages(messages)),
+			"context_pack_tokens":    contextPackTokens(messages),
 			"selected_tools":         toolPack.SelectedTools,
 			"selection_reason":       toolPack.SelectionReason,
 		})
@@ -342,7 +342,7 @@ func updateContextMetrics(workspace string, messages []chatMessage, toolSchemas 
 	}
 	state.ContextBudget["estimated_input_tokens"] = estimateMessageTokens(messages) + estimateJSONTokens(toolSchemas)
 	state.ContextBudget["dynamic_suffix_tokens"] = estimateMessageTokens(messages[minInt(2, len(messages)):])
-	state.ContextBudget["context_pack_tokens"] = estimateMessageTokens(contextPackMessages(messages))
+	state.ContextBudget["context_pack_tokens"] = contextPackTokens(messages)
 	saveState(workspace, state)
 }
 
@@ -376,4 +376,12 @@ func contextPackHash(messages []chatMessage) string {
 		return ""
 	}
 	return shaJSON(packMessages)
+}
+
+func contextPackTokens(messages []chatMessage) int {
+	packMessages := contextPackMessages(messages)
+	if len(packMessages) == 0 {
+		return 0
+	}
+	return estimateMessageTokens(packMessages)
 }
