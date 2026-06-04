@@ -150,6 +150,8 @@ xiaogui --input ./Downloads
 
 单命令 interface 直接执行该命令；多命令 interface 使用第一个参数选择子命令。execute mode 使用 frozen self、本机 provider config、当前目录状态和本次 args 组装 messages，默认不修改 packaged self，也不把 self repo 展开到使用者当前目录。使用者目录只出现 `.feng/` 状态、事件和 artifacts。最终 assistant 输出既打印到 stdout，也写入 `execute-output` artifact，并进入 `last_artifacts`，方便 `status/artifacts/gui` 追踪执行产物。
 
+业务 interface 下，第一个参数默认属于业务命令空间，不能被 feng 内核命令抢占。唯一保留的窄入口是 provider 配置：`config init`、`config status` 和 `config help` 仍由内核处理，方便使用者在不展开 self repo 的情况下完成本机配置。只有默认 feng interface 的 package 才把 `grow`、`check`、`hatch` 等解释为内核 CLI。
+
 ## GUI
 
 GUI MVP 只读：

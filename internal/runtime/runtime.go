@@ -145,11 +145,14 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 		fmt.Fprintf(stderr, "package integrity check failed: %v\n", err)
 		return 1
 	}
-	if len(args) > 0 && args[0] == "config" {
+	if shouldRunPackagedConfigCommand(args) {
 		return cmdConfig(args[1:], cwd, stdout, stderr)
 	}
 	if shouldRunPackagedExecute(args, executable) {
 		return cmdExecute(args, cwd, stdout, stderr, executable)
+	}
+	if len(args) > 0 && args[0] == "config" {
+		return cmdConfig(args[1:], cwd, stdout, stderr)
 	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		printHelp(stdout)
@@ -190,6 +193,18 @@ func RunWithExecutable(args []string, cwd string, stdout, stderr io.Writer, exec
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printHelp(stderr)
 		return 2
+	}
+}
+
+func shouldRunPackagedConfigCommand(args []string) bool {
+	if len(args) < 2 || args[0] != "config" || packagedSeedSelf() == "" {
+		return false
+	}
+	switch args[1] {
+	case "init", "status", "-h", "--help", "help":
+		return true
+	default:
+		return false
 	}
 }
 

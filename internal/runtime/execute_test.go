@@ -134,6 +134,73 @@ func TestPackagedSingleInterfaceCommandRunsExecuteMode(t *testing.T) {
 	}
 }
 
+func TestPackagedSingleInterfaceTreatsConfigAsBusinessArg(t *testing.T) {
+	var seenRequest chatRequest
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&seenRequest); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requests.Add(1)
+		writeChatResponse(w, map[string]any{
+			"role":    "assistant",
+			"content": "business config handled",
+		})
+	}))
+	defer server.Close()
+
+	seed := t.TempDir()
+	if _, err := bootstrap(seed, "seed business config arg", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(seed, "interface.yaml"), map[string]any{
+		"commands": []any{map[string]any{
+			"name":  "run",
+			"usage": "xiaogui [args...]",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+	t.Setenv("DEEPSEEK_API_KEY", "fake-key")
+	t.Setenv("FENG_LLM_BASE_URL", server.URL)
+	user := t.TempDir()
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"config"}, user, &out, &errOut, "xiaogui.exe")
+	if code != 0 {
+		t.Fatalf("execute exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != "business config handled" {
+		t.Fatalf("config arg was not handled by execute mode: %s", out.String())
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("expected provider call for business config arg, got %d", requests.Load())
+	}
+	if !requestContains(seenRequest.Messages, `"command": "run"`) || !requestContains(seenRequest.Messages, `"config"`) {
+		t.Fatalf("execute request did not preserve config arg: %+v", seenRequest.Messages)
+	}
+}
+
+func TestDefaultKernelPackageStillAllowsConfigCommand(t *testing.T) {
+	seed := t.TempDir()
+	if _, err := bootstrap(seed, "seed kernel config", ""); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FENG_PACKAGED_SELF", seed)
+
+	var out, errOut bytes.Buffer
+	code := RunWithExecutable([]string{"config", "status"}, t.TempDir(), &out, &errOut, "feng.exe")
+	if code != 0 {
+		t.Fatalf("config status exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), `"commands"`) || !strings.Contains(out.String(), `"config init"`) {
+		t.Fatalf("default kernel package did not expose config status: %s", out.String())
+	}
+}
+
 func TestPackagedExecutePersistsAssistantOutputArtifact(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeChatResponse(w, map[string]any{
