@@ -24,11 +24,14 @@ func cmdTag(args []string, cwd string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	defer release()
+	appendEvent(workspace, "run_started", map[string]any{"mode": "tag", "tag": name})
 	tag, err := createValidatedTag(workspace, name)
 	if err != nil {
+		appendRunStopped(workspace, "tag", "tag_failed", map[string]any{"tag": name, "message": err.Error()})
 		fmt.Fprintf(stderr, "tag failed: %v\n", err)
 		return 1
 	}
+	appendRunStopped(workspace, "tag", "tag_created", map[string]any{"tag": tag, "commit": currentHead(workspace)})
 	printJSON(stdout, map[string]any{"ok": true, "tag": tag, "commit": currentHead(workspace)})
 	return 0
 }

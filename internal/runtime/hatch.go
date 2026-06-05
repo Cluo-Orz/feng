@@ -90,11 +90,18 @@ func cmdHatch(args []string, cwd string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	defer release()
+	appendEvent(workspace, "run_started", map[string]any{"mode": "hatch", "name": name, "portable": portable})
 	output, err := hatch(workspace, name, outDir, portable)
 	if err != nil {
+		appendRunStopped(workspace, "hatch", "hatch_failed", map[string]any{"name": name, "message": err.Error()})
 		fmt.Fprintf(stderr, "hatch failed: %v\n", err)
 		return 1
 	}
+	stop := map[string]any{"name": name, "path": output}
+	if state, err := loadState(workspace); err == nil && len(state.LastArtifacts) > 0 {
+		stop["artifact"] = state.LastArtifacts[0].Path
+	}
+	appendRunStopped(workspace, "hatch", "hatch_created", stop)
 	fmt.Fprintln(stdout, output)
 	return 0
 }

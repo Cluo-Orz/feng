@@ -381,7 +381,13 @@ func cmdCheck(cwd string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	defer release()
+	appendEvent(workspace, "run_started", map[string]any{"mode": "check"})
 	report := runCheck(workspace)
+	stop := map[string]any{"validated_commit": report.ValidatedCommit}
+	if state, err := loadState(workspace); err == nil && len(state.LastArtifacts) > 0 {
+		stop["artifact"] = state.LastArtifacts[0].Path
+	}
+	appendRunStopped(workspace, "check", ternary(report.OK, "check_passed", "check_failed"), stop)
 	printJSON(stdout, report)
 	if !report.OK {
 		return 1

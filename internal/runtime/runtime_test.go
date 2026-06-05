@@ -75,6 +75,9 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	if !strings.Contains(out.String(), `"validated_commit": "`) {
 		t.Fatalf("check did not report validated commit: %s", out.String())
 	}
+	if !hasRunStartedMode(dir, "check") || !hasRunStoppedReason(dir, "check", "check_passed") {
+		t.Fatalf("check did not emit observable run lifecycle events: %+v", tailEvents(dir, 50))
+	}
 	state, err := loadState(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -383,12 +386,18 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if code := Run([]string{"tag", "sample-v1"}, dir, &out, &errOut); code != 0 {
 		t.Fatalf("tag exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
+	if !hasRunStartedMode(dir, "tag") || !hasRunStoppedReason(dir, "tag", "tag_created") {
+		t.Fatalf("tag did not emit observable run lifecycle events: %+v", tailEvents(dir, 50))
+	}
 	out.Reset()
 	errOut.Reset()
 	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 0 {
 		t.Fatalf("hatch exit=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
 	}
 	packagePath := strings.TrimSpace(out.String())
+	if !hasRunStartedMode(dir, "hatch") || !hasRunStoppedReason(dir, "hatch", "hatch_created") {
+		t.Fatalf("hatch did not emit observable run lifecycle events: %+v", tailEvents(dir, 50))
+	}
 	out.Reset()
 	errOut.Reset()
 	if code := Run([]string{"hatch", "--name", "sample", "--portable"}, dir, &out, &errOut); code != 0 {
@@ -1020,6 +1029,15 @@ func artifactTypeExists(workspace, artifactType string) bool {
 func hasEventWithTemplate(workspace, template string) bool {
 	for _, event := range tailEvents(workspace, 20) {
 		if event.Type == "run_started" && event.Data["template"] == template {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRunStartedMode(workspace, mode string) bool {
+	for _, event := range tailEvents(workspace, 50) {
+		if event.Type == "run_started" && event.Data["mode"] == mode {
 			return true
 		}
 	}

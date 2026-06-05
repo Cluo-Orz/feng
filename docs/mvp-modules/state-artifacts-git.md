@@ -68,7 +68,7 @@ blocked
 
 event reader 必须容忍历史版本写入的超大 event 行或坏行。`watch/gui/message compiler` 读取 event stream 时不能因为一条旧的大日志记录失去后续 progress；能解析的后续 event 仍然要可观测。
 
-`run_stopped` 是每次 `run_started` 的终止信号。正常完成、预算耗尽、provider/missing_config 失败都必须写入它，并带上 `mode` 和 `reason`，让 `watch/gui` 不需要从 lock 或 blocked 事件反推一次长任务是否已经结束。
+`run_started/run_stopped` 是拿 workspace 锁的 mutating 命令的生命周期信号，至少覆盖 `grow`、`execute`、`check`、`hatch` 和 `tag`。正常完成、预算耗尽、provider/missing_config 失败都必须写入 `run_stopped`，并带上 `mode` 和 `reason`，让 `watch/gui` 不需要从 lock 或 blocked 事件反推一次长任务是否已经结束。
 
 `tool_called` 在 dispatcher 开始执行工具前写入，用于让 `watch/gui` 观察长命令已经启动；参数必须压缩和脱敏，不能把 `write_file` content 或长 JSON 全量写进 event。`tool_result` 在工具结束后写入。`tool_denied` 必须指向 `permission-denied` artifact，让下一轮 grow 可以通过 artifact refs 读取拒绝原因。
 
