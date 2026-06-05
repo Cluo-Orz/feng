@@ -23,15 +23,16 @@ read .feng + workspace
 1. acquire .feng/lock
 2. append user input to .feng/inbox
 3. load goal/state/history
-4. select active skill/tool/prompt
-5. compile message list
-6. call provider
-7. execute tool calls
-8. write artifacts/events/messages
-9. run validation/check when candidate changed
-10. if failed, feed failure artifact into next grow turn
-11. repeat until done, blocked, missing_config, or budget reached
-12. release lock
+4. digest raw intake into candidate goal/world/tools/evals/skills when needed
+5. select active skill/tool/prompt
+6. compile message list
+7. call provider
+8. execute tool calls
+9. write artifacts/events/messages
+10. run validation/check when candidate changed
+11. if failed, feed failure artifact into next grow turn
+12. repeat until done, blocked, missing_config, or budget reached
+13. release lock
 ```
 
 显式 `feng check` 仍然可以存在，但自迭代不能依赖外部 agent 手动执行每一轮 check/repair。
@@ -53,10 +54,13 @@ hook 选择 `.feng/skills` 或 packaged `self/skills` 中的 skill body；skill 
 ```text
 .feng/goal.md
 .feng/inbox/
+  raw world intake and user feedback
+
 .feng/skills/
 .feng/tools/
 .feng/prompts/
 .feng/world/
+.feng/evals/
 .feng/state.yaml
 .feng/events.jsonl
 .feng/artifacts/
@@ -70,6 +74,7 @@ provider profile
 ```text
 workspace changes
 .feng skill/tool/prompt/world/eval changes
+.feng inbox digestion result
 .feng/messages/latest.json
 .feng/events.jsonl
 .feng/artifacts/
@@ -86,4 +91,6 @@ grow/check/execute 共享 kernel。
 mode 只改变 instance root、writable boundary 和 interface。
 LLM 不能绕过 permission。
 LLM 不能直接推进 validated checkpoint。
+raw intake 不能直接等同于稳定能力。
+稳定能力必须有 world/tool/skill/eval 的最小闭环。
 ```

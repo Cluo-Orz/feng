@@ -47,7 +47,7 @@ feng/
       token-report.json
     world/
       repo-map.md
-      runtime-contract.md
+      runtime-boundary.md
       mvp-requirements.md
     evals/
       self-check.yaml
@@ -76,14 +76,15 @@ runtime 执行：
 ```text
 1. 创建或读取 .feng。
 2. 把用户输入写入 .feng/inbox。
-3. 合并 goal/world/skills 状态。
-4. 编译 message list 到 .feng/messages/latest.json。
-5. 调 LLM。
-6. 执行工具，修改 .feng 或 workspace。
-7. 运行 check。
-8. 如果 check 失败，记录 artifact，继续 grow 修复。
-9. 如果 check 通过，checkpoint .feng 能力和必要 workspace 变更。
-10. 如果目标达到，停止；需要发布时 hatch。
+3. 消化 raw intake，判断它是目标变化、世界事实、工具需求、eval 需求还是一次性证据。
+4. 生成 candidate world/tools/evals/skills 更新。
+5. 编译 message list 到 .feng/messages/latest.json。
+6. 调 LLM。
+7. 执行工具，修改 .feng 或 workspace。
+8. 运行 check。
+9. 如果 check 失败，记录 artifact，继续 grow 修复。
+10. 如果 check 通过，checkpoint .feng 能力和必要 workspace 变更。
+11. 如果目标达到，停止；需要发布时 hatch。
 ```
 
 MVP 可以保留显式 `feng check` 和 `feng hatch` 命令，但不能要求外部 agent 手动执行每一轮。
@@ -123,6 +124,7 @@ portable-smoke
 源码和长日志不直接塞进 prompt。
 docs/source index 进入 state manifest。
 相关 skill/world excerpt 进入 cached context pack。
+raw intake 只进入动态后缀或 artifact ref，不能当成稳定能力。
 长 test output 进入 artifact。
 latest message list 和 token report 写入 .feng/messages。
 ```

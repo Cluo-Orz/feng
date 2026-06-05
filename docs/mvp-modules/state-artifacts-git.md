@@ -105,6 +105,8 @@ snippets: []
 
 ```text
 user input
+raw intake refs
+intake digestion decisions
 goal changes
 skill/tool/prompt/world changes
 message hashes
@@ -113,6 +115,15 @@ validated instance snapshots
 ```
 
 MVP 可以先用 JSONL 和 snapshot 文件实现，不要求复杂数据库。
+
+history 要能回答：
+
+```text
+某个能力来自哪次用户输入或 artifact？
+它被沉淀到了 world/tools/skills/evals 的哪几个文件？
+它通过了哪些 check/eval？
+它是否进入了 hatch package self？
+```
 
 ## Git
 

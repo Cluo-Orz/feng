@@ -24,6 +24,8 @@ registry 是全集，active tool pack 是本轮暴露给 LLM 的子集。
 
 MVP 的四个 bootstrap tools 是常驻种子能力。领域工具由 grow 写入 `.feng/tools`，或由 hatch package 的 `self/tools` 提供。
 
+工具是 raw world intake 变成可行动能力的桥。仅写入 `.feng/world` 的说明还不代表 feng 能感知或操作世界；需要相应 tool、permission 和 eval 才算稳定能力。
+
 ## Tool 类型
 
 MVP 只支持：
@@ -128,4 +130,5 @@ workspace files
 GUI 不提供 CLI 没有的工具能力。
 工具长说明留在文件，message 中只放 active schema。
 permission deny 必须写 artifact 和 event。
+没有 eval 证明的领域工具不能进入 hatch 的稳定 self。
 ```

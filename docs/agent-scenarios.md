@@ -9,6 +9,17 @@ workspace files
 optional hatch package self
 ```
 
+共同成长链路：
+
+```text
+raw world intake
+-> .实例/world 当前理解
+-> .实例/tools 感知或行动
+-> .实例/evals 验证目标
+-> .实例/skills 复用能力
+-> hatch package self
+```
+
 ## 1. Coding Agent
 
 创造者：
@@ -51,6 +62,8 @@ apitest "为登录接口生成 smoke test"
 
 `self/world` 保存稳定 API 测试方法和 schema 解释规则；本机 token、base URL 和环境名进入 `.apitest/config.yaml` 或 env。完整响应、测试日志和 diff 进入 `.apitest/artifacts`。
 
+intake 可以是 OpenAPI、curl 示例或自然语言。只有当 feng 长出 HTTP tool、认证边界和 smoke eval 后，API 测试能力才算稳定。
+
 ## 3. News Summary Agent
 
 使用者：
@@ -73,6 +86,8 @@ car-runtime/
 ```
 
 传感器、电机和安全边界进入 packaged `self/world` 和 `self/tools`。设备地址、校准参数和本机密钥进入 `.carbrain/config.yaml`。高风险动作必须由 permissions 和 evals 约束。
+
+intake 可以是设备 SDK、串口协议、用户描述或传感器日志。feng 不能因为读懂说明就直接控制小车；必须先长出受权限约束的 sensor/motor tools 和安全 eval。
 
 ## 5. Windows Desktop Assistant
 
@@ -125,6 +140,8 @@ feng/
 
 `cmd/internal/docs` 是被迭代对象，`.feng` 是负责迭代的实例。这个场景不能依赖 Codex 手动串联每轮 check/hatch。
 
+intake 可以是用户新诉求、失败测试、架构文档或实现 diff。feng 必须把它沉淀成 runtime world、迭代 skill、Go/check/hatch tools 和 portable smoke eval。
+
 ## 共同验收
 
 ```text
@@ -135,4 +152,5 @@ feng/
 5. message list 可观察且 token-efficient。
 6. 失败进入 artifacts/history，下一轮可修复。
 7. 没有为某个场景写 runtime 特殊分支。
+8. raw intake 不直接等同于稳定能力，必须经过 world/tools/evals/skills 沉淀。
 ```

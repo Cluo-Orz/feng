@@ -36,7 +36,7 @@ feng grow "目标"
 
 已有 workspace 文件不移动、不覆盖。它们是当前世界，不是 feng 的 self 文件。
 
-## 输入合并
+## World Intake
 
 每次 `feng grow "..."` 都先写入：
 
@@ -44,7 +44,42 @@ feng grow "目标"
 .feng/inbox/<timestamp>.md
 ```
 
-然后由 runtime 和 LLM 结合当前 `.feng/goal.md`、world、skills、history 判断如何合并。用户补充信息不是一次孤立任务。
+inbox 只保存 raw intake。它可以是任意形式：
+
+```text
+用户自然语言
+文件路径
+API 文档
+设备说明
+日志
+网页正文 artifact
+代码片段
+纠错反馈
+```
+
+raw intake 不是稳定能力。feng 下一步必须判断它应该沉淀到哪里：
+
+```text
+goal.md
+  长期目标或目标变更。
+
+world/
+  对世界的稳定理解。
+
+tools/
+  感知或操作世界的工具。
+
+evals/
+  判断目标是否达成的检查。
+
+skills/
+  如何使用 world/tools/evals 完成目标。
+
+artifacts/
+  长证据或一次性证据。
+```
+
+用户补充信息不是一次孤立任务；它会进入同一个实例的 intake 流，经过 grow/check 后才可能成为稳定能力。
 
 ## 默认能力
 
@@ -57,7 +92,7 @@ feng grow "目标"
 .feng/tools/ 只描述 read_file/write_file/list_files/run_command。
 ```
 
-不要预置项目 skill。第一个 grow 通过通用 loop 长出 candidate skills/world/evals/tools。
+不要预置项目 skill。第一个 grow 通过通用 loop 长出 candidate world/tools/evals/skills。不要要求用户一开始提供固定格式的世界描述。
 
 ## Package Seed
 
@@ -77,4 +112,6 @@ feng binary 不保存实例能力。
 workspace 根不散落 skills/tools/world。
 .feng 是当前目录 agent 实例。
 template/seed 只能补缺失实例文件，不能覆盖用户 workspace。
+inbox 是材料，不是能力。
+稳定能力必须能被工具感知、权限约束、eval 验证，并被 skill 复用。
 ```

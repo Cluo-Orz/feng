@@ -41,6 +41,8 @@ check 验证 `.feng` 实例和当前 workspace candidate 是否可推进。
 ```text
 .feng 能加载
 skills/tools/prompts/world/evals 基本 schema 正确
+raw inbox 不被当作稳定能力
+world/tools/skills/evals 能形成最小能力闭环
 permissions 可解析
 active tool pack 可生成
 message compiler 可编译
@@ -65,6 +67,7 @@ last_recovery 指向失败 artifact
 ```text
 更新 validated instance
 记录 history snapshot
+标记本轮可 hatch 的能力子集
 state.candidate_status = validated
 ```
 
@@ -103,6 +106,22 @@ dist/xiaopi/
 ```
 
 `self/` 是产品稳定能力。它随 package 发布，不展开到用户 workspace。
+
+hatch 打包的是 validated ability subset，不是完整 `.feng/`：
+
+```text
+include:
+  validated skills/tools/prompts/world/evals/interface/permissions/config schema
+
+exclude:
+  inbox raw input
+  messages
+  runs
+  artifacts
+  local history
+  provider profile
+  secrets
+```
 
 ## Execute Mode
 
