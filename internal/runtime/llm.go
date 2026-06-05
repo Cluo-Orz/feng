@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type ProviderProfile struct {
@@ -913,17 +914,34 @@ func isSkillBodyFile(path string) bool {
 }
 
 func contextTerms(query string) []string {
+	return lexicalSelectionTerms(query, 48, contextStopTerm)
+}
+
+func lexicalSelectionTerms(text string, limit int, stop func(string) bool) []string {
 	seen := map[string]bool{}
 	var terms []string
-	for _, term := range strings.FieldsFunc(strings.ToLower(query), splitSelectionRune) {
-		term = strings.TrimSpace(term)
-		if len(term) < 4 || seen[term] || contextStopTerm(term) {
-			continue
+	add := func(term string, minRunes int) {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term == "" || seen[term] || runeCount(term) < minRunes {
+			return
+		}
+		if stop != nil && stop(term) {
+			return
 		}
 		seen[term] = true
 		terms = append(terms, term)
-		if len(terms) >= 16 {
-			break
+	}
+	limit = clampInt(limit, 1, 128)
+	for _, term := range strings.FieldsFunc(strings.ToLower(text), splitSelectionRune) {
+		add(term, 4)
+		if len(terms) >= limit {
+			return terms
+		}
+	}
+	for _, term := range cjkSelectionTerms(text) {
+		add(term, 2)
+		if len(terms) >= limit {
+			return terms
 		}
 	}
 	return terms
@@ -933,9 +951,52 @@ func contextStopTerm(term string) bool {
 	switch term {
 	case "this", "that", "with", "from", "into", "make", "grow", "feng", "agent", "workspace", "goal", "using", "when":
 		return true
+	case "这个", "那个", "一个", "需要", "帮我", "请帮", "改进", "优化", "能力", "功能", "当前", "现在", "进行":
+		return true
 	default:
 		return false
 	}
+}
+
+func cjkSelectionTerms(text string) []string {
+	var terms []string
+	var run []rune
+	flush := func() {
+		if len(run) < 2 {
+			run = run[:0]
+			return
+		}
+		if len(run) <= 6 {
+			terms = append(terms, string(run))
+		}
+		for n := 2; n <= 3 && n <= len(run); n++ {
+			for i := 0; i+n <= len(run); i++ {
+				terms = append(terms, string(run[i:i+n]))
+			}
+		}
+		run = run[:0]
+	}
+	for _, r := range strings.ToLower(text) {
+		if isCJKSelectionRune(r) {
+			run = append(run, r)
+			continue
+		}
+		flush()
+	}
+	flush()
+	return terms
+}
+
+func isCJKSelectionRune(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
+}
+
+func runeCount(text string) int {
+	count := 0
+	for range text {
+		count++
+	}
+	return count
 }
 
 func contextMatchScore(path, body string, terms []string) (int, string) {

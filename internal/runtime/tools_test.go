@@ -896,6 +896,37 @@ func TestActiveToolPackSelectsRelevantSelfRepoTools(t *testing.T) {
 	}
 }
 
+func TestActiveToolPackSelectsChineseDescribedSelfRepoTools(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "multilingual tool selection test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "car.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "car_control_check",
+		"description": "检查小车避障控制和传感器状态。",
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "tools", "news.tool.yaml"), map[string]any{
+		"type":        "command",
+		"name":        "news_fetch",
+		"description": "汇总新闻来源并生成摘要。",
+		"command":     "git status --short",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := activeToolPack(dir, "grow", "请帮我优化小车避障能力")
+	if !hasTool(tools, "car_control_check") {
+		t.Fatalf("Chinese described self repo tool was not selected: %+v", tools)
+	}
+	if hasTool(tools, "news_fetch") {
+		t.Fatalf("unrelated Chinese self repo tool should not be exposed: %+v", tools)
+	}
+}
+
 func TestActiveToolPackSelectsHookSkillDeclaredTools(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "hook tool selection test", ""); err != nil {

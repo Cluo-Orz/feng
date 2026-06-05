@@ -666,8 +666,11 @@ func selectionTerms(name, rel, description string, raw map[string]any) []string 
 		add(term)
 	}
 	for _, key := range []string{"when", "keywords", "tags"} {
-		for _, term := range stringListFromAny(raw[key]) {
-			add(term)
+		for _, value := range stringListFromAny(raw[key]) {
+			add(value)
+			for _, term := range lexicalSelectionTerms(value, 12, toolSelectionStopTerm) {
+				add(term)
+			}
 		}
 	}
 	for _, term := range significantSelectionTerms(description) {
@@ -677,22 +680,18 @@ func selectionTerms(name, rel, description string, raw map[string]any) []string 
 }
 
 func significantSelectionTerms(text string) []string {
+	return lexicalSelectionTerms(text, 32, toolSelectionStopTerm)
+}
+
+func toolSelectionStopTerm(term string) bool {
+	if contextStopTerm(term) {
+		return true
+	}
 	stop := map[string]bool{
 		"with": true, "from": true, "this": true, "that": true, "tool": true,
 		"command": true, "self": true, "defined": true, "through": true, "using": true,
 	}
-	var terms []string
-	for _, term := range strings.FieldsFunc(text, splitSelectionRune) {
-		term = strings.ToLower(strings.TrimSpace(term))
-		if len(term) < 4 || stop[term] {
-			continue
-		}
-		terms = append(terms, term)
-		if len(terms) >= 12 {
-			break
-		}
-	}
-	return terms
+	return stop[term]
 }
 
 func splitSelectionRune(r rune) bool {

@@ -118,6 +118,39 @@ func TestCompileGrowMessagesIncludesRelevantCachedContextPack(t *testing.T) {
 	}
 }
 
+func TestCompileGrowMessagesSelectsMultilingualCachedContextPack(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "multilingual context test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "小车.md"), []byte("# 小车避障 skill\n使用传感器和控制报告改进小车避障行为。\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "news.md"), []byte("# 新闻摘要 skill\n汇总新闻来源并生成摘要。\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "world", "vehicle.md"), []byte("# 小车 world\n传感器、里程计和避障边界说明。\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	messages := compileGrowMessages(dir, "请帮我优化小车避障能力")
+	if len(messages) != 5 {
+		t.Fatalf("expected multilingual cached context pack, got %d messages: %+v", len(messages), messages)
+	}
+	pack := parseCachedContextPack(t, messages[2].Content)
+	skills, _ := pack["skills"].([]any)
+	if !containsAnyString(skills, "skills/小车.md") || !containsAnyString(skills, "控制报告") {
+		t.Fatalf("multilingual skill body missing from context pack: %+v", pack)
+	}
+	if containsAnyString(skills, "新闻摘要") {
+		t.Fatalf("irrelevant Chinese skill body entered context pack: %+v", pack)
+	}
+	world, _ := pack["world"].([]any)
+	if !containsAnyString(world, "world/vehicle.md") || !containsAnyString(world, "里程计") {
+		t.Fatalf("multilingual world body missing from context pack: %+v", pack)
+	}
+}
+
 func TestCompileGrowMessagesUsesHookSelectedSkill(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "hook context test", ""); err != nil {
