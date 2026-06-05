@@ -10,6 +10,7 @@ llm-provider.md
 tools-permissions.md
 state-artifacts-git.md
 check-hatch-cli.md
+growth-validation.md
 ```
 
 核心模型：

@@ -8,10 +8,12 @@
 
 ```yaml
 mode: growing | checking | executing | blocked | ready | missing_config
+trust: trusted | untrusted | packaged
 current_goal: ""
 candidate_status: none | dirty | failed | validated
 validated_instance: ""
 source_self_commit: ""
+stale_abilities: []
 active_tool_pack_hash: ""
 stable_prefix_hash: ""
 context_pack_hash: ""
@@ -107,8 +109,10 @@ snippets: []
 user input
 raw intake refs
 intake digestion decisions
+intake superseded/rejected/needs_user decisions
 goal changes
 skill/tool/prompt/world changes
+stale ability marks
 message hashes
 check reports
 validated instance snapshots
@@ -122,6 +126,7 @@ history 要能回答：
 某个能力来自哪次用户输入或 artifact？
 它被沉淀到了 world/tools/skills/evals 的哪几个文件？
 它通过了哪些 check/eval？
+它是否被后续输入标记为 stale 或 superseded？
 它是否进入了 hatch package self？
 ```
 
@@ -159,4 +164,5 @@ last_recovery -> state
 不能把真实 secret 写入 event/artifact/history。
 不能把 .feng/cache 或本机 provider profile 打包。
 不能用 workspace Git 替代 .feng 实例历史。
+untrusted 状态不能靠 prompt 绕过。
 ```

@@ -89,6 +89,8 @@ runtime 执行：
 
 MVP 可以保留显式 `feng check` 和 `feng hatch` 命令，但不能要求外部 agent 手动执行每一轮。
 
+目标达到不能只靠 assistant 声明。自迭代至少需要 source-health、feng check 和 portable smoke eval 覆盖当前目标；失败时进入 repair，全部通过后才允许 hatch 下一版 feng。
+
 ## 4. 必须自举的能力
 
 `.feng/skills/iterate-feng.md` 描述如何迭代 feng：
@@ -142,6 +144,8 @@ workspace source change
 ```
 
 在 feng 自迭代场景中，workspace 本身就是 feng 源码仓库，所以 source change 可以通过仓库 Git 进入提交；但这仍然是受 check 保护的项目变更，不是 runtime 任意推进 Git。
+
+如果新 intake 推翻旧架构理解，相关 world/skill/eval 必须标记 stale 并重跑。否则 feng 可能带着互相矛盾的设计继续 hatch。
 
 ## 7. Hatch
 

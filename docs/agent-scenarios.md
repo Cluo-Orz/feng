@@ -153,4 +153,7 @@ intake 可以是用户新诉求、失败测试、架构文档或实现 diff。fe
 6. 失败进入 artifacts/history，下一轮可修复。
 7. 没有为某个场景写 runtime 特殊分支。
 8. raw intake 不直接等同于稳定能力，必须经过 world/tools/evals/skills 沉淀。
+9. done 必须由 eval/check 证明，不能只靠 assistant 声明。
+10. hatch 只发布 validated ability closure，不发布完整实例目录。
+11. 外来实例默认 untrusted，只能 inspect/check，确认后才可执行可变更工具。
 ```

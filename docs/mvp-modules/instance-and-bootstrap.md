@@ -81,6 +81,18 @@ artifacts/
 
 用户补充信息不是一次孤立任务；它会进入同一个实例的 intake 流，经过 grow/check 后才可能成为稳定能力。
 
+每条 raw intake 有明确状态：
+
+```text
+new         未处理。
+digested    已沉淀到 goal/world/tools/evals/skills/artifacts。
+superseded  被后续输入取代。
+rejected    与目标无关或不可信。
+needs_user  关键信息不足，需要用户补充。
+```
+
+如果新输入推翻旧理解，feng 不是简单覆盖文件，而是记录 revision event，标记受影响的 world/tool/skill/eval 为 stale，并重新跑相关 eval。只有 check 通过后，新的理解才会进入 validated instance。
+
 ## 默认能力
 
 默认实例只包含最小工具说明和空能力目录。
@@ -105,13 +117,29 @@ workspace/.name  local runtime state
 
 对于默认 feng 命令，实例目录是 `.feng/`。对于产品命令 `xiaopi`，实例目录默认是 `.xiaopi/`。
 
+## Trust Gate
+
+当前 runtime 创建的新实例默认 trusted。来自 clone、下载、复制或 package 展开的外部 `.feng` 默认 untrusted，直到用户明确确认。
+
+untrusted 实例可以被读取、展示、check，但不能：
+
+```text
+执行 .feng/tools 里的 command tool
+写 workspace
+hatch/package
+扩大 permissions
+```
+
+这个限制属于 runtime 边界，不依赖 prompt 约束。
+
 ## 不变量
 
 ```text
 feng binary 不保存实例能力。
 workspace 根不散落 skills/tools/world。
 .feng 是当前目录 agent 实例。
-template/seed 只能补缺失实例文件，不能覆盖用户 workspace。
+runtime seed 或 package seed 只能补缺失实例文件，不能覆盖用户 workspace。
 inbox 是材料，不是能力。
 稳定能力必须能被工具感知、权限约束、eval 验证，并被 skill 复用。
+外部带来的实例先验证和确认，再执行。
 ```

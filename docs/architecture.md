@@ -174,6 +174,16 @@ grow
 
 外界可以补信息，但不应该由 Codex 或另一个 agent 手动驱动每一轮 check/hatch/repair。
 
+`done` 不能由 LLM 口头声明。至少需要：
+
+```text
+目标已被当前 goal/run state 接收。
+相关 raw intake 已被消化或明确搁置。
+至少一个 eval/check 覆盖目标成功标准。
+覆盖目标的 eval/check 通过。
+要发布的 ability closure 完整且受 permission 约束。
+```
+
 ## 5. Skills、Tools、Prompts、Messages
 
 `.feng/skills` 是能力说明。
@@ -302,6 +312,10 @@ check 失败不强制回滚。失败报告进入 `.feng/artifacts`，下一轮 g
 
 如果当前 workspace 自己有 Git，feng 可以把 Git status/diff/log 作为世界事实使用。是否提交用户项目文件，应由权限、skill 和用户目标明确决定，不能和 `.feng` 实例 checkpoint 混为一谈。
 
+用户后续输入可能推翻旧理解。新 intake 与 validated 能力冲突时，feng 必须记录 revision，标记受影响的 world/tool/skill/eval stale，并重跑相关 eval。eval 通过前，旧能力不能被静默替换成新 validated 能力。
+
+`.feng` 里可以包含 command tools，因此外来 `.feng` 不能默认可信。从 clone、download 或 copy 得到的实例默认是 untrusted：可以 inspect 和只读 check，但不能执行 `.feng/tools`、不能写 workspace、不能 hatch，直到用户明确确认信任。
+
 ## 9. feng 自迭代
 
 当 feng 迭代自己时，当前目录是 feng 源码仓库，`.feng/` 是负责迭代 feng 的 agent 实例。
@@ -331,7 +345,7 @@ feng/
 
 ## 10. Hatch
 
-`hatch` 把当前实例的 validated 能力打包成命名命令。
+`hatch` 把当前实例的 validated ability closure 打包成命名命令。
 
 ```text
 feng hatch --name xiaopi --portable
@@ -349,6 +363,8 @@ launchers/install scripts
 ```
 
 使用者得到的是 `xiaopi`，不是一个 feng workspace。
+
+ability closure 是 skill 及其依赖的 tools/world/prompts/evals/permissions/config schema。hatch 不打包 inbox、messages、runs、artifacts、本地 history、provider profile、secret 或未通过 eval 的候选能力。
 
 ## 11. 非目标
 

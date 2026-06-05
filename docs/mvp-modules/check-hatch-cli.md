@@ -32,6 +32,17 @@ feng config
 
 用户多次 `grow` 是给同一个实例补信息，不是重开 session。
 
+grow 结束条件由 runtime 判断：
+
+```text
+done criteria pass
+blocked
+missing_config
+budget reached
+```
+
+其中 done criteria 至少要求：本轮相关 raw intake 已处理、能力闭环成立、eval 通过、没有 stale ability 被当作稳定能力。
+
 ## check
 
 check 验证 `.feng` 实例和当前 workspace candidate 是否可推进。
@@ -47,6 +58,8 @@ permissions 可解析
 active tool pack 可生成
 message compiler 可编译
 provider profile 不含 secret
+untrusted 实例不能进入可写执行或 hatch
+没有 stale ability 被选为稳定能力
 如果 workspace 有 Go runtime/source，go test ./... 通过
 evals 可运行
 没有 feng 自举专用 runtime 分支
@@ -67,7 +80,7 @@ last_recovery 指向失败 artifact
 ```text
 更新 validated instance
 记录 history snapshot
-标记本轮可 hatch 的能力子集
+标记本轮可 hatch 的 ability closure
 state.candidate_status = validated
 ```
 
@@ -107,7 +120,7 @@ dist/xiaopi/
 
 `self/` 是产品稳定能力。它随 package 发布，不展开到用户 workspace。
 
-hatch 打包的是 validated ability subset，不是完整 `.feng/`：
+hatch 打包的是 validated ability closure，不是完整 `.feng/`：
 
 ```text
 include:
@@ -121,7 +134,22 @@ exclude:
   local history
   provider profile
   secrets
+  stale candidate
+  untrusted instance state
 ```
+
+ability closure 不是按目录机械复制，而是从目标 interface 出发，收集被验证过且互相需要的一组文件：
+
+```text
+skill 说明如何完成任务
+world 说明对象和环境
+tool 提供感知或行动
+eval 证明目标可判断
+prompt/message rule 让运行时能高效调用
+permissions 限定边界
+```
+
+孤立 skill、孤立 tool、没有 eval 证明的能力都不能进入 hatch。
 
 ## Execute Mode
 
@@ -196,6 +224,7 @@ watch --limit N 只接受正整数。
 hatch 不包含 API key。
 hatch 不包含本机 provider profile。
 hatch 不包含未验证 candidate。
+hatch 只包含 validated ability closure。
 execute mode 不修改 package self。
 用户 workspace 只出现 .产品名 运行态。
 ```

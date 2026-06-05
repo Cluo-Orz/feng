@@ -110,6 +110,28 @@ rm -rf / Remove-Item -Recurse / del /s
 shell control operator 绕过
 ```
 
+## Trust Gate
+
+当实例状态是 untrusted 时，只允许：
+
+```text
+读取实例文件
+读取 workspace 文件
+运行 feng check 的只读验证
+展示 status/artifacts/gui
+```
+
+以下行为必须被 deny，并写入 event/artifact：
+
+```text
+执行 .feng/tools 里的 command tool
+写 workspace
+hatch/package
+扩大 permissions
+```
+
+用户明确确认后，runtime 才能把实例标记为 trusted。
+
 ## 文件边界
 
 ```text
@@ -131,4 +153,5 @@ GUI 不提供 CLI 没有的工具能力。
 工具长说明留在文件，message 中只放 active schema。
 permission deny 必须写 artifact 和 event。
 没有 eval 证明的领域工具不能进入 hatch 的稳定 self。
+untrusted 实例不能执行可变更工具。
 ```

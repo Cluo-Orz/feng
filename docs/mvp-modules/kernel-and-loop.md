@@ -31,11 +31,25 @@ read .feng + workspace
 9. write artifacts/events/messages
 10. run validation/check when candidate changed
 11. if failed, feed failure artifact into next grow turn
-12. repeat until done, blocked, missing_config, or budget reached
+12. repeat until done criteria pass, blocked, missing_config, or budget reached
 13. release lock
 ```
 
 显式 `feng check` 仍然可以存在，但自迭代不能依赖外部 agent 手动执行每一轮 check/repair。
+
+## Done Criteria
+
+`done` 不是 assistant message 里说“完成了”。runtime 只有在 check 证明以下条件后才停止：
+
+```text
+goal 已被当前实例接受。
+相关 raw intake 已 digested/rejected/superseded/needs_user。
+world/tool/skill/eval 形成能力闭环。
+相关 eval 通过。
+没有被标记为 stale 的能力继续作为稳定能力使用。
+```
+
+高风险目标还必须有 dry-run、simulator 或等价验证路径；危险动作默认不能执行，除非 permissions 和用户确认都允许。
 
 ## Hook
 
@@ -93,4 +107,6 @@ LLM 不能绕过 permission。
 LLM 不能直接推进 validated checkpoint。
 raw intake 不能直接等同于稳定能力。
 稳定能力必须有 world/tool/skill/eval 的最小闭环。
+done 必须由 check/eval 证明。
+untrusted 实例不能执行可变更工具。
 ```
