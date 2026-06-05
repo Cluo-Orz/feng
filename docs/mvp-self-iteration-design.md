@@ -1,906 +1,198 @@
-# Feng MVP 自迭代设计
+# MVP：feng 自迭代设计
 
 ## 1. MVP 目标
 
-MVP 只有一个目标：
+MVP 的目标是证明：
 
 ```text
-让 feng 用通用逻辑迭代 feng 自己。
+feng runtime + 当前目录 .feng 实例 + 当前 workspace
 ```
 
-具体表现为：
+可以让 feng 在自己的源码仓库里迭代 feng 自己。
+
+这不是写一个 feng 专用 agent，也不是让 Codex 手动驱动每一轮。Codex 或用户只负责启动和补信息；生命周期 loop 必须由 feng runtime 自己执行。
+
+## 2. 目标目录
+
+在 feng 源码仓库中：
 
 ```text
-feng grow "改进 feng 自己"
-feng check
-feng hatch --name feng --portable
-```
-
-这不是为 feng 写一个专用 agent，也不是创造另一个专用自举命令。MVP 必须证明：
-
-```text
-同一套 Runtime Kernel
-同一套 Self Repo
-同一套 .feng State
-同一套 Git 成长模型
-同一套 LLM / Tool / Message / Permission 机制
-```
-
-可以用于任意 agent，也可以用于 feng 自己。
-
-## 2. 非目标
-
-MVP 不做：
-
-```text
-多 agent 协作
-复杂 GUI
-插件市场
-复杂长期记忆
-复杂 hook 脚本系统
-复杂 provider router
-自动模型 benchmark
-完整跨平台安装器
-完整用户应用生态
-```
-
-MVP 也不做 feng 专用逻辑：
-
-```text
-不写按项目名分支的特殊逻辑
-不写专用自举命令
-不写自举专用 runtime
-不写自举专用 prompt 通道
-不绕过 permissions
-不自动重写 Git 历史
-```
-
-## 2.1 Runtime 语言边界
-
-MVP 的架构不绑定语言，但当前产品级 runtime、CLI、check、hatch 和 portable runner 统一用 Go 实现。
-
-Go runtime 需要覆盖完整 MVP 语义：
-
-```text
-grow loop
-self repo 文件约定
-.feng state/events/artifacts
-tool permission
-check checkpoint
-hatch package
-```
-
-正式 hatch 体验不要求用户安装解释器或理解语言包管理。Go binary 是命名命令和跨平台分发的默认形态。
-
-语言迁移不能改变 MVP 的核心约束：
-
-```text
-仍然只有一个通用 loop
-仍然从 self repo 和 .feng state 读写
-仍然由 check 推进 validated commit
-仍然不能写 feng 自举专用 runtime
-```
-
-## 3. 成功标准
-
-MVP 成功标准：
-
-```text
-1. 第一次 grow 能在普通目录 bootstrap 一个 feng workspace，或识别已有 workspace。
-2. 能读取当前 feng 文档、源码、review 轮次和 Git 状态。
-3. 能用 LLM 生成修改计划。
-4. 能通过 tool call 读取、写入文件、列目录、运行受限命令。
-5. 能把长输出写入 .feng/artifacts/，message 中只保留 artifact refs。
-6. 能修改 self repo 中的 docs/specs/skills/evals 或源码。
-7. 能保留 candidate working tree。
-8. 能运行 check，失败时保留失败现场，不强制回滚。
-9. 能从 validated commit 启动并修复 candidate。
-10. 能在 check 通过后提交 validated commit。
-11. 能 hatch --name feng --portable，产出下一版 feng 命令。
-12. 产出的 feng 可以在另一个目录继续执行 grow/check/hatch。
-```
-
-## 4. 顶层结构
-
-MVP 只实现四个对象：
-
-```text
-Runtime Kernel
-  稳定小内核。负责 CLI、loop、LLM adapter、message compiler、tool dispatcher、permissions、check、hatch、state、Git。
-
-Self Repo
-  文件化自我。表达 identity、goal、skills、hooks、tools、world、evals、interface、permissions、config schema。
-
-.feng State
-  当前 workspace 的状态、事件、产物、缓存和锁。
-
-Git
-  self 的成长历史。表达 candidate、validated commit、tag。
-```
-
-不要再拆更大的系统。
-
-## 5. Workspace 结构
-
-MVP workspace：
-
-```text
-.
-  identity.md
-  goal.md
-  feng.yaml
-  hooks.yaml
-  permissions.yaml
-  interface.yaml
-  config.schema.yaml
-  skills/
-  tools/
-  world/
-  evals/
+feng/
+  .git/
+  go.mod
+  cmd/
+  internal/
+  docs/
+  scripts/
   .feng/
+    instance.yaml
+    goal.md
+    inbox/
+    skills/
+      iterate-feng.md
+      review-design.md
+      implement-go-runtime.md
+      validate-release.md
+    tools/
+      go-test.tool.yaml
+      go-build.tool.yaml
+      feng-check.tool.yaml
+      feng-hatch.tool.yaml
+    prompts/
+      kernel.md
+      message-policy.md
+      review-policy.md
+    messages/
+      latest.json
+      token-report.json
+    world/
+      repo-map.md
+      runtime-contract.md
+      mvp-requirements.md
+    evals/
+      self-check.yaml
+      source-health.yaml
+      portable-smoke.yaml
     state.yaml
     lock
     events.jsonl
-    artifacts/
-    cache/
     runs/
-  .git/
+    artifacts/
+    history/
 ```
 
-对 feng 自举来说，当前 `docs/`、Go 源码、测试和构建脚本属于被感知的 world 和可修改目标。它们不是特殊 runtime。
+`cmd/ internal/ docs/` 是被迭代对象。`.feng/` 是迭代 feng 的 agent 实例。
 
-## 6. CLI
+## 3. 自迭代 loop
 
-MVP CLI 只做：
+用户启动：
 
 ```text
-feng grow "..."
-feng check
-feng hatch --name feng --portable
-feng status
-feng watch
-feng artifacts
-feng gui
-feng tag NAME
-feng config
+feng grow "改进 feng 的自迭代能力"
 ```
 
-说明：
+runtime 执行：
 
 ```text
-grow
-  第一个语义入口。用户给目标，kernel 持续推进 candidate。
-  如果当前目录还不是 workspace，先执行通用 bootstrap。
-
-check
-  验证 candidate 是否可成为 validated self。
-
-hatch
-  从 validated self 产出命名命令。
-
-status/watch/artifacts
-  可观测性入口。
-
-config
-  查看或初始化本机 provider profile。只写 provider profile 模板，不保存 API key。
+1. 创建或读取 .feng。
+2. 把用户输入写入 .feng/inbox。
+3. 合并 goal/world/skills 状态。
+4. 编译 message list 到 .feng/messages/latest.json。
+5. 调 LLM。
+6. 执行工具，修改 .feng 或 workspace。
+7. 运行 check。
+8. 如果 check 失败，记录 artifact，继续 grow 修复。
+9. 如果 check 通过，checkpoint .feng 能力和必要 workspace 变更。
+10. 如果目标达到，停止；需要发布时 hatch。
 ```
 
-第一次 `grow` 的通用 bootstrap：
+MVP 可以保留显式 `feng check` 和 `feng hatch` 命令，但不能要求外部 agent 手动执行每一轮。
+
+## 4. 必须自举的能力
+
+`.feng/skills/iterate-feng.md` 描述如何迭代 feng：
 
 ```text
-创建最小 self repo
-创建 .feng/
-如果没有 Git，则初始化 Git
-写入初始 state
-如果缺少 provider 配置，则进入 missing_config
+读取核心诉求和架构文档
+识别实现偏差
+修改 Go runtime 或 docs
+运行 go test / go vet / go build
+运行 feng check
+运行 hatch portable smoke
+把失败报告作为下一轮修复材料
 ```
 
-bootstrap 不覆盖已有文件。已有 docs、源码、测试、脚本和配置先作为当前 world 的一部分被感知，只有缺失的 self 文件和 `.feng/` 状态会被补齐。
-
-bootstrap 不是单独产品命令。它只是 `grow` 在非 workspace 目录中的前置阶段。
-
-## 7. Self Repo 初始内容
-
-MVP 自迭代 self repo 的初始内容可以由 builtin template 生成。对于已有 feng 仓库，template 的作用是补齐缺失的 self 文件，不是复制或覆盖整个项目。
-
-### identity.md
+`.feng/tools` 中只保存通用 command tool 声明，不写进 runtime 特殊分支。
 
 ```text
-这是一个 feng self。
-不要假设当前项目已经具备领域能力。
-稳定能力必须通过 grow 生成 candidate，并通过 check 后才能成为 validated self。
+go-test
+go-vet
+go-build
+feng-check
+feng-hatch
+portable-smoke
 ```
 
-### goal.md
+这些工具仍然经过 permission、schema、artifact 和 event。
+
+## 5. Message 和 Token
+
+自迭代必须遵守 token efficiency：
 
 ```text
-初始 goal 来自本次 grow 的用户输入。
-goal.md 可以在 grow 过程中被更新为稳定目标，但不能在模板中预置某个项目目标。
+源码和长日志不直接塞进 prompt。
+docs/source index 进入 state manifest。
+相关 skill/world excerpt 进入 cached context pack。
+长 test output 进入 artifact。
+latest message list 和 token report 写入 .feng/messages。
 ```
 
-### world/
+## 6. Checkpoint
+
+MVP 需要区分：
 
 ```text
-world/README.md
-  说明 world/ 用来存放稳定世界模型，不存运行日志。
+.feng instance checkpoint
+  skills/tools/prompts/world/evals 的 validated 状态。
+
+workspace source change
+  cmd/internal/docs 等 feng 源码和文档的变更。
 ```
 
-world 是说明书，不存运行日志。当前仓库结构、文档含义和 review 方法必须由 grow 通过读文件、列目录、运行命令感知后，再作为 candidate world 写入。
+在 feng 自迭代场景中，workspace 本身就是 feng 源码仓库，所以 source change 可以通过仓库 Git 进入提交；但这仍然是受 check 保护的项目变更，不是 runtime 任意推进 Git。
 
-### skills/
+## 7. Hatch
 
-MVP 不预置任何项目 skill。
-
-```text
-skills/README.md
-  说明 skill 是通过 grow 长出来的能力契约。
-```
-
-第一个 grow 可以创建适合当前目标的 candidate skill，但这些必须是本轮 candidate 的产物，而不是模板预先准备好的能力。
-
-MVP skill 文件只需要表达最小能力契约：
-
-```text
-when
-goal
-context
-tools
-output
-checks
-```
-
-skill 可以提供 prompt 文本，但 message compiler 才决定本轮放入哪些内容。
-
-MVP skill 加载采用两级模型：
-
-```text
-skill catalog
-  从 skills/ 扫描 name、description、when、tools、checks 摘要，进入稳定 self contract。
-
-skill body
-  完整 skill 内容只在当前 hook/event 相关时进入 cached context pack 或动态后缀。
-```
-
-`skills/` 为空时，catalog 为空。第一个 grow 依靠通用 seed loop，而不是依靠隐藏 skill。
-
-MVP 的相关性选择保持简单：用本轮 goal/request 的关键词匹配 skill/world 文件路径、标题和正文，只取少量 excerpt 进入 cached context pack。这样 skill 长出来后能被使用，但不会因为存在很多 skill 就污染稳定前缀或撑爆上下文。
-
-### hooks.yaml
-
-MVP hook 可以为空或只声明事件名：
-
-```yaml
-on_grow: []
-on_check_failed: []
-```
-
-如果 hook 没有匹配 skill，kernel 使用通用 seed loop：latest event + self index + 文件索引 + 初始工具 + artifact refs。LLM 可以在这个 loop 中生成第一批 candidate skills/hooks/world/evals。
-
-MVP hook 只做 skill 选择，不执行脚本。`hooks.yaml` 的事件值可以引用 skill 名称或路径，例如 `reviewer`、`skills/reviewer.md` 或 `{ "skill": "reviewer" }`。被 hook 选中的 skill body 会优先进入 cached context pack；没有 hook 匹配时仍按 goal/request 关键词选择相关 skill/world。
-
-如果 hook 选中的 skill 声明了 `tools:`，这些工具会优先进入本轮 active tool pack。`check` 必须拒绝不存在的 hook skill 或不存在的 tool 声明，避免 validated self 里留下看得见但用不了的能力。
-
-MVP 支持的事件点保持很少：
-
-```text
-on_grow
-on_check_failed
-on_execute
-```
-
-复杂 hook 脚本执行器不是 MVP。
-
-### tools/
-
-初始工具只有：
-
-```text
-read_file
-write_file
-list_files
-run_command
-```
-
-领域工具可以后续 grow 出来，但 MVP 不依赖它。
-
-MVP 的工具实现不是 MCP。MVP 只支持 bootstrap tools 和 self repo command tools；MCP 是未来可选 adapter，接入后也必须先转换为 feng 内部 `Tool / ToolCall / ToolResult`，并继续经过 active tool pack、permissions、artifact 和 events。`type: mcp` 这类 self repo 工具声明在 MVP 中必须被 `check` 拒绝。
-
-### evals/
-
-MVP eval：
-
-```text
-evals/load-self.yaml
-  self repo 必须能加载。
-
-evals/schema.yaml
-  self repo 的 YAML/Markdown 结构必须能解析。
-
-evals/permission-boundary.yaml
-  permissions.yaml 必须能被解析并阻止危险操作。
-
-evals/no-secret.yaml
-  self repo、artifact 和 hatch package 不得包含真实 API key。
-
-evals/llm-provider-boundary.yaml
-  LLM provider 必须是配置 profile，不写真实 key。
-```
-
-MVP 默认 eval 只验证 self 健康、schema、权限、provider 边界和 secret 边界。针对当前项目的业务 eval，必须由 grow 根据目标生成 candidate eval。
-
-## 8. LLM Provider
-
-MVP 使用 provider-neutral 调用层：
-
-```text
-LLMRequest
-LLMResponse
-Message
-Tool
-ToolCall
-ToolResult
-Usage
-Capability
-ProviderProfile
-```
-
-MVP 实现两个最小 adapter：
-
-```text
-openai_chat
-anthropic_messages
-```
-
-DeepSeek 作为 provider profile：
-
-```yaml
-id: deepseek
-protocol: openai_chat
-base_url: https://api.deepseek.com
-api_key_env: DEEPSEEK_API_KEY
-model_env: FENG_LLM_MODEL
-example_model: deepseek-chat
-```
-
-API key 不进入 self repo、Git、artifact 或 hatch package。
-
-provider profile 可以来自用户级配置、显式配置路径或 `.feng/` 下的本机未跟踪配置。MVP 不做 provider router，也不把 provider profile 当成 self repo 的一部分。
-
-## 9. Message Compiler
-
-MVP message compiler 只做一件事：
-
-```text
-把 self repo + .feng state + Git + latest event 编译成 token-efficient messages。
-```
-
-顺序：
-
-```text
-provider tools
-system: kernel contract
-system: self contract
-optional cached context pack
-user: state manifest
-conversation suffix
-user: latest event
-```
-
-规则：
-
-```text
-稳定前缀尽量不变。
-动态内容放后面。
-大内容写 artifact。
-message 里只放 artifact refs。
-assistant 不长期保存推理。
-tool response 长结果文件化。
-```
-
-ArtifactRef 最小字段：
-
-```yaml
-type: diff
-source: git
-path: .feng/artifacts/...
-hash: "..."
-summary: "..."
-why_relevant: "..."
-snippets: []
-```
-
-## 10. Active Tool Pack
-
-MVP active tool pack 规则：
-
-```text
-tool registry 保存 bootstrap tools 和 self repo tools 的全集。
-四个 bootstrap tools 常驻：read_file / write_file / list_files / run_command。
-领域工具由当前 hook/skill 选择；没有 skill 时由通用 seed loop 选择最小必要工具。
-每轮只暴露需要的 self repo tool schema。
-工具说明全文留在 tools/ 文件中，必要时 read_file。
-每次 tool call 仍经过 permissions。
-active_tool_pack_hash 写入 LLM cache key 和 .feng/events.jsonl。
-```
-
-自迭代 seed loop 的初始可选工具：
-
-```text
-read_file
-write_file
-list_files
-run_command
-```
-
-如果后续 grow 出领域工具或辅助检查工具，也仍然按 hook/skill 选择，不自动全量暴露。
-
-tool growth 后，下一轮必须重新计算 active tool pack。不能因为旧 cache 命中而让 LLM 看不到新工具，也不能把所有工具 schema 塞进稳定前缀。
-
-## 11. Permissions
-
-MVP permission 只做本地边界：
-
-```yaml
-files:
-  read:
-    - docs/**
-    - cmd/**
-    - internal/**
-    - pkg/**
-    - scripts/**
-    - "*.md"
-  write:
-    - docs/**
-    - cmd/**
-    - internal/**
-    - pkg/**
-    - scripts/**
-    - go.mod
-    - go.sum
-commands:
-  allow:
-    - git status
-    - git diff
-    - git log
-    - rg
-    - go run
-    - go test
-    - go vet
-    - go build
-  deny:
-    - git reset --hard
-    - git push
-    - rm -rf
-```
-
-MVP 不需要复杂沙箱，但每次 tool call 必须经过 permission check。
-
-危险操作必须失败，并写入 artifact。
-
-LLM 可以通过允许的 git 命令读取事实，例如 status、diff、log。更新 validated commit、创建 checkpoint commit、创建 hatch tag 是 kernel 在 check/hatch 通过后的动作，不是 LLM 任意 `run_command` 的结果。
-
-## 12. Grow Loop
-
-MVP grow loop：
-
-```text
-1. acquire .feng/lock
-2. read .feng/state.yaml
-3. read Git state
-4. read self repo index
-5. select hook/skill；如果没有匹配 skill，进入通用 seed loop
-6. select active tool pack
-7. compile messages
-8. call LLM
-9. execute tool calls with permission check
-10. write artifacts/events/state
-11. repeat until task done, blocked, or budget reached
-12. release lock
-```
-
-每一 turn 都重新读取 state、self repo、Git、artifact refs 和 workspace file index，再编译新的 messages。上一轮 assistant/tool 结果只作为必要 conversation suffix 保留；suffix 每轮都会压缩，只保留最近 tool turn，旧 turn 通过 recent_events、artifact_refs、Git status 或 targeted read_file 重新感知。这样 `write_file` 修改 skills、world、tools、docs 或源码后，下一次 LLM 调用能看到最新文件世界，同时不会让历史工具结果无限撑大上下文。
-
-如果 LLM 在 grow 中只返回计划或结论、没有 tool call，kernel 不能只把内容打到终端。该 assistant 输出必须写成 `assistant-output` artifact，并在 `run_stopped`、`last_artifacts` 和下一轮 `artifact_refs` 中可见。这样“先形成计划，再继续孵化”的长任务不会丢失进展材料。
-
-状态写入：
-
-```text
-.feng/state.yaml
-  mode: growing | checking | blocked | ready | missing_config
-  current_goal
-  validated_commit
-  source_self_commit
-  candidate_status
-  active_tool_pack_hash
-  stable_prefix_hash
-  context_budget
-  last_recovery
-  recovery_count
-  last_event_id
-  last_artifacts
-
-.feng/events.jsonl
-  append-only event stream
-
-.feng/artifacts/
-  diff、tool output、check report、review report、hatch preview
-```
-
-`candidate_status` 只描述 self roots 是否存在未验证 candidate，不能把一次未执行任何修改的 grow 请求当成 dirty。provider 缺配置、纯计划输出或只读工具调用不会污染已 validated 的 self；只有 self roots 相对 Git 状态发生变化时，runtime 才把 candidate 标记为 dirty。
-
-如果上一轮 check 失败，下一轮 grow 只生成修复计划但没有修改 candidate，`last_recovery` 仍然保留 check report 指针；计划本身作为 `assistant-output` artifact 记录。这样 agent 后续仍能明确回到失败报告，而不是因为一次“成功生成计划”丢失恢复入口。
-
-MVP grow loop 的恢复规则：
-
-```text
-max_tokens
-  首次提高输出预算或请求 continuation；记录 recovery event。
-
-prompt_too_long
-  先 artifact 化大内容，再 reactive compact，重试一次；仍失败则 mode: blocked。
-
-max_input_tokens
-  如果 state 或 env 设置了输入预算，调用 provider 前先压缩动态后缀；压缩事件写入 events。
-
-429 / 500 / 503
-  退避重试；超过上限写 provider-error artifact。
-
-401 / 402 / missing_config
-  不重试，mode: missing_config 或 blocked。
-
-400 / 422
-  视为 adapter/request 构造错误，写 artifact，下一轮 grow 可修复。
-```
-
-恢复动作只改变 runtime state 和 artifacts，不把 provider 错误硬写进 self repo。
-
-## 13. Git 成长模型
-
-MVP Git 语义：
-
-```text
-validated commit
-  上一次 check 通过的 self。
-
-working tree
-  当前 workspace，其中 self roots 表示 candidate self，其他文件只是可感知世界。
-
-tag
-  可 hatch 的命名版本。
-```
-
-失败策略：
-
-```text
-check 失败不自动丢弃 candidate。
-validated commit 仍是运行基线。
-失败报告、diff、tool output 写入 artifacts。
-下一轮 grow 读取 artifact refs 修复 candidate。
-```
-
-只有 check 通过才可以更新 validated commit。
-
-checkpoint/tag/hatch 的 Git 干净检查只针对 self roots：最小 self 文件、skills/tools/world/evals、docs/cmd/internal/pkg/scripts 和 Go module 文件。这样 feng 可以跑在一个真实 workspace 里，旁边存在数据、日志或目标环境文件，但 validated self 不会误提交这些内容，也不会被它们阻塞发布。
-
-LLM 修复 self 的方式是读取 Git 报告、diff 和失败 artifact，然后继续编辑 working tree。Git commit/tag 由 kernel 在验证通过后执行，避免把版本推进权交给一次普通 tool call。
-
-## 14. Check
-
-MVP check 只验证最低可行性：
-
-```text
-self repo 能加载
-YAML/Markdown schema 能解析
-hooks.yaml 能解析
-permissions.yaml 能解析
-tools 能加载
-active tool pack 能生成
-message compiler 能编译
-provider profile 能解析，但不要求真实调用
-如果 candidate 带 Go runtime/source，Go source health check 能通过
-evals 能运行
-禁止特殊 runtime 检查通过
-candidate 声明的项目业务 eval 能运行；如果还没有业务 eval，不因此失败
-```
-
-command eval 的结果必须写入事件流：通过写 `eval_passed`，失败写 `eval_failed`，并把长输出写入 `eval-output` artifact。这样 check 失败后的下一轮 grow 能通过 artifact refs 修复 candidate。
-
-作为通用自修改安全检查，check 还要验证：
-
-```text
-没有专用自举命令
-没有按当前项目名分支的 runtime 逻辑
-没有真实 API key
-没有默认 push / reset / delete history
-```
-
-Check 结果规则：
-
-```text
-check 失败
-  不更新 validated_commit。
-  不提交 validated checkpoint。
-  写入 .feng/artifacts/check-report-*.md。
-  .feng/state.yaml 标记 candidate_status: failed。
-
-check 通过
-  更新 .feng/state.yaml 的 validated_commit。
-  可以创建 Git checkpoint commit。
-  .feng/state.yaml 标记 candidate_status: validated。
-```
-
-`hatch` 只能从 `validated_commit` 打包，不能从未验证 working tree 打包。
-
-## 15. Hatch
-
-MVP hatch：
+通过后：
 
 ```text
 feng hatch --name feng --portable
 ```
 
-输出：
+产物：
 
 ```text
 dist/feng/
   feng
-  feng.exe
-  self.feng 或 self/
+  feng.cmd
+  feng-runner
+  self/
+    skills/
+    tools/
+    prompts/
+    world/
+    evals/
+    interface.yaml
+    permissions.yaml
+    config.schema.yaml
   provider-examples/
   feng-release.yaml
   checksums.json
 ```
 
-如果输出路径在当前 workspace 内，MVP 只允许写入 `dist/`。hatch 可以覆盖上一版 package，但不能把 workspace 中的 self repo、candidate 文件或 review artifact 当作输出目录清理掉。
+下一版 feng 在新目录运行时，仍然创建当前目录的 `.feng/` 实例；它不把源码仓库里的 `.feng` 直接当作用户目录状态。
 
-hatch 只能清理空目录或已有 feng package 目录。已有 package 通过 `feng-release.yaml` 或 package marker 识别；如果目标目录已有普通用户内容，hatch 必须拒绝覆盖，让用户显式处理。
+## 8. 非目标
 
-portable package 使用 `runner + self/` 目录结构：runner 是命名 Go binary，`self/` 是 frozen self bundle。未来可以把 self bundle embed 进 binary，但这只是打包形态优化。
-
-manifest：
-
-```yaml
-name: feng
-self_commit: "..."
-runner_version: "..."
-required_provider_profiles:
-  - deepseek
-required_env:
-  - DEEPSEEK_API_KEY
-permissions_summary:
-  source: self/permissions.yaml
-  files:
-    read: []
-    write: []
-  commands:
-    allow: []
-    deny: []
-interface:
-  commands:
-    - grow
-    - check
-    - hatch
-    - status
-    - watch
-    - artifacts
-    - gui
-    - tag
-    - config
-```
-
-`interface` 来自 self repo 的 `interface.yaml`。check 必须确认 `commands` 是非空列表，且 command 名唯一、可作为稳定命令 token。hatch 只把通过 check 的 interface 写入 manifest。默认 feng self 的 interface 暴露 grow/check/hatch/status/watch/artifacts/gui/tag/config，后续普通目标 agent 可以通过 grow 修改 interface。
-
-Hatch 不包含：
+MVP 不做：
 
 ```text
-API key
-本机 provider profile
-.feng/runs
-.feng/cache
-未通过 check 的 candidate
+Codex 外部驱动每一轮。
+feng 自举专用 runtime 分支。
+复杂多 agent 调度。
+完整 MCP transport。
+自动接管用户项目 Git。
 ```
 
-对 `feng hatch --name feng --portable`，frozen self 还应携带已经长出来的 `docs/`、`cmd/`、`internal/`、`pkg/`、`scripts/` 和 Go module 文件。它们必须先经过 check 和 secret scan，不能绕过 validated commit。这样下一代 feng 到新目录后仍能继续用通用 grow/check/hatch 迭代自己，而不是只剩一个不可成长的 binary。
-
-下一代 feng 第一次 bootstrap 新 workspace 时，应把 package manifest 的 `self_commit` 记录为 `source_self_commit`。它表示这一代 self 的来源版本，不替代新 workspace 自己通过 `check` 生成的本地 `validated_commit`。
-
-Hatch 可以包含 provider examples：
+## 9. 成功标准
 
 ```text
-provider-examples/deepseek.yaml
-provider-examples/deepseek-anthropic.yaml
-```
-
-但 example 只能包含：
-
-```text
-protocol
-base_url
-api_key_env
-model
-capabilities
-```
-
-不能包含真实 API key。
-
-## 16. Execute
-
-如果 frozen self 的 `interface.yaml` 仍是默认 feng interface，产物 `feng` 在另一台机器上运行：
-
-```text
-feng grow "..."
-feng check
-feng hatch --name feng --portable
-```
-
-这是因为自举 MVP hatch 出来的命名命令仍然叫 `feng`，所以它的 interface 仍然是 grow/check/hatch。
-
-如果 frozen self 的 `interface.yaml` 暴露的是业务命令，runner 进入 execute mode：
-
-```text
-xiaogui --input ./Downloads
-coder review --diff ./patch.diff
-newsbrief --topic ai
-```
-
-单命令 interface 直接把可执行文件名当作业务命令；多命令 interface 使用第一个参数选择子命令。execute mode 读取 packaged `self/`、当前目录状态、本机 provider config 和本次 args，组装 LLM message list 并调用工具完成任务。
-
-execute mode 默认读取 frozen self、本机 config 和本次 args，不修改 packaged self，也不把 self repo 展开到使用者当前目录。它只在当前目录写 `.feng/` 状态、事件和 artifacts。若使用者要让它继续成长，应在一个 feng workspace 中再次进入 grow mode。
-
-如果缺少 provider profile 或 API key：
-
-```text
-feng status 显示 missing_config。
-feng grow 不启动 LLM。
-提示 provider profile 路径、需要的 env 名称和 provider example。
-feng config status 可查看 provider 状态。
-feng config init 可在当前 workspace 的 .feng/provider.yaml 写入 provider profile 模板。
-```
-
-## 17. 可观测性
-
-MVP 可观测性：
-
-```text
-feng status
-  当前 mode、goal、candidate、validated commit、最近错误、缺失配置。
-
-feng watch
-  读取 .feng/events.jsonl。
-
-feng artifacts
-  列出 artifacts，显示 type/source/path/hash/summary/why_relevant。
-```
-
-GUI MVP 只读：
-
-```text
-Running
-Progress
-Artifacts
-```
-
-GUI 不提供额外能力，不绕过 CLI 和 permissions。
-
-## 18. MVP 端到端路径
-
-```text
-1. 开发者安装 feng runner。
-2. 配置 provider profile 和 DEEPSEEK_API_KEY。
-3. 在 feng 仓库执行 feng grow "根据核心诉求改进 MVP 自迭代设计"。
-4. 如果当前目录不是 workspace，grow 先执行通用 bootstrap。
-5. kernel 读取 self repo、docs、Git、.feng state。
-6. message compiler 生成 token-efficient messages。
-7. LLM 通过 tool call 读取/写入文件、运行检查。
-8. 长输出进入 artifacts。
-9. candidate 形成。
-10. 执行 feng check。
-11. 失败则保留 artifacts，继续 grow 修复。
-12. 成功则更新 validated commit。
-13. 执行 feng hatch --name feng --portable。
-14. 在新目录运行 dist/feng/feng grow "..."。
-15. 新 feng 先 bootstrap 当前目录，再继续 grow/check/hatch。
-```
-
-## 19. MVP 风险
-
-### 风险一：通用逻辑不够强，自迭代效果弱
-
-处理：
-
-```text
-先要求能修改 docs/specs。
-代码生成能力不作为第一验收门槛。
-```
-
-### 风险二：check 太弱，坏 candidate 被 promote
-
-处理：
-
-```text
-MVP check 保守。
-只在 self 加载、message compiler、permissions、evals 都通过时更新 validated commit。
-```
-
-### 风险三：LLM 输出误操作
-
-处理：
-
-```text
-所有工具调用走 permission check。
-危险命令 deny。
-失败写 artifact。
-```
-
-### 风险四：context 过大
-
-处理：
-
-```text
-artifact refs。
-active tool pack。
-stable prefix + dynamic suffix。
-```
-
-### 风险五：自举变成 feng 专用逻辑
-
-处理：
-
-```text
-check 禁止特殊 runtime。
-review 必须证明同一机制可用于普通 agent。
-```
-
-## 20. MVP 不变量
-
-```text
-不能把 API key 写进仓库。
-不能为 feng 自己开特殊通道。
-不能跳过 permissions。
-不能 check 失败还 promote。
-不能自动丢弃失败 candidate。
-不能把长日志塞进 prompt。
-不能把所有长出来的领域工具 schema 每轮全量暴露；四个 bootstrap primitives 是 MVP 的常驻种子能力。
-不能让 GUI 拥有 CLI 没有的能力。
-```
-
-## 21. 模块详细设计
-
-MVP 的实现规格拆成少量模块文档，放在：
-
-```text
-docs/mvp-modules/
-```
-
-这些模块只服务一个目标：用通用逻辑跑通 feng 自迭代。模块之间不能引入 feng 项目名判断，也不能预置项目 skill。
-
-模块清单：
-
-```text
-kernel-and-loop.md
-self-repo-and-bootstrap.md
-message-context.md
-llm-provider.md
-tools-permissions.md
-state-artifacts-git.md
-check-hatch-cli.md
-```
-
-## 22. 下一步实现顺序
-
-```text
-1. Self repo loader。
-2. .feng state/events/artifacts。
-3. Permission checker。
-4. Bootstrap tools。
-5. Provider profile loader。
-6. OpenAI-compatible LLM adapter。
-7. Message compiler。
-8. Tool dispatcher。
-9. Grow loop。
-10. Check runner。
-11. Git validated commit marker。
-12. Hatch package builder。
-13. status/watch/artifacts CLI。
-14. 只读 GUI。
+1. 空目录运行 feng grow 会创建 .feng 实例。
+2. feng 源码目录运行 feng grow 会用 .feng 实例迭代 cmd/internal/docs。
+3. 用户补充信息会进入 inbox 并合并到当前目标。
+4. message list、token report、artifacts 可观察。
+5. check 失败后 feng 能读取失败 artifact 并继续修复。
+6. check 通过后产生 validated checkpoint。
+7. hatch 生成下一版 feng 命令。
+8. 下一版 feng 在新目录仍能创建 .feng 并继续 grow。
 ```

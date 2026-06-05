@@ -1,17 +1,17 @@
-# MVP 模块：State, Artifacts and Git
+# MVP 模块：State, Artifacts, History and Git
 
 ## 职责
 
-这个模块表达 feng 长任务的生命体征和 self 的代际成长。
+表达 `.feng` 实例的运行状态、成长历史、失败现场和可观测性。
 
-## .feng State
+## State
 
 ```yaml
-mode: growing | checking | blocked | ready | missing_config
+mode: growing | checking | executing | blocked | ready | missing_config
 current_goal: ""
-validated_commit: ""
-source_self_commit: ""
 candidate_status: none | dirty | failed | validated
+validated_instance: ""
+source_self_commit: ""
 active_tool_pack_hash: ""
 stable_prefix_hash: ""
 context_pack_hash: ""
@@ -26,58 +26,65 @@ last_recovery:
 recovery_count: 0
 last_event_id: ""
 last_artifacts: []
-lock:
-  owner: ""
-  heartbeat: ""
 ```
 
-Go runtime 使用 `.feng/lock` 表示 workspace 修改锁。`grow`、`check`、`hatch` 这类会修改 workspace 的命令必须先拿锁；`status/watch/artifacts/gui` 只读命令不需要拿锁。
+状态文件默认在：
 
-拿到锁的进程会持续刷新 `.feng/lock` 和 `.feng/state.yaml` 里的 heartbeat。stale lock 判断以 heartbeat 为准，而不是只看 lock 文件 mtime，避免长任务运行中被误判为失效；但如果 lock 记录的 PID 已经不存在，即使 heartbeat 看起来很新，也必须视为 stale，让下一轮命令可以恢复 workspace。
+```text
+.feng/state.yaml
+```
 
-`status` 和 GUI 的 running 视图必须从当前 `.feng/lock` 文件即时计算，并标出 `active/stale/owner/pid/started_at/heartbeat`。`.feng/state.yaml` 里的 `lock` 是 heartbeat 写入的观测副本，不能作为判断当前是否仍在运行的唯一依据。
+产品命令 `xiaopi` 使用：
 
-`last_recovery` 表示当前需要用户或下一轮 grow 关注的最近恢复状态。check 失败时它指向 check report artifact；provider 失败时它指向 provider-error artifact。成功的 grow 或 check 会清空它；`recovery_count` 保留为累计计数，避免 status/gui 在 ready 状态下继续展示旧错误。
+```text
+.xiaopi/state.yaml
+```
 
-`check_failed` recovery 不会因为下一轮 grow 只生成计划而清空。只要 candidate 仍然是 failed 或 dirty，last_recovery 继续指向最近的 check report；新的 plan 可以作为 `assistant-output` 进入 last_artifacts。只有 check 通过、或出现新的 provider/config recovery，才替换这条恢复指针。
+## Lock
 
-`candidate_status` 由 self roots 的 Git 状态驱动。`grow` 开始、provider 缺配置、只读工具调用或 assistant 只输出计划，都不能单独把 validated self 标记为 dirty；只有 self roots 出现未验证变化时才进入 dirty。这样一次失败的 grow 不会让仍然干净的 validated self 无法 tag/hatch。
+mutating 命令必须拿实例锁：
+
+```text
+.feng/lock
+```
+
+只读命令 `status/watch/artifacts/gui` 不需要拿锁。stale lock 以 heartbeat 和 PID 判断。
 
 ## Events
 
-`.feng/events.jsonl` 是 append-only：
+```text
+.feng/events.jsonl
+```
+
+核心事件：
 
 ```text
 run_started
 run_stopped
 message_compiled
 tool_called
-tool_denied
 tool_result
+tool_denied
 artifact_written
-provider_recovered
-provider_recovery
 check_failed
 check_passed
-validated_commit_updated
+validated_instance_updated
 hatch_created
 blocked
 ```
 
-每条 event 必须有唯一 `id`，用于 `status/watch/gui` 把 running、progress 和 artifact 变化串起来。MVP 使用时间戳加进程内序号即可，不需要引入外部事件系统。event 写盘前必须脱敏和压缩：长字符串截断，长数组只保留前部摘要；完整证据必须进 artifact。
-
-event reader 必须容忍历史版本写入的超大 event 行或坏行。`watch/gui/message compiler` 读取 event stream 时不能因为一条旧的大日志记录失去后续 progress；能解析的后续 event 仍然要可观测。
-
-`run_started/run_stopped` 是拿 workspace 锁的 mutating 命令的生命周期信号，至少覆盖 `grow`、`execute`、`check`、`hatch` 和 `tag`。正常完成、预算耗尽、provider/missing_config 失败都必须写入 `run_stopped`，并带上 `mode` 和 `reason`，让 `watch/gui` 不需要从 lock 或 blocked 事件反推一次长任务是否已经结束。
-
-`tool_called` 在 dispatcher 开始执行工具前写入，用于让 `watch/gui` 观察长命令已经启动；参数必须压缩和脱敏，不能把 `write_file` content 或长 JSON 全量写进 event。`tool_result` 在工具结束后写入。`tool_denied` 必须指向 `permission-denied` artifact，让下一轮 grow 可以通过 artifact refs 读取拒绝原因。
+event 必须可增量读取、脱敏、压缩。长内容不能直接进入 event。
 
 ## Artifacts
 
-大内容写入 `.feng/artifacts/`：
+```text
+.feng/artifacts/
+```
+
+artifact ref：
 
 ```yaml
-type: assistant-output | execute-output | tool-output | eval-output | test-log | diff | provider-error | check-report | hatch-preview
+type: assistant-output | execute-output | tool-output | eval-output | diff | provider-error | check-report | hatch-preview
 source: ""
 path: ""
 hash: ""
@@ -86,42 +93,59 @@ why_relevant: ""
 snippets: []
 ```
 
-`assistant-output` 用来保存 grow 中没有 tool call 的 assistant 计划或结论。它不是长期记忆，也不是 validated self；它只是下一轮 grow 可以通过 artifact refs 读取的进展材料。`execute-output` 用来保存 hatched agent 命令的最终 assistant 输出，让使用者能通过 `artifacts`、`status` 或 GUI 追踪本次执行结果。
+长日志、完整 diff、网页正文、测试输出都写 artifact。message 只放 artifact ref。
 
-events 和 artifacts 写盘前必须做 secret-like redaction。它们用于恢复和观测，不用于保存真实密钥。
-
-artifact 内容文件和 metadata 文件分开：内容文件保存原始摘要材料，metadata 文件保存 `type/path/hash/summary/why_relevant/snippets`。`feng artifacts`、GUI 和 context assembly 只读取合法 metadata，不能把内容 JSON 误当成 artifact 记录。
-
-`hatch-preview` 是一次 package 发布的运行证据。hatch 成功后它必须进入 `last_artifacts`，并由 `hatch_created` event 通过 artifact path 引用，而不是把完整 artifact 对象塞进 event。
-
-## Git 语义
+## History
 
 ```text
-validated commit = 可以启动的一版 self
-working tree = candidate self + 当前 workspace 的其他用户文件
-tag = 可 hatch 的命名版本
+.feng/history/
 ```
 
-Git 成长边界不是整个 workspace，而是 self roots：
+记录 agent 成长历史：
 
 ```text
-identity.md / goal.md / feng.yaml / hooks.yaml / permissions.yaml / interface.yaml / config.schema.yaml
-skills/ / tools/ / world/ / evals/
-docs/ / cmd/ / internal/ / pkg/ / scripts/
-Go module files
+user input
+goal changes
+skill/tool/prompt/world changes
+message hashes
+check reports
+validated instance snapshots
 ```
 
-`check` 创建 checkpoint commit 时只 stage 这些 roots；`tag` 和 `hatch` 也只要求这些 roots 干净。workspace 里的无关用户文件、临时目录或目标环境文件可以被 agent 感知，但不能被 kernel 误提交，也不能阻塞 validated self 打包。
+MVP 可以先用 JSONL 和 snapshot 文件实现，不要求复杂数据库。
 
-check 失败不强制回滚。下一轮 grow 从 validated self 启动，读取 self roots 的 diff 和 artifacts 修复 candidate。
+## Git
 
-如果 workspace 是从 hatch package bootstrap 出来的，`source_self_commit` 记录 package manifest 中的 frozen self commit。它只表达来源，不代替本地 Git 的 `validated_commit`；新 workspace 仍然需要通过自己的 `check` 生成本地 validated checkpoint。
+不要混淆两种历史：
+
+```text
+.feng/history
+  agent 实例成长历史。
+
+workspace .git
+  用户项目历史，如果存在。
+```
+
+feng 可以读取 workspace Git 作为事实。是否提交 workspace 文件必须由目标、权限或用户明确决定。runtime 不默认接管用户项目 Git。
+
+在 feng 自迭代场景中，workspace 是 feng 源码仓库；因此源码变更可以通过仓库 Git checkpoint，但 `.feng` 仍然是负责迭代的实例空间。
+
+## Recovery
+
+check 失败不自动丢弃 candidate。
+
+```text
+失败报告 -> artifacts
+diff/日志 -> artifacts
+last_recovery -> state
+下一轮 grow -> 读取 artifact refs 修复
+```
 
 ## 不变量
 
 ```text
 失败现场是成长材料。
-不能自动丢弃 candidate。
-不能把 .feng/cache 和本机 provider profile 打包。
-不能把真实 secret 写入 artifact。
+不能把真实 secret 写入 event/artifact/history。
+不能把 .feng/cache 或本机 provider profile 打包。
+不能用 workspace Git 替代 .feng 实例历史。
 ```

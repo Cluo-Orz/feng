@@ -2,345 +2,190 @@
 
 ## 1. 产品目标
 
-feng 的目标是把一个想法孵化成一个可以直接运行、可以传播的命令。
+feng 的目标不是生成一个项目模板，而是提供一个可以在任意目录运行的 agent runtime。
 
 ```text
-idea -> grow -> check -> hatch -> named command
+feng binary
+  稳定运行框架。
+
+current directory
+  用户当前要开发、分析、操作的 workspace。
+
+current directory/.feng
+  这个目录里的 agent 实例：能力、目标、工具、上下文工程、状态、历史和产物。
 ```
 
-创造者使用 feng：
+用户心智应该很简单：
 
 ```text
-mkdir xiaogui
-cd xiaogui
-feng grow "帮我整理下载目录"
-feng check
-feng hatch --name xiaogui --portable
+cd any-project
+feng grow "我要完成什么"
 ```
 
-使用者只使用孵化出来的命令：
+如果当前目录还没有 `.feng/`，feng 自动创建。之后用户继续用 `feng grow "补充信息"` 喂目标、规则、事实和反馈；feng 负责把这些信息合并到当前实例里，并持续运行直到目标满足、需要配置、预算耗尽或 blocked。
+
+## 2. 四个边界
+
+### Runtime
+
+`feng` 命令是稳定 runtime。它负责：
 
 ```text
-xiaogui --input ./Downloads
+loop
+LLM provider adapter
+message compiler
+tool dispatcher
+permissions
+state/events/artifacts
+check
+hatch
 ```
 
-feng 是孵化器，`xiaogui` 是产品。
+runtime 不应该写死某个 agent 的能力，也不应该把 feng 自举做成特殊分支。
 
-## 2. 顶层模型
+### Instance
 
-feng 只有四个核心对象：
+`.feng/` 是当前目录里的 agent 实例。
 
 ```text
-Runtime Kernel
-  稳定小内核，负责 loop、LLM adapter、工具调度、验证、版本、hatch/release package、状态记录。
-
-Self Repo
-  agent 的自我，由文件组成，受 Git 管理，可以成长。
-
-.feng State
-  当前 workspace 的运行状态、事件、产物和缓存。
-
-Git
-  self 的成长历史、candidate、validated commit 和 tag。
+.feng/
+  instance.yaml
+  goal.md
+  inbox/
+  skills/
+  tools/
+  prompts/
+  messages/
+  world/
+  evals/
+  permissions.yaml
+  config.schema.yaml
+  state.yaml
+  lock
+  events.jsonl
+  runs/
+  artifacts/
+  history/
 ```
 
-一个 feng 目录就是一个 workspace：
+`skills/tools/prompts/world/evals` 是可成长能力。`state/events/runs/artifacts/history` 是运行事实。两者都属于这个目录里的 agent 实例，而不是用户项目根目录的普通业务文件。
+
+### Workspace
+
+当前目录是任务现场。feng 可以按权限读取、修改、测试这里的文件，以完成用户目标。
 
 ```text
-workspace = self repo + .feng state + Git history
+project/
+  .feng/
+  src/
+  docs/
+  tests/
+  README.md
 ```
 
-同一个 workspace 同一时间只允许一个 feng kernel 修改 self。
+用户项目是否使用 Git、如何提交业务代码，是 workspace 自己的语义。feng 可以读取 Git 事实，也可以在权限允许时执行受控命令，但 runtime 不应默认把整个 workspace 当成自己的能力根。
 
-## 2.1 Runtime 语言策略
+### Packaged Product
 
-Runtime Kernel 的架构是语言无关的，但产品级实现应该优先使用 Go。
-
-原因很简单：feng 最终要 hatch 成一个可传播的命名命令。Go 更适合把 runner、CLI、文件系统、Git、HTTP provider、权限检查和打包能力收敛成跨平台单命令。Rust 可以作为未来高风险原生工具或平台 adapter 的选择，但不适合作为第一版 kernel 的复杂度起点。
-
-当前 MVP runtime、CLI、check、hatch 和 portable runner 统一用 Go 实现。语言选择不能改变四个核心对象和通用 loop，也不能引入 feng 专用自迭代分支。
-
-## 3. 两个界面
-
-feng 要易用，必须隐藏内部结构。
-
-创造者界面：
+hatch 后的产品命令读取安装包里的 frozen self，而不是把 self 展开到用户目录。
 
 ```text
-grow     推动 self 成长；如果当前目录还不是 workspace，先创建最小 self
-check    检查 candidate 是否可以成为下一版 self
-hatch    把 validated self 破壳成命名命令
+dist/xiaopi/
+  xiaopi
+  xiaopi.cmd
+  feng-runner
+  self/
+    identity.md
+    skills/
+    tools/
+    prompts/
+    world/
+    evals/
+    interface.yaml
+    permissions.yaml
+    config.schema.yaml
+  provider-examples/
+  xiaopi-release.yaml
+  checksums.json
 ```
 
-使用者界面：
+使用者运行产品时，当前目录只生成运行态：
 
 ```text
-xiaogui
-xiaogui --help
-xiaogui --input ./Downloads
+user-workspace/
+  .xiaopi/
+    state.yaml
+    lock
+    events.jsonl
+    runs/
+    artifacts/
+    history/
+    config.yaml
 ```
 
-`skills`、`evals`、`permissions`、Git 版本、candidate、promote 都是内部结构。创造者可以打开精修，但默认流程不要求先理解它们。
+`self/` 在安装包里，`.xiaopi/` 在用户目录里。这样用户只和 `xiaopi` 交互，不需要理解 feng。
 
-这对应两个运行形态：
+## 3. grow 的语义
+
+`feng grow` 是向当前 `.feng` 实例输入目标或反馈，不是一次孤立问答。
 
 ```text
-grow mode
-  在 feng workspace 内运行，目标是修改 self repo 并形成 validated commit。
-
-execute mode
-  运行 hatch 出来的命名命令，目标是按 interface.yaml 完成用户任务。默认不修改 packaged frozen self。
+feng grow "做一个 API 测试助手"
+feng grow "base url 是 https://example.test"
+feng grow "报告要输出 markdown"
 ```
 
-两种形态共享 Runtime Kernel、LLM adapter、tool dispatcher、permissions 和 message compiler；差异只在可写边界、interface 和 Git 语义。
-
-## 4. Self Repo
-
-self repo 是少量约定文件，不是复杂工程。
+这些输入进入同一个实例：
 
 ```text
-identity.md         agent 是谁，基础边界是什么
-goal.md             当前成长目标
-skills/             agent 学会的能力；bootstrap 时可以为空
-hooks.yaml          哪些事件点启用哪些 skill
-tools/              工具声明和实现
-world/              对外部世界的稳定描述
-evals/              怎么判断 agent 有效
-interface.yaml      hatch 后暴露哪些参数
-permissions.yaml    需要哪些文件、命令、网络权限
-config.schema.yaml  首次运行需要哪些配置
-feng.yaml           self 元信息
+.feng/inbox/
+.feng/goal.md
+.feng/world/
+.feng/skills/
 ```
 
-运行产物不属于 self：
+feng 内部负责合并信息、更新目标、选择 skill/tool/prompt，并继续长程 loop。
+
+## 4. 自运行 loop
+
+feng 的核心 loop 仍然很小：
 
 ```text
-.feng/state.yaml
-.feng/lock
-.feng/events.jsonl
-.feng/artifacts/
-.feng/runs/
-.feng/cache/
+read .feng + workspace
+-> compile messages
+-> llm
+-> tool call
+-> write .feng/workspace
+-> validate
+-> continue or stop
 ```
 
-运行产物可以被读取，但默认不提交。只有 agent 明确沉淀下来的稳定经验，才写回 self repo。
-
-## 5. World、Config、Args
-
-`world/` 是 agent 面对外部环境的说明书。
+关键变化是：生命周期编排应该属于 feng runtime，而不是外部 agent。
 
 ```text
-world       可随 hatch package 传播的稳定环境模型
-config      使用者本地事实，例如密钥、路径、设备地址、偏好
-args        单次运行输入
-permissions 允许接触外部世界的边界
-artifacts   运行过程中留下的证据
+grow
+-> check
+-> if failed: read check artifact and grow repair
+-> if passed: checkpoint instance
+-> optional hatch/tag
 ```
 
-示例：
+外界可以补信息，但不应该由 Codex 或另一个 agent 手动驱动每一轮 check/hatch/repair。
+
+## 5. Skills、Tools、Prompts、Messages
+
+`.feng/skills` 是能力契约。
 
 ```text
-API schema -> world
-API token -> config
---base-url -> args 或 config
-
-传感器含义 -> world
-设备地址和校准参数 -> config
---speed low -> args
+when
+goal
+context
+tools
+output
+checks
 ```
 
-context assembly 只选择和当前事件相关的 world 片段，不把整个 world 塞进每轮 context。
-
-## 6. Workspace State 和可观测性
-
-feng 不使用用户可见的 session/resume 模型。运行状态属于 workspace，放在 `.feng/` 里。
-
-```text
-.feng/state.yaml      当前状态快照
-.feng/lock            单写锁和心跳
-.feng/events.jsonl    append-only 事件流
-.feng/artifacts/      diff、eval 结果、失败报告、hatch 预览
-```
-
-中断后不需要 `resume`。下一次 `feng grow`、`feng check` 或 `feng status` 都先读取 self repo、Git 和 `.feng/state.yaml`，自然从当前 workspace 状态继续。
-
-可观测性也只靠文件和简单命令：
-
-```text
-feng status     看当前状态和是否卡住
-feng watch      看 events 时间线
-feng artifacts  看产物、diff、eval、失败报告
-```
-
-GUI 只是这些文件的可视化：running、progress、artifact 三种视图。
-
-## 7. Loop 和上下文工程
-
-feng 只有一个基础 loop：
-
-```text
-read files
-  -> assemble context
-  -> llm
-  -> hook
-  -> call tool
-  -> hook
-  -> read files
-```
-
-核心关系：
-
-```text
-hook    什么时候介入
-skill   用什么能力介入
-tool    对外部世界做什么动作
-message 本轮临时组装出的 LLM 输入
-```
-
-feng 不以散乱 prompt 片段作为主要成长单位，而以 skill 作为主要成长单位。
-
-```text
-hook 调度 skill
-skill 提供能力
-kernel 组装上下文
-```
-
-skill 的最小结构是能力契约，不是插件系统：
-
-```text
-when        适用事件或触发条件
-goal        这个能力要完成什么
-context     需要哪些 world、artifact 或文件引用
-tools       允许暴露哪些 tool schema
-output      期望输出形态
-checks      哪些 eval 或规则能验证它
-```
-
-skill 加载采用两级模型：
-
-```text
-skill index
-  name、description、when、tools、checks 摘要。进入稳定前缀，可缓存。
-
-skill body
-  完整能力说明、示例、约束。只有当前 hook/event 相关时才按需进入 context。
-```
-
-`skills/` 为空时，index 就是空的。kernel 不能把不存在的能力伪造成默认能力。
-
-hook 可以在未来支持脚本，但脚本仍然必须作为 tool 受 permissions 和 check 管理。
-
-bootstrap self 不需要预置任何领域 skill。若当前 hook 没有匹配 skill，kernel 进入通用 seed loop：只用 kernel contract、latest event、self index、目录索引、初始工具和 artifact refs 让 LLM 生成第一批 candidate self 文件。这条 fallback 对所有 workspace 相同，不是某个项目的特殊逻辑。
-
-上下文工程只有一个优先级：token efficiency。
-
-每轮上下文先分成稳定前缀和动态后缀：
-
-```text
-cache prefix
-  kernel contract、active tool schema、self summary、稳定 skill/world index。
-
-hot suffix
-  最新用户输入、hook 事件、最近 tool result、candidate 状态、失败原因。
-
-artifact refs
-  大文件、长日志、长 diff、网页正文、测试输出，只放类型、来源、路径、hash、摘要、为什么相关、必要片段。
-
-summary
-  历史对话和旧事件压缩后的短摘要。
-```
-
-超长时，原始证据进入 artifacts，prompt 只保留路径、hash、摘要和必要片段。稳定经验才沉淀回 self repo。
-
-context pressure 的处理顺序必须固定：
-
-```text
-1. 长 tool result / 长日志 / 长 diff 先写 artifact。
-2. 旧 tool result 在 conversation suffix 中变成短占位。
-3. 历史事件合并成 summary。
-4. 低相关 skill/world 片段退出本轮 context。
-5. prompt_too_long 时执行 reactive compact 后重试一次。
-6. 仍然超长时，状态进入 blocked，要求缩小任务或增加预算。
-```
-
-这样做的目标不是“尽量塞满”，而是保证长任务能继续、证据不丢、稳定前缀不被动态内容污染。
-
-### Message List
-
-kernel 最终发送给 LLM 的是稳定顺序的 message list。message list 是运行时产物，不是用户维护的 prompt 文件。
-
-message list 的设计目标不是“把信息放全”，而是：
-
-```text
-缓存前缀稳定
-动态内容靠后
-大内容文件化
-工具结果可追溯但不刷屏
-```
-
-每轮按这个顺序组装：
-
-```text
-provider tools
-  当前 active tool pack 的 schema。初始工具可用，但不要求每轮全部暴露；领域工具由当前 hook/skill 或 seed loop 选择。工具多时只暴露本轮需要的工具组，工具说明全文留在 tools/ 文件中。
-
-system: kernel contract
-  极小、稳定的运行规则，例如当前模式、工具调用协议、权限边界、稳定输出约束。
-
-system: self contract
-  identity、goal、self commit、active skill/world/tool index、权限摘要。
-
-optional cached context pack
-  反复使用、足够稳定、值得缓存的 skill/world/example 片段。
-
-user: state manifest
-  当前任务状态、文件路径、artifact 的类型、来源、路径、hash、短摘要、为什么相关、必要片段。
-
-conversation suffix
-  最近 user / assistant / tool call / tool response，保持 provider 协议顺序。
-
-user: latest event
-  最新用户输入、hook 事件或需要 LLM 处理的 tool result 摘要。
-```
-
-稳定输出约束放在 kernel contract；任务特定输出要求放在 latest event，避免每轮改写稳定前缀。
-
-assistant message 只用于稳定 few-shot 示例，或最近必要行动历史，尤其是 tool call 配对。它不长期保存推理过程。
-
-tool response 短结果可以直接进入 tool message；长结果写入 `.feng/artifacts/`，tool message 只返回类型、来源、路径、hash、摘要、为什么相关和关键片段。
-
-每个 message 都应带来源、层级、优先级、预算和 hash，方便缓存、压缩、追踪来源、统计 token 花费和跨 OpenAI / Anthropic adapter 转换。
-
-## 8. Grow、Check、Tool Growth
-
-`grow` 是用户侧的第一个语义入口。它可能是长任务，但不是用户需要 resume 的 session。
-
-如果当前目录还不是 feng workspace，`grow` 先执行通用 bootstrap：
-
-```text
-创建最小 self repo
-创建 .feng/
-建立 Git 成长语义
-写入初始 state
-```
-
-bootstrap 只补齐缺失的 feng 自我文件和运行状态，不覆盖用户已有文件。已有源码、文档、配置和目录结构会先被当作 world 或可感知目标，而不是被复制成另一个项目。
-
-然后再进入成长 loop。这个 bootstrap 是 `grow` 的前置阶段，不是单独的产品命令。
-
-grow 可能修改：
-
-```text
-skills/
-hooks.yaml
-tools/
-evals/
-interface.yaml
-permissions.yaml
-world/
-```
-
-初始四个工具是 bootstrap tools：
+`.feng/tools` 是工具定义和工具说明。初始只有四个基础工具的声明和边界：
 
 ```text
 read_file
@@ -349,245 +194,116 @@ list_files
 run_command
 ```
 
-领域工具属于 self repo。grow 可以新增或修改工具声明和实现，例如 HTTP 请求工具、传感器读取工具、桌面操作工具。
+后续长出来的工具也进入 `.feng/tools`，并经过 permission、schema、check。
 
-工具变多后，不代表每轮全部暴露给 LLM。
+`.feng/prompts` 保存可迭代的 prompt block 或编排规则。它不是让用户维护一大坨 prompt，而是让 feng 能观察和优化自己的 context engineering。
+
+`.feng/messages` 保存每轮实际编译出来的 message list、hash、token 统计和压缩记录。message 是运行时产物，prompt/skill/world 是可成长材料。
+
+## 6. World、Config、Args
 
 ```text
-tool registry
-  当前 workspace 可用工具全集，来自 bootstrap tools 和 self repo tools。
+world
+  稳定世界模型，例如 API schema、项目结构、小车控制协议。
 
-active tool pack
-  本轮暴露给 LLM 的工具子集，由 hook/skill/latest event/seed loop 选择。
+config
+  本机事实，例如 token env、设备地址、用户偏好。
+
+args
+  单次运行输入。
+
+artifacts
+  运行证据，例如日志、diff、测试报告、网页正文。
 ```
 
-每轮只暴露当前 hook/skill 或 seed loop 需要的工具 schema；工具文档和长说明仍留在 `tools/` 文件里，必要时再读取。active tool pack 的 hash 是 prompt cache key 的一部分。tool growth、provider capability 变化或 permission 变化都会让 hash 改变，不能复用旧工具前缀。
+长内容默认文件化。message 中只放路径、hash、summary、why_relevant 和必要片段。
 
-MCP 不属于 feng 的核心工具协议。未来 MCP server 可以作为 tool adapter，把外部工具归一化成 feng 内部 `Tool / ToolCall / ToolResult` 后进入 registry；但 MVP 不实现 MCP transport，也不允许 self repo 声明一个 runtime 无法执行的 MCP 工具。MVP 工具保持 bootstrap tools + command tools。
+## 7. Checkpoint 和历史
 
-`check` 是验证入口，只回答三个问题：
+`.feng/history` 是 agent 实例的成长历史。它至少记录：
 
 ```text
-能不能启动
-会不会按示例做事
-还缺什么权限或配置
+user inputs
+message hashes
+tool calls
+check results
+validated instance snapshots
+artifacts
 ```
 
-check 至少验证：
+check 失败不强制回滚。失败报告进入 `.feng/artifacts`，下一轮 grow 读取它并修复。只有 check 通过，才把 `.feng` 中的能力变化推进为 validated instance。
+
+如果当前 workspace 自己有 Git，feng 可以把 Git status/diff/log 作为世界事实使用。是否提交用户项目文件，应由权限、skill 和用户目标明确决定，不能和 `.feng` 实例 checkpoint 混为一谈。
+
+## 8. feng 自迭代
+
+当 feng 迭代自己时，当前目录是 feng 源码仓库，`.feng/` 是负责迭代 feng 的 agent 实例。
 
 ```text
-self 能加载
-schema 能解析
-tool 能加载并受权限约束
-baseline eval 能通过
-candidate 声明的项目 eval 能通过
+feng/
+  .git/
+  cmd/
+  internal/
+  docs/
+  go.mod
+  .feng/
+    goal.md
+    skills/iterate-feng.md
+    tools/go-test.tool.yaml
+    tools/hatch-feng.tool.yaml
+    prompts/
+    messages/
+    world/runtime-contract.md
+    evals/
+    state.yaml
+    artifacts/
+    history/
 ```
 
-baseline eval 验证 self 健康、schema、permissions、provider/config、secret 边界。项目 eval 可以是示例、fixture、mock 或受限命令，由 grow 生成并沉淀。eval 产物写入 `.feng/artifacts/`，不会直接污染 self repo。
+`cmd/ internal/ docs/` 是被修改对象；`.feng/` 是孵化器和成长记忆；`feng` binary 是执行这个孵化器的 runtime。
 
-## 9. 成长版本
+## 9. Hatch
 
-Git 是 self repo 的成长介质，不只是回滚工具。
+`hatch` 把当前实例的 validated 能力打包成命名命令。
 
 ```text
-validated commit = 可以启动的一版 self
-working tree      = candidate self + 当前 workspace 的其他可感知文件
-tag               = 被命名和固定的一版 self
+feng hatch --name xiaopi --portable
 ```
 
-Git 管理的 promote 边界是 self roots，不是整个目录树。kernel 只把 self 文件、skills/tools/world/evals、可选源码/文档/测试根和 Go module 文件纳入 checkpoint/tag/hatch 的干净检查；无关数据、日志或目标环境文件可以留在 workspace 中，被需要时感知，但不能被误提交或阻塞 release。
-
-candidate 验证失败时，不自动丢弃。当前 agent 继续从上一版 validated commit 运行，同时修复 working tree 里的 candidate。失败报告、diff 和验证结果写入 `.feng/artifacts/`，下一轮通过 artifact refs 进入上下文。
-
-candidate 验证通过后，promote 成新的 validated commit。达到目标后，可以 tag 并 hatch。
-
-agent 感知 Git 的方式是文件和工具：kernel 把 status、diff、check report、validated commit 写入 state/artifacts；agent 也可以在 permissions 允许范围内通过 `run_command` 调用安全 git 命令。强制回滚不是默认策略，默认策略是用上一版 validated self 启动，再继续修复 candidate。
-
-## 10. Hatch / Release
-
-`hatch` 把 validated self 变成命名命令。release 是 hatch 产出的技术包。
+产物包含：
 
 ```text
-hatch output = frozen self + runner + manifest + checksums
-```
-
-release package 至少包含：
-
-```text
-命名入口：xiaogui / xiaogui.ps1
 runner
-self/
+frozen self
 manifest
 checksums
-install 脚本
+provider examples
+launchers/install scripts
 ```
 
-manifest 说明：
+使用者得到的是 `xiaopi`，不是一个 feng workspace。
+
+## 10. 非目标
+
+MVP 不做：
 
 ```text
-name、version/tag、self commit、runner version、target platform
-required tools、required permissions、config schema、interface、checksums
+多 agent 团队
+插件市场
+复杂 hook 脚本系统
+完整 MCP transport
+provider router
+复杂后台 daemon
+自动管理用户项目 Git 历史
 ```
 
-使用者机器上的密钥、路径、设备地址、API endpoint 不应该被打进 release self。第一次运行时由 `config.schema.yaml` 引导配置，保存到使用者本机。
+MCP 未来可以作为 tool adapter 接入内部 `Tool / ToolCall / ToolResult`，但不能替代 feng 的内部工具协议。
 
-permissions 不只是展示文本，也是 runner 的执行边界。每次 tool call 都必须经过 permission check。
-
-## 11. 模板
-
-模板只是起始 self 形状，不是插件市场，也不是隐藏 runtime。
-
-第一版只支持：
+## 11. 一句话
 
 ```text
-builtin template
-local template
+feng 是运行框架。
+.feng 是当前目录里 agent 的身体、能力和记忆。
+workspace 是 agent 工作的世界。
+hatch 后的命名命令读取安装包 self，并在用户目录写自己的运行态。
 ```
-
-命令：
-
-```text
-feng templates
-feng grow "帮我整理下载目录"
-feng grow --template file-agent "帮我整理下载目录"
-feng grow --template ./my-template "帮我整理下载目录"
-```
-
-默认模板应该足够好，让第一次 `feng grow "..."` 不需要额外参数。这里的“足够好”指结构完整，而不是预置能力。
-
-默认模板不预置领域 skill。local template 可以带少量 skills、tools、evals 和 world 示例，但它们是创造者显式选择的起点，仍然只是 self repo 文件，必须经过正常 check 才能成为 validated self。
-
-MVP 中 template 不做成市场或插件系统。`--template builtin/default` 表示使用内置最小形状；`--template ./path` 表示从本地目录复制缺失的 self 文件和 self roots。复制规则和 bootstrap 一样：只补缺失文件，不覆盖当前 workspace 已有内容。
-
-## 12. LLM 和缓存
-
-OpenAI 和 Anthropic 只是 adapter 差异，不进入 self 核心概念。
-
-kernel 内部统一：
-
-```text
-Message
-Tool
-ToolCall
-```
-
-缓存策略遵循一个原则：
-
-```text
-稳定前缀尽量不变，动态后缀尽量短。
-```
-
-缓存 key 必须感知：
-
-```text
-model
-stable prefix hash
-active tool pack hash
-self commit/tag
-context pack hash
-mode: execute | grow
-```
-
-运行时至少记录：
-
-```text
-prompt tokens
-cached tokens
-tool schema tokens
-artifact-ref tokens
-dynamic suffix tokens
-```
-
-这些指标写入 `.feng/events.jsonl` 或 `.feng/artifacts/`，用于观察 token efficiency。
-
-LLM 错误恢复属于 Runtime Kernel，不属于 self repo 的特殊能力。
-
-MVP 至少区分：
-
-```text
-max_tokens / output truncated
-  首次提高输出预算或请求 continuation；截断内容不直接污染稳定前缀。
-
-prompt_too_long
-  执行 reactive compact 后重试；仍失败则 blocked。
-
-429 / 500 / 503
-  指数退避重试；超过上限写 artifact 并 blocked。
-
-401 / 402 / missing_config
-  不重试，进入 missing_config 或 blocked。
-
-400 / 422
-  视为请求构造错误，写 artifact 供下一轮修复。
-```
-
-所有恢复动作都写入 `.feng/events.jsonl`；长错误响应写入 `.feng/artifacts/`。agent 下一轮通过 artifact refs 感知错误，而不是把完整错误栈反复塞进 messages。
-
-## 13. 易用性约束
-
-为了保持架构简单，所有易用性问题只允许通过三类东西解决：
-
-```text
-更好的 CLI 入口
-少量 self repo 约定文件
-更清楚的 release manifest
-```
-
-不要为了模板、测试、权限、配置、分享分别做复杂系统。
-
-## 14. 自举验证
-
-`feng hatch --name feng --portable` 是架构的自举验证 case。
-
-它的目标不是创造另一个 agent，而是让当前 feng workspace 用同一套机制孵化下一版 feng 自己。被 hatch 出来的命令仍然叫 `feng`，面对的 world 是 feng 自己的仓库、核心诉求、架构文档、评审轮次、源码、测试和 Git 历史。
-
-自举不应该拥有特殊 runtime。它仍然通过：
-
-```text
-self repo
-.feng state
-Git
-skills
-tools
-evals
-permissions
-```
-
-来审查、修改、验证和提交 feng 自己。
-
-如果自举需要特殊通道，说明 feng 的通用架构还不够自洽。
-
-## 15. MVP
-
-第一版只做：
-
-1. Runtime kernel。
-2. 文件化 self repo。
-3. `.feng/state.yaml`、`.feng/lock`、`.feng/events.jsonl`、`.feng/artifacts/`。
-4. 一个基础 loop。
-5. 四个 bootstrap tools。
-6. 一个 LLM adapter，另一个保留接口。
-7. Git 管理 candidate、validated commit、tag。
-8. skill-ready context assembly：有 skill 时按 skill 选择上下文；没有 skill 时走通用 seed loop。
-9. 简单 validate：load、schema、tool、eval。
-10. builtin/local template。
-11. CLI：grow、check、hatch、status、watch、artifacts、gui、tag。
-12. named portable release。
-13. 首次运行配置引导。
-14. 权限摘要确认和 tool call permission check。
-15. 只读观察型 GUI。
-
-暂时不做多 agent、复杂插件市场、复杂长期记忆、复杂 hook 执行器。
-
-## 16. 核心判断
-
-feng 要爆火，不能让使用者理解 feng。
-
-```text
-创造者使用 feng。
-使用者使用 xiaogui。
-```
-
-架构上保持小内核，产品上隐藏内部结构。所有关键能力落到 self repo 的文件约定里：skill 是成长单位，hook 是介入时机，eval 是成长标准，permissions 是信任边界，interface 是命令参数，hatch 是命名可执行产物。
-
-这样 feng 才能把一个想法孵化成一个可以传播的命令。

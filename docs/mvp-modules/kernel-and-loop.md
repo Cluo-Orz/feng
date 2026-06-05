@@ -2,51 +2,80 @@
 
 ## 职责
 
-Runtime Kernel 只负责一件事：
+Runtime Kernel 只负责运行通用 loop，不写死领域能力。
 
 ```text
-把 workspace state 编译成 LLM 可行动的环境，并把行动结果写回文件和 Git 语义。
-```
-
-核心 loop：
-
-```text
-read state/files/git
--> select hook/skill
--> select active tool pack
+read .feng + workspace
+-> select skills/tools/prompts
 -> compile messages
 -> call LLM
--> execute tool calls through permission
--> write events/artifacts/state
--> repeat
+-> execute tool calls through permissions
+-> write workspace/.feng
+-> validate
+-> continue or stop
 ```
 
-每一 turn 都重新执行 `read state/files/git -> compile messages`。tool call 之后保留必要的 assistant/tool suffix，但下一次 LLM 调用必须重新读取 self repo、Git、artifact refs 和 workspace index。这样 agent 修改自己或生成 artifact 后，下一轮能立刻感知最新文件世界，而不是继续使用旧的 state manifest。
+## 长程 grow
 
-MVP 的 hook 只用于选择 skill body，不执行脚本。`on_grow`、`on_check_failed`、`on_execute` 可以从 `hooks.yaml` 引用 skill 名称或路径；命中的 skill body 进入 cached context pack。`check` 必须拒绝其他 hook 事件名，避免 self repo 长出 runtime 不会触发的隐藏入口。没有命中时走 seed loop 和关键词相关性选择。
+`grow` 是长程孵化，不是单次问答。
+
+```text
+1. acquire .feng/lock
+2. append user input to .feng/inbox
+3. load goal/state/history
+4. select active skill/tool/prompt
+5. compile message list
+6. call provider
+7. execute tool calls
+8. write artifacts/events/messages
+9. run validation/check when candidate changed
+10. if failed, feed failure artifact into next grow turn
+11. repeat until done, blocked, missing_config, or budget reached
+12. release lock
+```
+
+显式 `feng check` 仍然可以存在，但自迭代不能依赖外部 agent 手动执行每一轮 check/repair。
+
+## Hook
+
+MVP hook 只做选择，不执行脚本。
+
+```text
+on_grow
+on_check_failed
+on_execute
+```
+
+hook 选择 `.feng/skills` 或 packaged `self/skills` 中的 skill body；skill 可声明本轮需要的 tools。复杂 hook 脚本不是 MVP。
 
 ## 输入
 
 ```text
-self repo files
+.feng/goal.md
+.feng/inbox/
+.feng/skills/
+.feng/tools/
+.feng/prompts/
+.feng/world/
 .feng/state.yaml
 .feng/events.jsonl
 .feng/artifacts/
-Git status/diff/validated commit
-latest event
+workspace file index
+workspace Git facts if present
 provider profile
 ```
 
 ## 输出
 
 ```text
-ToolResult
-updated self repo candidate
-events
-artifacts
-state snapshot
-check result
-hatch package
+workspace changes
+.feng skill/tool/prompt/world/eval changes
+.feng/messages/latest.json
+.feng/events.jsonl
+.feng/artifacts/
+.feng/state.yaml
+validated instance checkpoint
+optional hatch package
 ```
 
 ## 不变量
@@ -54,14 +83,7 @@ hatch package
 ```text
 只有一个 loop。
 grow/check/execute 共享 kernel。
-mode 只改变可写边界和 interface，不改变核心机制。
-LLM 不能绕过 permission 直接推进 Git validated commit。
-```
-
-## 非目标
-
-```text
-不内置 feng 自举专用逻辑。
-不内置固定项目 skill。
-不实现多 agent 团队、cron、MCP 完整生态。
+mode 只改变 instance root、writable boundary 和 interface。
+LLM 不能绕过 permission。
+LLM 不能直接推进 validated checkpoint。
 ```

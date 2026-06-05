@@ -2,51 +2,82 @@
 
 ## 职责
 
-Message compiler 把 self repo、runtime state、Git 和 latest event 编译成 token-efficient messages。
+Message compiler 把 `.feng` 实例、workspace 状态、artifacts 和用户最新输入编译成 token-efficient messages。
 
 ## Message 顺序
 
 ```text
 provider tools
 system: kernel contract
-system: self contract
+system: instance/self contract
 optional cached context pack
 user: state manifest
 conversation suffix
-  只保留最近必要的 assistant/tool 配对，并插在最新 user event 之前，避免 tool result 出现在时间线最后却缺少新的用户目标。
-  每一 turn 编译前都会压缩 suffix：旧 assistant/tool turn 从 live message list 移除，只留下压缩提示；较旧的大 tool result 变成占位内容。历史证据通过 recent_events、artifact_refs、Git status 或 targeted read_file 重新感知。
-
-user: latest event
+user: latest input/event
 ```
 
-## Skill/World 加载
+## 来源
 
 ```text
-skill/world index
-  进入稳定 self contract，可缓存。
+.feng/prompts
+  稳定 prompt block 和编排规则。
 
-self_files
-  进入稳定 self contract，只作为 self repo 的均衡文件索引。每个 self root 有固定预算，目录过长时写入 path/[truncated]，避免一个目录挤掉 tools/world/evals 等其他可感知面。
+.feng/skills
+  能力 catalog 进入稳定 contract；skill body 只在相关时进入 context pack。
 
-source_self_commit
-  如果当前 workspace 来自 hatch package，进入 self contract，用于让 agent 感知这一代 self 的来源版本。
+.feng/tools
+  工具全集。message 中只暴露 active tool pack schema。
 
-workspace file index
-  进入动态 state manifest。self roots 优先，普通 world 文件后置；node_modules、vendor、target、build/cache 等生成或依赖目录默认不进入 index。
+.feng/world
+  稳定世界模型。只选相关 excerpt。
 
-skill/world body
-  只在相关时进入 cached context pack 或动态后缀。
-  MVP 用本轮 goal/request 的轻量多语言关键词匹配 path、标题和正文；中文目标用 CJK 短片段召回，不依赖外部分词器。只取少量最相关文件的 excerpt；不把整个 skills/ 或 world/ 全量塞入 message。
-  如果当前 hook 在 hooks.yaml 中选中了 skill，这些 skill body 优先进入 cached context pack。
+.feng/messages
+  编译产物、hash、token 报告和压缩记录。
 
-artifact refs
-  大内容只放 type/source/path/hash/summary/why_relevant/snippets。
+.feng/artifacts
+  大内容引用。
 
-recent_events
-  只作为短进展索引进入 state manifest；嵌套字段也必须递归裁剪，不能因为旧 event 里有长 map、长 array 或 snippets 就把日志正文带回 prompt。
+workspace
+  当前任务现场，按需索引和读取。
+```
 
-last_recovery
-  进入动态 state manifest。它只放失败类型和 artifact 地址，让下一轮 grow 能从失败现场继续修复，而不是把完整日志塞进 prompt。
+## Token Efficiency
+
+规则：
+
+```text
+稳定内容靠前。
+动态内容靠后。
+大内容只放 artifact ref。
+source/log/diff 不直接塞进 prompt。
+skill/world body 只按相关性选择少量 excerpt。
+conversation suffix 只保留最近必要 tool turn。
+```
+
+相关性选择使用轻量多语言匹配，支持中文目标和中文 skill/tool/world 描述，不依赖外部分词器。
+
+## `.feng/messages`
+
+每轮写入：
+
+```text
+.feng/messages/latest.json
+.feng/messages/latest.hash
+.feng/messages/token-report.json
+```
+
+至少包含：
+
+```text
+stable_prefix_hash
+active_tool_pack_hash
+context_pack_hash
+estimated_input_tokens
+tool_schema_tokens
+context_pack_tokens
+provider usage
+cache hit/miss if available
+compaction events
 ```
 
 ## Context Pressure
@@ -54,37 +85,19 @@ last_recovery
 处理顺序：
 
 ```text
-0. 如果 state/env 设置 max_input_tokens，调用 provider 前先压缩动态后缀。
 1. 大 tool output 写 artifact。
-2. conversation suffix 持久压缩，只保留最近 tool turn。
-3. 旧 tool result 占位。
-4. 历史压缩成 summary。
-5. 低相关 skill/world 出局。
-6. prompt_too_long 时 reactive compact。
-7. 仍失败则 blocked。
+2. conversation suffix 压缩。
+3. 低相关 skill/world 出局。
+4. state manifest 裁剪。
+5. prompt_too_long reactive compact。
+6. 仍失败则 blocked，并写 provider-error artifact。
 ```
-
-## Cache Key
-
-```text
-provider
-model
-mode
-self commit/tag
-stable_prefix_hash
-active_tool_pack_hash
-context_pack_hash
-provider_capability_hash
-```
-
-运行时还要记录 `context_pack_hash` 和 `context_pack_tokens`，用于观察相关 skill/world body 是否进入本轮上下文，以及它们对 token 预算的影响。
 
 ## 不变量
 
 ```text
-稳定前缀不放本轮动态错误、长日志、完整 diff。
-skill/world index 可以稳定进入 self contract；body 只能按需进入 cached context pack。
-assistant message 不保存长期推理过程。
-tool response 短结果可进 message，长结果必须 artifact 化。
-conversation suffix 不能无限增长；旧结果必须通过 event/artifact/file 重新读取，而不是永久留在 message list。
+message list 是临时编译结果。
+assistant message 不保存长期推理。
+tool response 长结果必须 artifact 化。
+稳定经验要沉淀回 .feng/skills/world/prompts，而不是长期留在 messages。
 ```
