@@ -307,6 +307,42 @@ func checkProviderProfile(workspace string) []string {
 	return nil
 }
 
+func checkConfigSchema(workspace string) []string {
+	data, err := readJSONFile(filepath.Join(workspace, "config.schema.yaml"))
+	if err != nil {
+		return nil
+	}
+	config, ok := data.(map[string]any)
+	if !ok {
+		return []string{"config.schema.yaml must be an object"}
+	}
+	var problems []string
+	problems = append(problems, checkConfigSchemaStringList(config, "provider_profiles")...)
+	problems = append(problems, checkConfigSchemaStringList(config, "env")...)
+	return problems
+}
+
+func checkConfigSchemaStringList(config map[string]any, field string) []string {
+	raw, ok := config[field]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return []string{"config.schema.yaml " + field + " must be a list of strings"}
+	}
+	for i, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return []string{fmt.Sprintf("config.schema.yaml %s item %d must be a string", field, i)}
+		}
+		if strings.TrimSpace(text) == "" {
+			return []string{fmt.Sprintf("config.schema.yaml %s item %d is empty", field, i)}
+		}
+	}
+	return nil
+}
+
 func checkPermissionsConfig(workspace string) []string {
 	data, err := readJSONFile(filepath.Join(workspace, "permissions.yaml"))
 	if err != nil {

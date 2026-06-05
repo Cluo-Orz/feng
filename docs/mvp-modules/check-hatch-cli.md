@@ -71,6 +71,8 @@ hatch 只要求 validated commit 对应的 self roots 干净，不要求整个 w
 
 hatch manifest 的 `interface` 必须来自 self repo 的 `interface.yaml`，不能由 runtime 硬编码另一套命令说明。默认 feng self 的 interface 是 grow/check/hatch/status/watch/artifacts/gui/tag/config。`check` 必须拒绝重复 command、非法 command 名和保留的 `help` command；command 名只允许字母、数字、dot、dash 和 underscore，避免 hatch 后的多命令 execute mode 出现不可调用或歧义入口。
 
+hatch manifest 的 `required_provider_profiles` 和 `required_env` 必须来自 frozen self 的 `config.schema.yaml`。runtime 只能在 schema 缺失或旧包兼容时使用默认 deepseek 要求，不能把 provider requirement 永久硬编码在 hatch 里。
+
 hatch manifest 必须包含 frozen self 的 `permissions_summary`，列出 `permissions.yaml` 中的文件读写范围和命令 allow/deny。它只是发布物说明，不授予额外权限；真正执行时仍由 runtime 读取 packaged self 的权限并逐次检查 tool call。
 
 `checksums.json` 是 package 的完整性边界。packaged runner 启动时如果发现 package 根目录存在 checksums，就必须校验 frozen self、runner、entrypoint、installer、provider examples 和 manifest 没有缺失、变更或出现未记录文件；校验失败时拒绝运行。没有 checksums 的本地测试 seed/template 不触发 package integrity。

@@ -84,6 +84,27 @@ func TestGoRuntimeGrowStatusCheck(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsInvalidConfigSchema(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := bootstrap(dir, "invalid config schema test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "config.schema.yaml"), map[string]any{
+		"provider_profiles": []any{"deepseek"},
+		"env":               []any{"DEEPSEEK_API_KEY", 42},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := runCheck(dir)
+	if report.OK {
+		t.Fatal("expected check to reject invalid config schema")
+	}
+	if !containsProblem(report.Problems, "config.schema.yaml env item 1 must be a string") {
+		t.Fatalf("expected config schema problem, got %+v", report.Problems)
+	}
+}
+
 func TestGoRuntimeWatchValidatesLimitArgs(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := bootstrap(dir, "watch args test", ""); err != nil {
@@ -339,6 +360,12 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "docs", "ignored-note.md"), []byte("ignored workspace note\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := writeJSONFile(filepath.Join(dir, "config.schema.yaml"), map[string]any{
+		"provider_profiles": []any{"deepseek-anthropic"},
+		"env":               []any{"DEEPSEEK_API_KEY", "CUSTOM_AGENT_KEY"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
 	errOut.Reset()
 	if code := Run([]string{"check"}, dir, &out, &errOut); code != 0 {
@@ -448,6 +475,14 @@ func TestGoRuntimeHatchCreatesPackage(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest), `"installers"`) || !strings.Contains(string(manifest), `"install.ps1"`) {
 		t.Fatalf("hatch manifest did not include installers: %s", string(manifest))
+	}
+	var parsedManifest HatchManifest
+	if err := json.Unmarshal(manifest, &parsedManifest); err != nil {
+		t.Fatal(err)
+	}
+	if !containsString(parsedManifest.RequiredProviderProfiles, "deepseek-anthropic") ||
+		!containsString(parsedManifest.RequiredEnv, "CUSTOM_AGENT_KEY") {
+		t.Fatalf("hatch manifest did not use config.schema.yaml requirements: %+v", parsedManifest)
 	}
 	if !strings.Contains(string(manifest), `"permissions_summary"`) ||
 		!strings.Contains(string(manifest), `"source": "self/permissions.yaml"`) ||

@@ -240,6 +240,7 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	requiredProfiles, requiredEnv := packageConfigRequirements(selfRoot)
 	manifest := HatchManifest{
 		Name:                     cleanName,
 		Portable:                 portable,
@@ -247,8 +248,8 @@ func hatch(workspace, rawName, outDir string, portable bool) (string, error) {
 		SelfTag:                  currentValidatedTag(workspace, state.ValidatedCommit),
 		RunnerVersion:            "0.1.0-go",
 		Runner:                   runnerName,
-		RequiredProviderProfiles: []string{"deepseek"},
-		RequiredEnv:              []string{"DEEPSEEK_API_KEY"},
+		RequiredProviderProfiles: requiredProfiles,
+		RequiredEnv:              requiredEnv,
 		Entrypoints:              entrypoints,
 		Installers:               installers,
 		Interface:                interfaceConfig,
@@ -628,6 +629,48 @@ func packagePermissionsSummary(selfRoot string) PermissionSummary {
 			Deny:  cloneStrings(permissions.Commands.Deny),
 		},
 	}
+}
+
+func packageConfigRequirements(selfRoot string) ([]string, []string) {
+	profiles := []string{"deepseek"}
+	env := []string{"DEEPSEEK_API_KEY"}
+	data, err := readJSONFile(filepath.Join(selfRoot, "config.schema.yaml"))
+	if err != nil {
+		return profiles, env
+	}
+	config, ok := data.(map[string]any)
+	if !ok {
+		return profiles, env
+	}
+	if items := configSchemaStringList(config["provider_profiles"]); len(items) > 0 {
+		profiles = items
+	}
+	if items := configSchemaStringList(config["env"]); len(items) > 0 {
+		env = items
+	}
+	return profiles, env
+}
+
+func configSchemaStringList(raw any) []string {
+	values, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var items []string
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		if text == "" || seen[text] {
+			continue
+		}
+		seen[text] = true
+		items = append(items, text)
+	}
+	return items
 }
 
 func packageChecksums(root string) (map[string]string, error) {
