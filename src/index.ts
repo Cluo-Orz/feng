@@ -8,3 +8,4 @@ export * as GrowUnitManager from "./grow-unit-manager/index.js";
 export * as PolicyBoundary from "./policy-boundary/index.js";
 export * as SkillRegistry from "./skill-registry/index.js";
 export * as ContextMessageCompiler from "./context-message-compiler/index.js";
+export * as LLMGateway from "./llm-gateway/index.js";

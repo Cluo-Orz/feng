@@ -52,6 +52,7 @@ export type RetentionClass = (typeof retentionClasses)[number];
 export type ArtifactProducerModule =
   | "artifact-registry"
   | "context-message-compiler"
+  | "llm-gateway"
   | "agent-runtime-kernel"
   | "tool-runtime"
   | "grow-attempt-runner"
