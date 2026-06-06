@@ -20,7 +20,12 @@ export const domainErrorCodes = [
   "file_too_large",
   "unsupported_encoding",
   "atomic_write_failed",
-  "io_failed"
+  "io_failed",
+  "append_conflict",
+  "sequence_conflict",
+  "idempotency_conflict",
+  "projection_stale",
+  "projection_incompatible"
 ] as const;
 
 export type DomainErrorCode = (typeof domainErrorCodes)[number];
