@@ -51,6 +51,7 @@ export const hatchLifecycles = [
   "packaged",
   "published_local",
   "failed",
+  "superseded",
   "retracted"
 ] as const;
 
@@ -114,4 +115,3 @@ export function parseLiteralState<const T extends readonly string[]>(
     retryable: false
   });
 }
-
