@@ -110,9 +110,13 @@ describe("Domain Model & Contracts", () => {
     });
 
     expect(Domain.isErr(failure)).toBe(true);
+    expect(Domain.isErr(success)).toBe(false);
     expect(Domain.isOk(success)).toBe(true);
+    expect(Domain.isOk(failure)).toBe(false);
     expect(Domain.unwrapOr(failure, 10)).toBe(10);
+    expect(Domain.unwrapOr(success, 10)).toBe(3);
     expect(Domain.flatMapResult(failure, (value: number) => Domain.ok(value + 1))).toBe(failure);
+    expect(Domain.flatMapResult(success, (value) => Domain.ok(value + 1))).toEqual({ ok: true, value: 4 });
     expect(Domain.err(failure.error)).toEqual(failure);
   });
 

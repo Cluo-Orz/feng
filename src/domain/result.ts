@@ -14,7 +14,13 @@ export const domainErrorCodes = [
   "llm_failed",
   "tool_failed",
   "readiness_failed",
-  "privacy_blocked"
+  "privacy_blocked",
+  "path_escape_rejected",
+  "symlink_escape_rejected",
+  "file_too_large",
+  "unsupported_encoding",
+  "atomic_write_failed",
+  "io_failed"
 ] as const;
 
 export type DomainErrorCode = (typeof domainErrorCodes)[number];
@@ -109,4 +115,3 @@ export function flatMapResult<T, U, E extends DomainError>(
 export function unwrapOr<T, E extends DomainError>(result: Result<T, E>, fallback: T): T {
   return result.ok ? result.value : fallback;
 }
-
