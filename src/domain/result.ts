@@ -25,7 +25,9 @@ export const domainErrorCodes = [
   "sequence_conflict",
   "idempotency_conflict",
   "projection_stale",
-  "projection_incompatible"
+  "projection_incompatible",
+  "lifecycle_conflict",
+  "content_hash_mismatch"
 ] as const;
 
 export type DomainErrorCode = (typeof domainErrorCodes)[number];

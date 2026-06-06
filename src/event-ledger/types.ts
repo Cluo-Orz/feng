@@ -17,6 +17,7 @@ export const ledgerStreamTypes = [
   "feedback_unit",
   "hatch_package",
   "runtime_trace",
+  "artifact",
   "skill",
   "policy"
 ] as const;

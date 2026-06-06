@@ -2,10 +2,15 @@ import { describe, expect, test } from "vitest";
 import { makeEventId } from "../../src/domain/index.js";
 import { createEventLedger, makeIdempotencyKey } from "../../src/event-ledger/index.js";
 import { streamPath } from "../../src/event-ledger/paths.js";
+import { stableStringify } from "../../src/event-ledger/stable-json.js";
 import { withWorkspace } from "../file-store/helpers.js";
 import { audit, eventInput, idem, makeLedgerFixture, projectionKey, projectionName, source } from "./helpers.js";
 
 describe("Event Ledger & Projection", () => {
+  test("stable stringify preserves array order and object key stability", () => {
+    expect(stableStringify([{ b: 2, a: 1 }, 3])).toBe('[{"a":1,"b":2},3]');
+  });
+
   test("appends events with stream-local monotonic sequence and reads pages", async () => {
     await withWorkspace(async (workspace) => {
       const { ledger, stream } = makeLedgerFixture(workspace);
