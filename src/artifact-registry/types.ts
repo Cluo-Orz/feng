@@ -59,6 +59,7 @@ export type ArtifactProducerModule =
   | "evidence-readiness"
   | "runtime-contract-registry"
   | "hatch-builder"
+  | "target-world-adapter"
   | "human"
   | "importer"
   | "unknown";

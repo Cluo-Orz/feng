@@ -7,6 +7,7 @@ import type {
   MessageListId,
   RuntimeContractId,
   SkillId,
+  TargetWorldId,
   ToolId
 } from "./ids.js";
 
@@ -18,6 +19,7 @@ export const refKinds = [
   "feedback_unit",
   "hatch_package",
   "runtime_contract",
+  "target_world",
   "skill",
   "tool",
   "tool_result",
@@ -41,6 +43,7 @@ export type AttemptRef = BaseRef<"attempt", AttemptId>;
 export type FeedbackUnitRef = BaseRef<"feedback_unit", FeedbackUnitId>;
 export type HatchPackageRef = BaseRef<"hatch_package", HatchPackageId>;
 export type RuntimeContractRef = BaseRef<"runtime_contract", RuntimeContractId>;
+export type TargetWorldRef = BaseRef<"target_world", TargetWorldId>;
 export type SkillRef = BaseRef<"skill", SkillId>;
 export type ToolRef = BaseRef<"tool", ToolId>;
 export type ToolResultRef = BaseRef<"tool_result", ArtifactId>;
@@ -55,6 +58,7 @@ export type DomainRef =
   | FeedbackUnitRef
   | HatchPackageRef
   | RuntimeContractRef
+  | TargetWorldRef
   | SkillRef
   | ToolRef
   | ToolResultRef
