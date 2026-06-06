@@ -19,6 +19,7 @@ export const ledgerStreamTypes = [
   "runtime_trace",
   "artifact",
   "skill",
+  "tool",
   "policy"
 ] as const;
 

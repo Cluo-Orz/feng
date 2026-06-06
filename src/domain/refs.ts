@@ -6,7 +6,8 @@ import type {
   HatchPackageId,
   MessageListId,
   RuntimeContractId,
-  SkillId
+  SkillId,
+  ToolId
 } from "./ids.js";
 
 export const refKinds = [
@@ -18,6 +19,7 @@ export const refKinds = [
   "hatch_package",
   "runtime_contract",
   "skill",
+  "tool",
   "tool_result",
   "trace",
   "validation_report"
@@ -40,6 +42,7 @@ export type FeedbackUnitRef = BaseRef<"feedback_unit", FeedbackUnitId>;
 export type HatchPackageRef = BaseRef<"hatch_package", HatchPackageId>;
 export type RuntimeContractRef = BaseRef<"runtime_contract", RuntimeContractId>;
 export type SkillRef = BaseRef<"skill", SkillId>;
+export type ToolRef = BaseRef<"tool", ToolId>;
 export type ToolResultRef = BaseRef<"tool_result", ArtifactId>;
 export type TraceRef = BaseRef<"trace", ArtifactId>;
 export type ValidationReportRef = BaseRef<"validation_report", ArtifactId>;
@@ -53,6 +56,7 @@ export type DomainRef =
   | HatchPackageRef
   | RuntimeContractRef
   | SkillRef
+  | ToolRef
   | ToolResultRef
   | TraceRef
   | ValidationReportRef;
@@ -74,4 +78,3 @@ export function makeRef<Kind extends RefKind, Id extends string>(
     ...(options.version === undefined ? {} : { version: options.version })
   };
 }
-
