@@ -56,6 +56,7 @@ export type ArtifactProducerModule =
   | "agent-runtime-kernel"
   | "tool-runtime"
   | "grow-attempt-runner"
+  | "evidence-readiness"
   | "hatch-builder"
   | "human"
   | "importer"
