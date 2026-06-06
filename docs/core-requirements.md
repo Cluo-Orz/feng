@@ -1,284 +1,248 @@
-# feng 核心诉求
+# feng 原始诉求
 
-## 1. 核心产品诉求
+这份文档只记录原始诉求，不进入架构和实现设计。后续设计文档必须从这里推导，不能反过来覆盖这里的目标。
 
-feng 要成为一个独立命令。它在任意目录运行时，都能让这个目录获得一个可成长的 agent 实例。
+## 1. 一句话目标
+
+feng 的目标是：
 
 ```text
-feng command
-  通用 runtime。
-
-.feng/
-  当前目录里的 agent 实例。
-
-workspace files
-  用户真正要处理的项目、数据、代码和环境。
+告诉 feng 如何感知世界，feng 给你造一个现成的 AI。
 ```
 
-用户只需要表达目标和反馈：
+用户不应该先学习 agent 框架、插件系统、目录规范或复杂 schema。用户只需要告诉 feng：
+
+```text
+我要做什么。
+这个 AI 需要感知什么世界。
+它能从哪里读到事实。
+它可以做哪些动作。
+什么结果算完成。
+后续反馈和修正是什么。
+```
+
+feng 负责把这些输入逐步整理成一个能运行、能验证、能继续成长，并最终能发布给别人直接使用的 AI。
+
+## 2. 用户心智
+
+用户面对的是一个命令：
 
 ```text
 feng grow "我要做什么"
 feng grow "补充一个事实"
-feng grow "按这个反馈继续"
+feng grow "刚才理解错了，按这个改"
 ```
 
-feng 负责合并信息、维护长期目标、选择工具、编排上下文、调用 LLM、修改 workspace、验证结果和继续运行。
+`grow` 不是一次问答。它表示把目标、事实、规则、反馈和世界入口持续喂给当前目录里的 AI，让这个 AI 长出稳定能力。
 
-## 2. 必须成立的体验
-
-### 空目录
+用户希望 feng 做的是：
 
 ```text
-mkdir demo
-cd demo
-feng grow "做一个能汇总新闻的 agent"
+理解目标。
+吸收世界信息。
+知道自己缺什么。
+需要配置、权限或样例时明确问出来。
+能调用工具观察世界。
+能修改或生成产物。
+能检查结果是否真的满足目标。
+失败后能继续修复。
+能力成熟后能变成一个普通命令。
 ```
 
-结果：
+## 3. 必须成立的体验
+
+### 空目录开始
+
+用户可以在一个空目录里运行：
 
 ```text
-demo/
-  .feng/
-    goal.md
-    inbox/
-    skills/
-    tools/
-    prompts/
-    messages/
-    world/
-    evals/
-    state.yaml
-    events.jsonl
-    artifacts/
+feng grow "做一个能汇总新闻的 AI"
 ```
 
-`.feng` 是实例空间，不污染用户项目根目录。
+期望结果不是一段建议，而是这个目录里开始出现一个可成长的 AI 实例。用户后续继续补充新闻源、时间范围、输出格式、可信来源、去重规则，feng 能把这些信息合并到同一个成长过程里。
 
 ### 普通项目目录
 
+用户可以在已有项目里运行：
+
 ```text
-cd existing-project
 feng grow "帮我实现 API 测试"
 ```
 
-feng 在当前目录创建/读取 `.feng`，按权限修改 `existing-project` 的项目文件。它不会把 `skills/ tools/ world/` 散落到项目根目录。
+feng 应该理解当前目录就是任务现场。它可以读取项目、生成测试、运行检查，但不应该把 feng 自己的能力文件散落到用户项目根目录，也不应该默认接管用户项目的 Git 历史。
 
-### feng 自迭代
+### feng 自己迭代自己
+
+用户可以在 feng 源码目录里运行：
 
 ```text
-cd feng
-feng grow "改进 feng 自己的自迭代能力"
+feng grow "改进 feng 自己"
 ```
 
-这里：
+这里 feng 的源码、文档和测试是被改进的对象。负责记忆、工具、目标、反馈和验证的是当前目录里的 feng 实例。
+
+自迭代不能依赖另一个外部 agent 手动串联每一轮。用户或 Codex 可以补信息，但 feng 自己必须能推动：
 
 ```text
-cmd/ internal/ docs/
-  被修改的 feng 源码和文档。
-
-.feng/
-  如何迭代 feng 的 skills、tools、prompts、world、evals、history。
+grow -> check -> repair -> check -> ready
 ```
 
-自迭代不能依赖 Codex 手动串联每一轮。Codex 或用户只负责补信息；feng runtime 必须能自己执行 grow/check/repair/check 的闭环。
+### hatch 成现成 AI
 
-### hatch 后产品
-
-创造者：
+创造者希望能运行：
 
 ```text
-feng hatch --name xiaopi --portable
+feng hatch --name xiaopi
 ```
 
-使用者：
+然后得到一个普通命令：
 
 ```text
-cd ~/Downloads
 xiaopi "整理发票"
 ```
 
-安装包里有 frozen self：
+使用者不应该理解 feng 的内部成长过程。使用者只需要运行这个命令、补必要配置、查看产物和失败原因。
+
+## 4. 世界感知诉求
+
+用户告诉 feng 如何感知世界时，不应该被迫使用固定格式。
+
+允许输入包括：
 
 ```text
-xiaopi-package/
-  xiaopi
-  feng-runner
-  self/
-    skills/
-    tools/
-    prompts/
-    world/
-    evals/
-```
-
-用户目录里只有运行态：
-
-```text
-~/Downloads/
-  .xiaopi/
-    state.yaml
-    events.jsonl
-    runs/
-    artifacts/
-    history/
-    config.yaml
-```
-
-## 3. 核心架构要求
-
-```text
-Runtime 必须稳定、薄、通用。
-.feng 必须是一等实例根。
-skills/tools/prompts/world/evals 必须属于实例或 packaged self。
-workspace 必须保持用户项目语义。
-世界输入可以是任意格式，但稳定能力必须沉淀到 world/tools/skills/evals。
-message list 必须由 runtime 临时编译，不是长期记忆。
-长内容必须文件化。
-工具调用必须经过权限。
-check 失败不能丢 candidate。
-validated 能力必须可 checkpoint。
-hatch 产物必须是普通命令。
-done 必须由 eval/check 证明，不能只看 assistant 文本。
-hatch 必须打包 validated ability closure，不打包完整 .feng。
-外来 .feng 默认 untrusted。
-```
-
-## 4. World Intake 要求
-
-用户“告诉 feng 如何感知世界”时，不需要遵守固定 schema。
-
-允许输入：
-
-```text
-自然语言
+自然语言说明
 文件路径
 API 文档
 curl 示例
-SDK 说明
+SDK 或设备协议
 日志
 网页
-设备协议
 代码仓库
-截图或其他 artifact 引用
+截图或其他产物引用
+本机命令说明
+外部工具或服务说明
 ```
 
-feng 必须把这些 raw intake 逐步整理成：
+feng 必须能判断这些输入只是原材料，还是已经变成了稳定能力。
+
+一条世界信息真正被吸收，至少应该变成：
 
 ```text
-.feng/world
-  当前稳定世界理解。
-
-.feng/tools
-  感知或操作世界的工具。
-
-.feng/evals
-  证明目标是否满足的检查。
-
-.feng/skills
-  如何使用 world/tools/evals 完成目标。
+可感知：feng 知道从哪里读到事实。
+可行动：feng 知道能做什么动作。
+可约束：feng 知道哪些动作需要限制、配置或确认。
+可验证：feng 知道怎么证明目标完成。
+可复用：以后相似任务能继续使用这项能力。
 ```
 
-判断一项世界信息是否真正被吸收，不看它是否填了某个表，而看它是否已经变成：
+如果信息只停留在聊天记录、inbox 或一次性日志里，它还不是能力。
+
+## 5. 成长过程诉求
+
+第一次 `grow` 至少应该把一句目标转成可继续推进的成长任务，而不是只生成自然语言回答。
+
+它应该产出这些问题的初步答案：
 
 ```text
-可感知
-可行动
-可约束
-可验证
-可复用
+这个 AI 要解决什么问题？
+给谁用？
+默认怎么交互？
+它需要感知哪些世界？
+当前已经给了哪些入口？
+还缺哪些配置、权限、样例或工具？
+什么结果算完成？
+用什么检查证明它完成了？
+哪些能力可以先做候选，哪些必须等用户补充？
 ```
 
-如果只停留在 inbox 或 artifact 里，它还只是材料，不是能力。
+后续 `grow` 默认是在同一个成长任务上补事实、纠错或追加约束，而不是重新开始一个无关 session。
 
-用户后续输入可以修订旧理解。发生冲突时，feng 必须标记受影响能力 stale，重跑相关 eval，通过后才更新 validated 能力。
+## 6. 完成标准诉求
 
-## 5. Context Engineering 要求
+feng 不能因为模型说“完成了”就算完成。
 
-唯一核心指标是 token efficiency。
+完成必须有证据，例如：
 
 ```text
-稳定的放前面。
-动态的放后面。
-大内容放文件。
-prompt 里尽量放引用。
-tool schema 只暴露 active subset。
-assistant/tool 历史只保留必要短后缀。
+生成了用户要的文件或产物。
+运行了项目测试或检查。
+报告里有来源、时间、输入和输出。
+缺少配置时明确列出缺什么、为什么缺。
+高风险动作在未确认前没有执行。
+发布前有可重复的示例或 smoke check。
 ```
 
-每轮 message list 至少分层：
+失败也必须成为下一轮成长材料。失败日志、测试输出、权限拒绝、缺配置原因都应该被保存，并能在后续 `grow` 中继续修复。
+
+## 7. 安全和边界诉求
+
+feng 可以变得有行动力，但不能默认无限行动。
+
+必须成立：
 
 ```text
-provider tools
-system: kernel rules
-system: instance summary
-optional cached context pack
-user: state manifest
-conversation suffix
-user: latest user input or event
+读写文件要有边界。
+运行命令要有边界。
+访问网络、外部服务或设备要有边界。
+删除、发布、写外部系统、控制硬件等高风险动作要确认。
+密钥和本机私有配置不能被写进发布包。
+从外部仓库带来的 feng 实例不能默认可信。
 ```
 
-`.feng/messages` 要记录：
+权限不能只靠 prompt 自觉，必须是运行时真实拦截。
+
+## 8. 发布诉求
+
+`hatch` 后的产品应该是一个普通命令，而不是一坨需要用户理解的内部目录。
+
+发布出来的 AI 应该：
 
 ```text
-latest message list
-stable_prefix_hash
-active_tool_pack_hash
-context_pack_hash
-estimated tokens
-provider usage
-cache hit/miss
-compaction events
+能解释自己怎么运行。
+缺配置时能提示具体缺什么。
+能在用户目录保存运行状态和产物。
+不污染用户项目根目录。
+不携带创造者本机密钥。
+只包含已经验证过的稳定能力。
 ```
 
-## 6. Tools 要求
+创造者的成长历史、原始输入、失败日志和本机配置，不应该全部塞进最终产品。
 
-初始工具只有：
+## 9. 简单性诉求
+
+feng 不应该变成一个复杂平台。
+
+原始期待是：
 
 ```text
-read_file
-write_file
-list_files
-run_command
+一个命令。
+一个当前目录里的 AI 实例。
+用户持续 grow。
+feng 自己整理世界、工具、能力和验证。
+成熟后 hatch 成普通命令。
 ```
 
-工具定义和工具说明进入 `.feng/tools` 或 packaged `self/tools`。后续工具必须通过 schema、permission 和 check。MCP 不是 MVP 工具实现，只能作为未来 adapter 接入内部 `Tool / ToolCall / ToolResult`。
+后续可以设计目录、状态、工具协议、消息编译、eval、MCP、打包等细节，但这些都只是实现手段。
 
-## 7. Git 和历史要求
+如果某个设计不能服务于“告诉 feng 如何感知世界，feng 给你造一个现成的 AI”，它就不应该进入核心。
 
-feng 需要两类历史，不要混淆：
+## 10. 暂不进入设计的问题
+
+以下问题暂时不在这份文档里决定：
 
 ```text
-.feng/history
-  agent 实例的成长历史。
-
-workspace Git
-  用户项目自己的版本历史，如果存在。
+具体目录结构。
+具体文件 schema。
+metadata 格式。
+candidate 和 validated 的精确机制。
+工具协议细节。
+MCP adapter 细节。
+eval runner 细节。
+message compiler 细节。
+provider adapter 细节。
+hatch package 目录布局。
+CLI 子命令完整设计。
+GUI 设计。
 ```
 
-feng 可以读取 workspace Git，但不能默认接管它。对 `.feng` 能力文件的 checkpoint 是 agent 成长语义；对用户项目文件的提交是用户项目语义，必须由目标、权限或用户确认明确触发。
-
-## 8. 简单性要求
-
-不要把 feng 做成复杂框架。
-
-```text
-一个命令
-一个 .feng 实例根
-一个 loop
-一套工具协议
-一套 message compiler
-一套状态和 artifact 机制
-```
-
-所有复杂能力都应该长在 `.feng/skills`、`.feng/tools`、`.feng/prompts` 和 `.feng/evals` 中，而不是写死进 runtime。
-
-外来 `.feng` 中的工具不是天然可信。未确认信任前，feng 只能 inspect/check，不能执行实例自带 command tool 或写 workspace。
-
-## 9. 最终判断
-
-feng 的核心不是“agent 做一次任务”，而是：
-
-```text
-让任意目录拥有一个能被持续喂养、能自我组织、能调用工具、能验证结果、能 hatch 成产品命令的 agent 实例。
-```
+这些都应该在重新梳理需求之后，再进入设计阶段。
