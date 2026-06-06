@@ -57,6 +57,7 @@ export type ArtifactProducerModule =
   | "tool-runtime"
   | "grow-attempt-runner"
   | "evidence-readiness"
+  | "runtime-contract-registry"
   | "hatch-builder"
   | "human"
   | "importer"

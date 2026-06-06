@@ -6,6 +6,7 @@ const producerPolicy: Partial<Record<ArtifactKind, readonly ArtifactProducerModu
   compiled_message_list: ["context-message-compiler"],
   runtime_message_list: ["agent-runtime-kernel"],
   tool_result: ["tool-runtime", "grow-attempt-runner"],
+  runtime_contract: ["runtime-contract-registry"],
   hatch_package: ["hatch-builder"]
 };
 
