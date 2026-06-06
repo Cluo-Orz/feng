@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feng Detailed Design Spec Partner"
+  short_description: "Generate feng top-level module design and SDD module specs."
+  default_prompt: "Use this skill to create or maintain feng detailed-design docs, top-level module design, per-module SDD specs, rounds, and audits."
