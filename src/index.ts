@@ -10,3 +10,4 @@ export * as SkillRegistry from "./skill-registry/index.js";
 export * as ContextMessageCompiler from "./context-message-compiler/index.js";
 export * as LLMGateway from "./llm-gateway/index.js";
 export * as ToolRuntime from "./tool-runtime/index.js";
+export * as GrowAttemptRunner from "./grow-attempt-runner/index.js";
