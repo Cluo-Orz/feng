@@ -32,7 +32,11 @@ export const domainErrorCodes = [
   "grant_expired",
   "grant_revoked",
   "boundary_unsupported",
-  "external_enforcement_unavailable"
+  "external_enforcement_unavailable",
+  "skill_incompatible",
+  "skill_retracted",
+  "activation_blocked",
+  "rollback_target_missing"
 ] as const;
 
 export type DomainErrorCode = (typeof domainErrorCodes)[number];
