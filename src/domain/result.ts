@@ -27,7 +27,12 @@ export const domainErrorCodes = [
   "projection_stale",
   "projection_incompatible",
   "lifecycle_conflict",
-  "content_hash_mismatch"
+  "content_hash_mismatch",
+  "approval_required",
+  "grant_expired",
+  "grant_revoked",
+  "boundary_unsupported",
+  "external_enforcement_unavailable"
 ] as const;
 
 export type DomainErrorCode = (typeof domainErrorCodes)[number];
