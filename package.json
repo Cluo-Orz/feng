@@ -1,0 +1,21 @@
+{
+  "name": "feng",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "File-native grow/hatch agent system.",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.1.8",
+    "typescript": "5.9.3",
+    "vitest": "4.1.8"
+  }
+}
