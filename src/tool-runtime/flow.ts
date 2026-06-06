@@ -287,7 +287,8 @@ async function waitForConcurrencySlot(
   }
   const deadline = Date.now() + Math.min(timeoutMs ?? definition.timeout.defaultMs, definition.timeout.maxMs);
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(50, Math.max(1, deadline - Date.now()))));
+    if (Date.now() >= deadline) break;
     if (activeCountForTool(runtime, definition.toolRef) < max) return ok(undefined);
   }
   return ok(executionError("timeout", "timed out waiting for tool concurrency slot", true));

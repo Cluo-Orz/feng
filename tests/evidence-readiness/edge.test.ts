@@ -6,14 +6,20 @@ import { makeDoDId, makeDoDRef } from "../../src/agenda-dod-manager/index.js";
 import {
   makeDoDEvaluationId,
   makeDoDEvaluationRef,
+  evaluationIndexPath,
+  evidenceIndexPath,
   makeEvidenceId,
   makeEvidenceRef,
+  makeReadinessGapId,
+  makeReadinessGapRef,
   makeReadinessAssessmentId,
   makeReadinessAssessmentRef,
   makeReadinessVerdictId,
   makeReadinessVerdictRef,
+  gapIndexPath,
   parseJson,
-  EvidenceStorage
+  EvidenceStorage,
+  verdictIndexPath
 } from "../../src/evidence-readiness/index.js";
 import { withWorkspace } from "../file-store/helpers.js";
 import {
@@ -276,6 +282,55 @@ describe("Evidence Readiness edge behavior", () => {
         expect(readinessSummary.value.readyToHatch).toBe(false);
         expect(readinessSummary.value.latestVerdictRef).toBeUndefined();
       }
+    });
+  });
+
+  test("keeps evidence storage index reads deterministic for dangling and invalid files", async () => {
+    await withWorkspace(async (workspace) => {
+      const fixture = makeEvidenceFixture(workspace);
+      const storage = new EvidenceStorage(fixture.store, fixture.workspace);
+      const danglingEvidence = makeEvidenceRef(makeEvidenceId("missing-evidence"));
+      const evidenceIndex = await fixture.store.writeTextAtomic(
+        fixture.workspace,
+        evidenceIndexPath,
+        JSON.stringify({ evidenceRefs: [danglingEvidence] }),
+        { reason: "write dangling evidence index", createParents: true }
+      );
+      expect(evidenceIndex.ok).toBe(true);
+      const evidence = await storage.readAllEvidence();
+      expect(evidence.ok).toBe(true);
+      if (evidence.ok) expect(evidence.value).toHaveLength(0);
+      const badEvaluation = await fixture.store.writeTextAtomic(
+        fixture.workspace,
+        evaluationIndexPath,
+        "{bad evaluation index",
+        { reason: "write invalid evaluation index", createParents: true }
+      );
+      expect(badEvaluation.ok).toBe(true);
+      const evaluations = await storage.readAllEvaluations();
+      expect(evaluations.ok).toBe(false);
+      if (!evaluations.ok) expect(evaluations.error.code).toBe("schema_incompatible");
+      const danglingGap = makeReadinessGapRef(makeReadinessGapId("missing-gap"));
+      const gapIndex = await fixture.store.writeTextAtomic(
+        fixture.workspace,
+        gapIndexPath,
+        JSON.stringify({ gapRefs: [danglingGap] }),
+        { reason: "write dangling gap index", createParents: true }
+      );
+      expect(gapIndex.ok).toBe(true);
+      const gaps = await storage.readAllGaps();
+      expect(gaps.ok).toBe(true);
+      if (gaps.ok) expect(gaps.value).toHaveLength(0);
+      const badVerdict = await fixture.store.writeTextAtomic(
+        fixture.workspace,
+        verdictIndexPath,
+        "{bad verdict index",
+        { reason: "write invalid verdict index", createParents: true }
+      );
+      expect(badVerdict.ok).toBe(true);
+      const verdicts = await storage.readAllVerdicts();
+      expect(verdicts.ok).toBe(false);
+      if (!verdicts.ok) expect(verdicts.error.code).toBe("schema_incompatible");
     });
   });
 });

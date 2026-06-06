@@ -259,24 +259,27 @@ describe("Tool Runtime execution flow", () => {
     await withWorkspace(async (workspace) => {
       let started!: () => void;
       const startedPromise = new Promise<void>((resolve) => { started = resolve; });
+      let release!: () => void;
+      const releasePromise = new Promise<void>((resolve) => { release = resolve; });
       const blocking: ToolImplementation = {
         implementationId: "echo",
-        execute: () => new Promise((resolve) => {
+        execute: async () => {
           started();
-          setTimeout(() => resolve({ stdout: "late", structuredOutput: { echoed: "late" } }), 80);
-        })
+          await releasePromise;
+          return { stdout: "late", structuredOutput: { echoed: "late" } };
+        }
       };
       const fixture = makeToolRuntimeFixture(workspace, [blocking]);
       const tool = await fixture.runtime.registerTool(registerEchoTool(fixture, {
         concurrency: { maxConcurrentPerTool: 1, queueWhenBusy: true },
-        timeout: { defaultMs: 200, maxMs: 200 }
+        timeout: { defaultMs: 1_000, maxMs: 1_000 }
       }));
       expect(tool.ok).toBe(true);
       if (!tool.ok) throw new Error(tool.error.message);
 
       const first = fixture.runtime.executeTool(
         toolRequest(fixture, tool.value),
-        { policyContext: policyContext("allow"), timeoutMs: 200 }
+        { policyContext: policyContext("allow"), timeoutMs: 1_000 }
       );
       await startedPromise;
       const second = await fixture.runtime.executeTool(
@@ -287,6 +290,7 @@ describe("Tool Runtime execution flow", () => {
       if (!second.ok) throw new Error(second.error.message);
       expect(second.value.status).toBe("unavailable");
       expect(second.value.error?.code).toBe("timeout");
+      release();
       await first;
     });
   });

@@ -341,9 +341,12 @@ export interface TargetWorldAdapter {
   readonly checkRuntimeContractCompatibility: (runtimeContractRef: RuntimeContractRef, targetWorldRef: TargetWorldRef) => Promise<Result<TargetWorldCompatibilityReport>>;
   readonly explainCompatibility: (ref: TargetWorldCompatibilityReportRef) => Promise<Result<readonly string[]>>;
   readonly normalizeWorldInput: (input: WorldInputEnvelopeInput) => Promise<Result<WorldInputEnvelope>>;
+  readonly getWorldInput: (ref: WorldInputEnvelopeRef) => Promise<Result<WorldInputEnvelope>>;
   readonly normalizeRuntimeOutput: (input: WorldOutputEnvelopeInput) => Promise<Result<WorldOutputEnvelope>>;
+  readonly getWorldOutput: (ref: WorldOutputEnvelopeRef) => Promise<Result<WorldOutputEnvelope>>;
   readonly validateWorldOutput: (ref: WorldOutputEnvelopeRef) => Promise<Result<TargetOutputValidation>>;
   readonly prepareTargetAction: (outputEnvelopeRef: WorldOutputEnvelopeRef, input: TargetActionInput) => Promise<Result<TargetActionRequest>>;
+  readonly getTargetAction: (ref: TargetActionRequestRef) => Promise<Result<TargetActionRequest>>;
   readonly dispatchTargetAction: (ref: TargetActionRequestRef, reason: string) => Promise<Result<TargetActionReceipt>>;
   readonly cancelTargetAction: (ref: TargetActionRequestRef, reason: string) => Promise<Result<TargetActionReceipt>>;
   readonly runTargetValidation: (input: TargetValidationInput) => Promise<Result<TargetValidationReport>>;

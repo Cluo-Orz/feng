@@ -38,6 +38,7 @@ import type {
   TargetWorldAdapterOptions,
   TargetWorldAdapterRef,
   TargetWorldDescriptorInput,
+  WorldInputEnvelopeRef,
   TargetWorldCompatibilityReportRef,
   WorldInputEnvelopeInput,
   WorldOutputEnvelopeInput,
@@ -84,8 +85,16 @@ class NodeTargetWorldAdapter implements TargetWorldAdapter {
     return normalizeWorldInputRecord(this.runtime, input);
   }
 
+  getWorldInput(ref: WorldInputEnvelopeRef) {
+    return this.runtime.storage.readWorldInput(ref);
+  }
+
   normalizeRuntimeOutput(input: WorldOutputEnvelopeInput) {
     return normalizeRuntimeOutputRecord(this.runtime, input);
+  }
+
+  getWorldOutput(ref: WorldOutputEnvelopeRef) {
+    return this.runtime.storage.readWorldOutput(ref);
   }
 
   validateWorldOutput(ref: WorldOutputEnvelopeRef) {
@@ -94,6 +103,10 @@ class NodeTargetWorldAdapter implements TargetWorldAdapter {
 
   prepareTargetAction(outputEnvelopeRef: WorldOutputEnvelopeRef, input: TargetActionInput) {
     return prepareTargetActionRecord(this.runtime, outputEnvelopeRef, input);
+  }
+
+  getTargetAction(ref: TargetActionRequestRef) {
+    return this.runtime.storage.readAction(ref);
   }
 
   dispatchTargetAction(ref: TargetActionRequestRef, reason: string) {

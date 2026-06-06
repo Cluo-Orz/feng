@@ -15,3 +15,4 @@ export * as EvidenceReadiness from "./evidence-readiness/index.js";
 export * as RuntimeContractRegistry from "./runtime-contract-registry/index.js";
 export * as HatchBuilder from "./hatch-builder/index.js";
 export * as TargetWorldAdapter from "./target-world-adapter/index.js";
+export * as AgentRuntimeKernel from "./agent-runtime-kernel/index.js";
