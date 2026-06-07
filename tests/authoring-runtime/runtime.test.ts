@@ -105,6 +105,30 @@ describe("authoring runtime runChapter", () => {
     });
   });
 
+  it("self-repairs a too-short chapter and records the repair", async () => {
+    await withProject(async (root) => {
+      await seedProject(root, { premise: "p", title: "t" });
+      let n = 0;
+      const shortThenLong: FetchLike = async () => {
+        n += 1;
+        const content = n === 1
+          ? "太短了。\n===OUTLINE===\n梗概"
+          : `${"扩写后的正文内容。".repeat(120)}\n===OUTLINE===\n扩写后的梗概`;
+        return { ok: true, status: 200, json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: shortThenLong });
+      const deps: AuthoringRuntimeDeps = { store: host.store, workspace: host.workspace, llmGateway: host.llmGateway, policy: host.policy, provider: "deepseek", model: "m" };
+      const result = await runChapters(deps, pkg(), 1);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value[0]?.repairAttempts).toBe(1);
+      expect(result.value[0]?.chars).toBeGreaterThanOrEqual(900);
+      const output = JSON.parse(await readFile(path.join(root, ".feng", "runtime", "chapters", "chapter-01", "model-output.json"), "utf8"));
+      expect(output.repairAttempts).toBe(1);
+      expect(n).toBe(2);
+    });
+  });
+
   it("errors when the work project has no project.json", async () => {
     await withProject(async (root) => {
       const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: chapterFetch(() => "x") });

@@ -69,7 +69,10 @@ feng route-feedback --target F:\code\libai-chongsheng --agent-dir F:\code\xiaosh
 - E2 libai 写 3 章（live），章节连贯（采石矶坠江→2024成都→便利店→直播赋诗→教授），年份一致 2024。
 - E3 质量检查现场抓到真实问题（length/geography）。
 - E4 反馈分层落盘并路由（work 留本地）。
-- E5（部分）：质量问题已被检测并归因；自动重写改善留作后续增强（见下）。
+- E5 自动改善闭环：authoring runtime 现已内置 length self-repair——检测到超长/欠长即带「修订要求」自动重试一次，并把 repairAttempts 写入 trace/model-output。
+  - 确定性验证（tests/authoring-runtime/runtime.test.ts）：12 字短稿 → 自修复 → ≥900 字，length 问题消除，repairAttempts=1。
+  - 现场诚实结果：对超长稿，self-repair 确实触发（repairAttempts=1）并要求压缩，但 DeepSeek 推理模型即便被要求压缩仍倾向写长（2867→仍 2867 字），未压到 1500 以内。
+    这是模型行为限制，非机制缺陷；length 仍以 warning 记录并归因到 work 层。后续可为该模型放宽 maxChars 或引入更强约束/分段生成。
 
 ## 测试边界遵循
 
@@ -86,5 +89,6 @@ feng route-feedback --target F:\code\libai-chongsheng --agent-dir F:\code\xiaosh
 
 ## 仍未做（诚实标注）
 
-- E5 自动改善闭环：当前 runtime 检测并归因质量问题，但尚未在 run 内对超长/欠长章节自动重写重试（authoring runtime 的 self-repair）。这是明确的下一步增强。
 - 语义级 LLM eval（文风/人物可信度）尚未落盘为 eval artifact，目前仅结构化检查。
+- length self-repair 已就位，但对该推理模型未能稳定压到字数上限（模型偏长）；可通过放宽 maxChars、分段生成或更强约束进一步改善。
+- 完整 Debug & Feedback Bridge + kernel-run-elsewhere（重型路径）仍未接入；当前以文件原生运行包 + authoring runtime 实现概念要求的运行契约要素。

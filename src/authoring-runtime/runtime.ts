@@ -40,6 +40,7 @@ export interface RunChapterResult {
   readonly quality: QualityEval;
   readonly feedback: RoutedFeedback;
   readonly artifactDir: string;
+  readonly repairAttempts: number;
 }
 
 function descriptors(provider: string, now: () => string) {
@@ -61,6 +62,29 @@ async function lastChapterTail(deps: AuthoringRuntimeDeps, n: number): Promise<s
 
 function blocksText(blocks: readonly { readonly type: string; readonly text?: string }[]): string {
   return blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
+}
+
+const MAX_REPAIRS = 1;
+
+function lengthCorrection(len: number, pkg: AuthoringRuntimePackage): string | undefined {
+  const rule = pkg.qualityRules.find((r) => r.kind === "length");
+  if (rule === undefined) return undefined;
+  const min = rule.minChars ?? 0;
+  const max = rule.maxChars ?? Number.MAX_SAFE_INTEGER;
+  if (len < min) return `上一稿仅${len}字，过短。请在不改变情节的前提下扩写到至少${min}字，补充场景、对话与细节。`;
+  if (len > max) return `上一稿${len}字，过长。请在不改变情节的前提下压缩到${max}字以内，删去冗余铺陈。`;
+  return undefined;
+}
+
+function withCorrection(
+  messages: readonly import("../context-message-compiler/index.js").ProviderNeutralMessage[],
+  correction: string
+): readonly import("../context-message-compiler/index.js").ProviderNeutralMessage[] {
+  return messages.map((m) =>
+    m.role === "user"
+      ? { ...m, content: [...m.content, { type: "text" as const, text: `\n\n【修订要求】\n${correction}` }] }
+      : m
+  );
 }
 
 export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRuntimePackage): Promise<Result<RunChapterResult>> {
@@ -111,27 +135,43 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   });
   if (!decision.ok) return decision;
 
-  const response = await deps.llmGateway.sendLLMRequest({
-    requestId: makeLLMRequestId(`authoring-ch${chapterNumber}-${Date.now()}`),
-    providerNeutralMessages: compiled.messages,
-    modelSelection: { provider: deps.provider, model: deps.model },
-    requiredCapabilities: {},
-    streaming: false,
-    timeoutMs: 180_000,
-    policyDecisionId: decision.value.policyDecisionId,
-    source: meta.source,
-    version: meta.version,
-    audit: meta.audit
-  });
-  if (!response.ok) return response;
-  const raw = blocksText(response.value.contentBlocks);
-  if (raw.length === 0) {
-    return domainErr({ module: "authoring-runtime", code: "response_invalid", message: "model returned no chapter text", severity: "error", retryable: true });
+  let parsed = { chapter: "", outline: "" };
+  let finishReason = "unknown";
+  let usage: unknown = {};
+  let repairAttempts = 0;
+  const issuesLog: string[] = [];
+  for (let attempt = 0; attempt <= MAX_REPAIRS; attempt += 1) {
+    const messages = attempt === 0 || issuesLog.length === 0
+      ? compiled.messages
+      : withCorrection(compiled.messages, issuesLog[issuesLog.length - 1] as string);
+    const response = await deps.llmGateway.sendLLMRequest({
+      requestId: makeLLMRequestId(`authoring-ch${chapterNumber}-${attempt}-${Date.now()}`),
+      providerNeutralMessages: messages,
+      modelSelection: { provider: deps.provider, model: deps.model },
+      requiredCapabilities: {},
+      streaming: false,
+      timeoutMs: 180_000,
+      policyDecisionId: decision.value.policyDecisionId,
+      source: meta.source,
+      version: meta.version,
+      audit: meta.audit
+    });
+    if (!response.ok) return response;
+    const raw = blocksText(response.value.contentBlocks);
+    if (raw.length === 0) {
+      return domainErr({ module: "authoring-runtime", code: "response_invalid", message: "model returned no chapter text", severity: "error", retryable: true });
+    }
+    parsed = parseChapterOutput(raw, chapterNumber);
+    finishReason = response.value.finishReason;
+    usage = response.value.usage;
+    const correction = lengthCorrection(parsed.chapter.length, pkg);
+    if (correction === undefined || attempt === MAX_REPAIRS) break;
+    issuesLog.push(correction);
+    repairAttempts += 1;
   }
-  const parsed = parseChapterOutput(raw, chapterNumber);
   const chapterPath = chapterFilePath(chapterNumber);
   await writeTextFile(deps.store, deps.workspace, chapterPath, `# ${project.title} · 第${chapterNumber}章\n\n${parsed.chapter}\n`, "write chapter file");
-  await writeJsonFile(deps.store, deps.workspace, `${dir}/model-output.json`, { finishReason: response.value.finishReason, usage: response.value.usage, text: parsed.chapter, outline: parsed.outline }, "write model output");
+  await writeJsonFile(deps.store, deps.workspace, `${dir}/model-output.json`, { finishReason, usage, text: parsed.chapter, outline: parsed.outline, repairAttempts, repairs: issuesLog }, "write model output");
 
   const quality = evaluateChapter({
     rules: pkg.qualityRules,
@@ -154,6 +194,7 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
     factsUsed: compiled.record.sections.map((s) => `${s.kind}:${s.charsUsed}chars`),
     strategyUsed: `${pkg.name}@${pkg.version}`,
     generatedChars: parsed.chapter.length,
+    repairAttempts,
     conflictsFound: quality.issues.map((i) => `${i.kind}:${i.detail}`),
     feedbackCandidateCount: feedback.candidates.length,
     tracedAt: now()
@@ -169,7 +210,7 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   const persisted = await writeJsonFile(deps.store, deps.workspace, ".feng/runtime/novel-state.json", nextState, "update runtime novel state");
   if (!persisted.ok) return persisted;
 
-  return ok({ chapterNumber, chapterPath, chars: parsed.chapter.length, outline: parsed.outline, qualityPassed: quality.passed, quality, feedback, artifactDir: dir });
+  return ok({ chapterNumber, chapterPath, chars: parsed.chapter.length, outline: parsed.outline, qualityPassed: quality.passed, quality, feedback, artifactDir: dir, repairAttempts });
 }
 
 export async function runChapters(deps: AuthoringRuntimeDeps, pkg: AuthoringRuntimePackage, count: number): Promise<Result<readonly RunChapterResult[]>> {
