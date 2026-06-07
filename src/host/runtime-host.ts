@@ -135,7 +135,11 @@ export async function createFengHost(input: CreateFengHostInput): Promise<FengHo
     growUnitManager: grow, admissionInbox: admission, agendaManager: agenda, evidenceReadiness: evidence,
     attemptRunner, hatchBuilder: hatch, agentRuntimeKernel, debugFeedbackBridge
   };
-  const cli = createFengCli({ ports, producer }, input.config.workspaceRoot);
+  const cli = createFengCli({
+    ports,
+    producer,
+    defaultModelSelection: { provider: input.config.provider.provider, model: input.config.provider.model }
+  }, input.config.workspaceRoot);
 
   return {
     config: input.config, workspace, store, ledger, artifacts, policy, skills, grow, admission, agenda,

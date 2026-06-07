@@ -11,6 +11,7 @@ import type { GrowAttemptRunner } from "../grow-attempt-runner/index.js";
 import type { HatchBuilder } from "../hatch-builder/index.js";
 import type { AgentRuntimeKernel } from "../agent-runtime-kernel/index.js";
 import type { DebugFeedbackBridge } from "../debug-feedback-bridge/index.js";
+import type { LLMModelSelection } from "../llm-gateway/index.js";
 
 export interface CLIPorts {
   readonly store: FileNativeStore;
@@ -31,6 +32,7 @@ export interface CLIPorts {
 export interface FengCliOptions {
   readonly ports: CLIPorts;
   readonly producer: string;
+  readonly defaultModelSelection?: LLMModelSelection;
   readonly now?: () => string;
   readonly newId?: () => string;
 }

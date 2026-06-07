@@ -37,6 +37,21 @@ const okFetch: FetchLike = async () => ({
   text: async () => ""
 });
 
+const novelFetch: FetchLike = async () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    id: "resp-novel",
+    model: "deepseek-v4-pro",
+    choices: [{
+      message: { content: "# xiaoshuo skill\n第一章：李白重生，睁眼便是大唐。" },
+      finish_reason: "stop"
+    }],
+    usage: { prompt_tokens: 40, completion_tokens: 60, total_tokens: 100 }
+  }),
+  text: async () => ""
+});
+
 describe("feng host", () => {
   it("wires every module and runs a file-native CLI command", async () => {
     await withRoot(async (root) => {
@@ -85,6 +100,22 @@ describe("feng host", () => {
       if (result.ok) {
         expect(result.value.finishReason).toBe("stop");
         expect(result.value.contentBlocks.some((b) => b.type === "text")).toBe(true);
+      }
+    });
+  });
+
+  it("runs an LLM-driven grow attempt from the CLI and produces a candidate output", async () => {
+    await withRoot(async (root) => {
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: novelFetch });
+      const created = await host.cli.run(["grow", "create", "--title", "xiaoshuo", "--goal", "write the novel 李白重生了", "--target", "next chapter"]);
+      if (!created.ok) throw new Error(created.error.message);
+      const growId = created.value.refs[0]?.ref;
+      if (growId === undefined) throw new Error("missing grow ref");
+      const run = await host.cli.run(["grow", "run", "--grow", growId, "--allow"]);
+      expect(run.ok).toBe(true);
+      if (run.ok) {
+        expect(run.value.exitStatus).toBe("succeeded");
+        expect(run.value.data?.["candidateOutputRefs"]).toBeDefined();
       }
     });
   });

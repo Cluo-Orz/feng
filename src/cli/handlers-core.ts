@@ -1,6 +1,7 @@
 import type { Result } from "../domain/result.js";
 import { ok } from "../domain/result.js";
 import { cliErr } from "./errors.js";
+import { runGrowAttempt } from "./grow-run.js";
 import { cliAudit, cliSource, cliVersion, type CLIRuntime } from "./runtime.js";
 import {
   feedbackRef,
@@ -72,6 +73,9 @@ export const growHandler: Handler = async (runtime, ctx) => {
       refs: [refView("grow_unit", record.value.growUnitRef)],
       data: { record: record.value }
     }));
+  }
+  if (intent.action === "run") {
+    return runGrowAttempt(runtime, ctx, ref.value);
   }
   return cliErr({ code: "invalid_input", message: `unknown grow action: ${intent.action}`, severity: "warning" });
 };

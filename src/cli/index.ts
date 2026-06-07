@@ -4,6 +4,7 @@ export * from "./dispatch.js";
 export * from "./errors.js";
 export * from "./events.js";
 export * from "./exit.js";
+export * from "./grow-run.js";
 export * from "./handlers-core.js";
 export * from "./handlers-runtime.js";
 export * from "./node-cli.js";
