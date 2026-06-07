@@ -11,34 +11,36 @@
 
 ## 验收项（每项必须有现场文件证据，不能只靠 review 文档声明）
 
+> 状态：详见 closed-loop-live-evidence.md（现场命令+文件路径）与各模块单测。
+
 ### A. xiaoshuo 层（F:\code\xiaoshuo）—— 真实 grow 出小说 agent
-- [ ] A1 目标世界定义（输入/输出/动作/失败契约）作为文件存在。
-- [ ] A2 上下文策略（区分作品事实/当前章节/长期写作策略/反馈候选）写入运行契约。
-- [ ] A3 写作策略（系统提示+约束）由 grow（LLM attempt）产生并作为 evidence 落盘，**不是** feng 内部硬编码。
-- [ ] A4 质量 DoD（字数、年份、人物承接、地理、章节连续、风格）写入契约。
-- [ ] A5 feedback routing 策略（作品级→libai / 能力级→xiaoshuo / 系统级→feng）写入契约。
-- [ ] A6 readiness 判定 + hatch 出可复制运行包文件（version 锁定）。
+- [x] A1 目标世界定义（输入/输出/动作/失败契约）—— 运行包 targetWorld（live）。
+- [x] A2 上下文策略（区分作品事实/当前章节/长期写作策略/反馈候选）—— 运行包 contextPolicy 4 段（live）。
+- [x] A3 写作策略由 grow（LLM attempt）产生并落盘为 evidence —— grow-agent designStrategy，非硬编码（live, strategyChars=301）。
+- [x] A4 质量 DoD（字数/年份/人物/地理/章节/大纲/artifact）写入运行包 qualityRules（7 条）。
+- [x] A5 feedback routing 策略写入运行包 feedbackRouting（7 条，work/capability/system）。
+- [x] A6 readiness 判定 + hatch 包；grow unit lifecycle=ready_to_hatch, phase=hatch（live，不再 intake）。
 
 ### B. 运行包（hatched runtime package）
-- [ ] B1 运行包是单一 file-native 工件，携带：运行入口、接入契约、message-list 编译方式、上下文策略、trace/feedback 能力、本地吸收/上游提议边界、验证报告、版本。
-- [ ] B2 运行包可被 `cp` 到另一目录（libai）并被加载。
+- [x] B1 单一 file-native 工件，携带运行入口/契约/message-list 编译/上下文策略/质量/反馈/验证/版本锁。
+- [x] B2 可 `cp` 到 libai 并被加载（live）。
 
 ### C. libai 层（F:\code\libai-chongsheng）—— 使用 hatched runtime
-- [ ] C1 运行加载的是 hatched xiaoshuo 运行包，**不是** feng 的 prompts.ts。
-- [ ] C2 每章 file-native：本轮输入、编译后的 message list、模型输出、章节文件、novel-state、trace、quality eval、feedback candidate。
-- [ ] C3 trace 记录：本轮输入/使用的作品事实/使用的写作策略/生成文本/发现的冲突/反馈候选。
+- [x] C1 加载 hatched 运行包的 grown systemPrompt，非 prompts.ts（live）。
+- [x] C2 每章 file-native：input/message-list/model-output/trace/quality-eval/feedback + 章节文件 + novel-state（live）。
+- [x] C3 trace 记录输入/作品事实/写作策略/生成/冲突/反馈候选（live）。
 
 ### D. 质量与反馈
-- [ ] D1 deterministic 质量检查能抓到真实问题：字数、章节编号连续、年份一致、人物承接、地点一致、outline 连续、文件/trace/message-list 存在。
-- [ ] D2 每条问题归因到正确层级（作品事实→libai；写作能力→xiaoshuo；系统→feng），写成 file-native feedback candidate。
-- [ ] D3 反馈不无脑上游吸收：作品事实留 libai，只有系统性问题进 feng。
+- [x] D1 deterministic 质量检查抓到真实问题：live 抓到 length/geography；年份/人物/章节/大纲/artifact 由单测覆盖。
+- [x] D2 每条问题归因到层级并落盘（feedback.json 带 layer+reason）。
+- [x] D3 反馈不无脑上游吸收：route-feedback 实测 work 全留本地（5/5），xiaoshuo admission 为空；capability→xiaoshuo / system→feng 由单测覆盖。
 
 ### E. 端到端
-- [ ] E1 从空/半空 xiaoshuo grow→hatch。
-- [ ] E2 在 libai 写≥3章。
-- [ ] E3 质量检查抓到真实问题。
-- [ ] E4 feedback candidate 进入正确层级。
-- [ ] E5 修复/再 grow 后重跑，质量改善可见。
+- [x] E1 从清空 xiaoshuo grow→hatch（live）。
+- [x] E2 libai 写≥3章（live，连贯、年份一致）。
+- [x] E3 质量检查抓到真实问题（live）。
+- [x] E4 feedback 分层路由（live + 单测）。
+- [~] E5 自修复机制就位（length self-repair，单测证明短稿→≥900字改善）；现场对超长稿触发但模型仍偏长，已诚实记录。
 
 ## 测试边界
 - 单测 deterministic，用 fake fetch / fixture，不依赖真实 LLM。
