@@ -89,6 +89,12 @@ feng route-feedback --target F:\code\libai-chongsheng --agent-dir F:\code\xiaosh
 
 ## 仍未做（诚实标注）
 
-- 语义级 LLM eval（文风/人物可信度）尚未落盘为 eval artifact，目前仅结构化检查。
 - length self-repair 已就位，但对该推理模型未能稳定压到字数上限（模型偏长）；可通过放宽 maxChars、分段生成或更强约束进一步改善。
 - 完整 Debug & Feedback Bridge + kernel-run-elsewhere（重型路径）仍未接入；当前以文件原生运行包 + authoring runtime 实现概念要求的运行契约要素。
+
+## 已补：语义级 LLM eval（file-native）
+
+`feng run --semantic-eval` 在结构化检查之外增加一层 LLM 评审，结果落盘为 `chapter-0N/semantic-eval.json`。
+- 现场 live：DeepSeek 评审 ch1 → style 9 / character 9 / plot 8 / overall 8.7，附中文点评，写入 semantic-eval.json。
+- 确定性覆盖：tests/authoring-runtime/semantic-eval.test.ts（解析/截断/降级）+ runtime.test.ts（--semantic-eval 写出 artifact）。
+- 满足测试边界"optional semantic/LLM eval ... 必须把结果写成文件化 eval artifact"。

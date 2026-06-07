@@ -9,6 +9,7 @@ import type { AuthoringRuntimePackage } from "../runtime-package/index.js";
 import { compileMessageList, type AuthoringRunState } from "./message-list.js";
 import { evaluateChapter, type QualityEval } from "./quality.js";
 import { routeFeedback, type RoutedFeedback } from "./feedback.js";
+import { buildSemanticJudgePrompt, parseSemanticEval, SEMANTIC_JUDGE_SYSTEM, type SemanticEval } from "./semantic-eval.js";
 import {
   chapterDir,
   chapterFilePath,
@@ -28,6 +29,7 @@ export interface AuthoringRuntimeDeps {
   readonly policy: PolicyBoundary;
   readonly provider: string;
   readonly model: string;
+  readonly semanticEval?: boolean;
   readonly now?: () => string;
 }
 
@@ -41,6 +43,35 @@ export interface RunChapterResult {
   readonly feedback: RoutedFeedback;
   readonly artifactDir: string;
   readonly repairAttempts: number;
+  readonly semantic?: SemanticEval;
+}
+
+async function runSemanticEval(
+  deps: AuthoringRuntimeDeps,
+  chapterNumber: number,
+  chapterText: string,
+  policyDecisionId: import("../domain/index.js").PolicyDecisionId,
+  meta: ReturnType<typeof descriptors>,
+  now: () => string
+): Promise<SemanticEval | undefined> {
+  const response = await deps.llmGateway.sendLLMRequest({
+    requestId: makeLLMRequestId(`authoring-judge-ch${chapterNumber}-${Date.now()}`),
+    providerNeutralMessages: [
+      { role: "system", content: [{ type: "text", text: SEMANTIC_JUDGE_SYSTEM }] },
+      { role: "user", content: [{ type: "text", text: buildSemanticJudgePrompt(chapterText) }] }
+    ],
+    modelSelection: { provider: deps.provider, model: deps.model },
+    requiredCapabilities: {},
+    streaming: false,
+    timeoutMs: 120_000,
+    policyDecisionId,
+    source: meta.source,
+    version: meta.version,
+    audit: meta.audit
+  });
+  if (!response.ok) return undefined;
+  const raw = response.value.contentBlocks.filter((b) => b.type === "text").map((b) => (b as { text?: string }).text ?? "").join("\n");
+  return parseSemanticEval(raw, chapterNumber, now());
 }
 
 function descriptors(provider: string, now: () => string) {
@@ -202,6 +233,14 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   await writeJsonFile(deps.store, deps.workspace, `${dir}/quality-eval.json`, quality, "write quality eval");
   await writeJsonFile(deps.store, deps.workspace, `${dir}/feedback.json`, feedback, "write feedback candidates");
 
+  let semantic: SemanticEval | undefined;
+  if (deps.semanticEval === true) {
+    semantic = await runSemanticEval(deps, chapterNumber, parsed.chapter, decision.value.policyDecisionId, meta, now);
+    if (semantic !== undefined) {
+      await writeJsonFile(deps.store, deps.workspace, `${dir}/semantic-eval.json`, semantic, "write semantic eval");
+    }
+  }
+
   const nextState: RuntimeNovelState = {
     premise: project.premise,
     title: project.title,
@@ -210,7 +249,7 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   const persisted = await writeJsonFile(deps.store, deps.workspace, ".feng/runtime/novel-state.json", nextState, "update runtime novel state");
   if (!persisted.ok) return persisted;
 
-  return ok({ chapterNumber, chapterPath, chars: parsed.chapter.length, outline: parsed.outline, qualityPassed: quality.passed, quality, feedback, artifactDir: dir, repairAttempts });
+  return ok({ chapterNumber, chapterPath, chars: parsed.chapter.length, outline: parsed.outline, qualityPassed: quality.passed, quality, feedback, artifactDir: dir, repairAttempts, ...(semantic === undefined ? {} : { semantic }) });
 }
 
 export async function runChapters(deps: AuthoringRuntimeDeps, pkg: AuthoringRuntimePackage, count: number): Promise<Result<readonly RunChapterResult[]>> {

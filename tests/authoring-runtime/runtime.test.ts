@@ -129,6 +129,29 @@ describe("authoring runtime runChapter", () => {
     });
   });
 
+  it("writes a file-native semantic eval artifact when enabled", async () => {
+    await withProject(async (root) => {
+      await seedProject(root, { premise: "p", title: "t" });
+      let n = 0;
+      const fetch: FetchLike = async () => {
+        n += 1;
+        const content = n % 2 === 1
+          ? `${"正文内容。".repeat(200)}\n===OUTLINE===\n梗概`
+          : '{"style": 8, "character": 7, "plot": 9, "notes": "好"}';
+        return { ok: true, status: 200, json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: fetch });
+      const deps: AuthoringRuntimeDeps = { store: host.store, workspace: host.workspace, llmGateway: host.llmGateway, policy: host.policy, provider: "deepseek", model: "m", semanticEval: true };
+      const result = await runChapters(deps, pkg(), 1);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value[0]?.semantic?.overall).toBe(8);
+      const semantic = JSON.parse(await readFile(path.join(root, ".feng", "runtime", "chapters", "chapter-01", "semantic-eval.json"), "utf8"));
+      expect(semantic.scores.style).toBe(8);
+      expect(semantic.chapterNumber).toBe(1);
+    });
+  });
+
   it("errors when the work project has no project.json", async () => {
     await withProject(async (root) => {
       const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: chapterFetch(() => "x") });
