@@ -80,6 +80,36 @@ describe("host command dispatch via runCli", () => {
     });
   });
 
+  it("refuses to run an unlocked package unless --allow-unlocked is passed", async () => {
+    await withRoot(async (root) => {
+      const dir = path.join(root, ".feng", "hatch");
+      await mkdir(dir, { recursive: true });
+      await mkdir(path.join(root, ".feng", "runtime"), { recursive: true });
+      await writeFile(path.join(root, ".feng", "runtime", "project.json"), JSON.stringify({ premise: "p", title: "t" }), "utf8");
+      const unlocked = {
+        schemaVersion: "1.0.0", packageId: "pkg-x", name: "xiaoshuo", kind: "serialized_authoring_agent", version: "0.1.0",
+        locked: false, runEntry: "feng run",
+        targetWorld: { description: "d", inputKinds: [], outputKinds: [], actionBoundary: [], failureHandling: [], dialogueAllowed: false },
+        contextPolicy: [{ kind: "observation", title: "o", source: "s", maxChars: 1000 }],
+        writingStrategy: { systemPrompt: "你是写作 agent。", stylePrinciples: [], constraints: [] },
+        qualityRules: [{ kind: "length", minChars: 1, maxChars: 100000 }], feedbackRouting: [],
+        validation: { readiness: "draft", grownInProject: "/x", evidenceSummary: "", checkedAt: "t" },
+        provenance: { model: "m", provider: "deepseek", hatchedAt: "t" }
+      };
+      await writeFile(path.join(dir, "xiaoshuo-runtime.json"), JSON.stringify(unlocked), "utf8");
+
+      const errors: string[] = [];
+      const refused = await runCli({ argv: ["run"], workspaceRoot: root, processEnv: env, fetchImpl: fetchFor(() => `${"正文".repeat(50)}\n===OUTLINE===\n梗概`), stdout: () => {}, stderr: (t) => errors.push(t) });
+      expect(refused).toBe(1);
+      expect(errors.join(" ")).toContain("production_lock_violation");
+
+      const out: string[] = [];
+      const allowed = await runCli({ argv: ["run", "--allow-unlocked"], workspaceRoot: root, processEnv: env, fetchImpl: fetchFor(() => `${"正文".repeat(50)}\n===OUTLINE===\n梗概`), stdout: (t) => out.push(t), stderr: () => {} });
+      expect(allowed).toBe(0);
+      expect(out.join("\n")).toContain("[run] package=xiaoshuo");
+    });
+  });
+
   it("write still works as the legacy host demo", async () => {
     await withRoot(async (root) => {
       const out: string[] = [];

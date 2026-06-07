@@ -119,6 +119,13 @@ export async function runRun(host: FengHost, argv: readonly string[], stdout: Ou
     stderr(`feng run error [${pkg.error.code}]: ${pkg.error.message}`);
     return 1;
   }
+  // Concept (product-concept 210): a published runtime stays version-locked and
+  // must not silently drift. Refuse to run an unlocked/draft package unless the
+  // operator explicitly opts in.
+  if (!pkg.value.locked && !argv.includes("--allow-unlocked")) {
+    stderr(`feng run error [production_lock_violation]: package ${pkg.value.name}@${pkg.value.version} is not locked (validation.readiness=${pkg.value.validation.readiness}); re-hatch a locked package or pass --allow-unlocked`);
+    return 1;
+  }
   const deps: AuthoringRuntimeDeps = {
     store: host.store,
     workspace: host.workspace,
