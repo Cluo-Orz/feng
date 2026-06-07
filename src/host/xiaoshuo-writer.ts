@@ -28,7 +28,12 @@ export interface WriteChapterResult {
   readonly chars: number;
   readonly outline: string;
   readonly finishReason: string;
+  readonly repaired: boolean;
+  readonly issues: readonly string[];
 }
+
+const MIN_CHAPTER_CHARS = 500;
+const MAX_REPAIRS = 1;
 
 function descriptors(reason: string) {
   const at = new Date().toISOString();
@@ -79,28 +84,31 @@ function chapterText(blocks: readonly { readonly type: string; readonly text?: s
   return blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
 }
 
-export async function writeNextChapter(
-  host: FengHost,
-  input: { readonly premise?: string; readonly title?: string; readonly skillBody?: string }
-): Promise<Result<WriteChapterResult>> {
-  const state = await readNovelState(host);
-  const premise = input.premise ?? state?.premise;
-  if (premise === undefined || premise.trim().length === 0) {
-    return domainErr({ module: "xiaoshuo-writer", code: "invalid_input", message: "premise is required for the first chapter", severity: "warning" });
-  }
-  const title = state?.title ?? input.title ?? "untitled-novel";
-  const prior = state?.chapters ?? [];
-  const chapterNumber = prior.length + 1;
-  const priorOutline = prior.map((c) => `第${c.number}章：${c.outline}`).join("\n");
+interface ModelAttempt {
+  readonly chapter: string;
+  readonly outline: string;
+  readonly finishReason: string;
+}
 
+async function callModel(
+  host: FengHost,
+  args: { readonly premise: string; readonly priorOutline: string; readonly chapterNumber: number; readonly skillBody?: string; readonly correction?: string }
+): Promise<Result<ModelAttempt>> {
   const decision = await allowNetwork(host, "write novel chapter");
   if (!decision.ok) return decision;
   const meta = descriptors("write novel chapter");
+  const userPrompt = buildXiaoshuoUserPrompt({
+    premise: args.premise,
+    priorOutline: args.priorOutline,
+    chapterNumber: args.chapterNumber,
+    ...(args.skillBody === undefined ? {} : { skillBody: args.skillBody })
+  });
+  const finalPrompt = args.correction === undefined ? userPrompt : `${userPrompt}\n\n【修订要求】\n${args.correction}`;
   const response = await host.llmGateway.sendLLMRequest({
-    requestId: makeLLMRequestId(`xiaoshuo-ch${chapterNumber}-${Date.now()}`),
+    requestId: makeLLMRequestId(`xiaoshuo-ch${args.chapterNumber}-${Date.now()}`),
     providerNeutralMessages: [
       { role: "system", content: [{ type: "text", text: XIAOSHUO_SYSTEM_PROMPT }] },
-      { role: "user", content: [{ type: "text", text: buildXiaoshuoUserPrompt({ premise, priorOutline, chapterNumber, ...(input.skillBody === undefined ? {} : { skillBody: input.skillBody }) }) }] }
+      { role: "user", content: [{ type: "text", text: finalPrompt }] }
     ],
     modelSelection: { provider: host.config.provider.provider, model: host.config.provider.model },
     requiredCapabilities: {},
@@ -116,15 +124,53 @@ export async function writeNextChapter(
   if (raw.length === 0) {
     return domainErr({ module: "xiaoshuo-writer", code: "response_invalid", message: "model returned no chapter text", severity: "error", retryable: true });
   }
-  const parsed = parseChapterOutput(raw, chapterNumber);
+  const parsed = parseChapterOutput(raw, args.chapterNumber);
+  return ok({ chapter: parsed.chapter, outline: parsed.outline, finishReason: response.value.finishReason });
+}
+
+export async function writeNextChapter(
+  host: FengHost,
+  input: { readonly premise?: string; readonly title?: string; readonly skillBody?: string }
+): Promise<Result<WriteChapterResult>> {
+  const state = await readNovelState(host);
+  const premise = input.premise ?? state?.premise;
+  if (premise === undefined || premise.trim().length === 0) {
+    return domainErr({ module: "xiaoshuo-writer", code: "invalid_input", message: "premise is required for the first chapter", severity: "warning" });
+  }
+  const title = state?.title ?? input.title ?? "untitled-novel";
+  const prior = state?.chapters ?? [];
+  const chapterNumber = prior.length + 1;
+  const priorOutline = prior.map((c) => `第${c.number}章：${c.outline}`).join("\n");
+
+  const issues: string[] = [];
+  let attempt: ModelAttempt | undefined;
+  for (let repair = 0; repair <= MAX_REPAIRS; repair += 1) {
+    const correction = repair === 0
+      ? undefined
+      : `上一稿仅 ${attempt?.chapter.length ?? 0} 字，过短。请在不改变既定情节的前提下扩写到至少 ${MIN_CHAPTER_CHARS} 字，补充场景、对话与细节。`;
+    const result = await callModel(host, {
+      premise, priorOutline, chapterNumber,
+      ...(input.skillBody === undefined ? {} : { skillBody: input.skillBody }),
+      ...(correction === undefined ? {} : { correction })
+    });
+    if (!result.ok) return result;
+    attempt = result.value;
+    if (attempt.chapter.length >= MIN_CHAPTER_CHARS) break;
+    issues.push(`第${chapterNumber}章第${repair + 1}稿仅${attempt.chapter.length}字，低于${MIN_CHAPTER_CHARS}字下限`);
+  }
+  if (attempt === undefined) {
+    return domainErr({ module: "xiaoshuo-writer", code: "response_invalid", message: "no chapter produced", severity: "error" });
+  }
+
+  const meta = descriptors("persist novel chapter");
   const path = `chapters/chapter-${String(chapterNumber).padStart(2, "0")}.md`;
-  const fileBody = `# ${title} · 第${chapterNumber}章\n\n${parsed.chapter}\n`;
+  const fileBody = `# ${title} · 第${chapterNumber}章\n\n${attempt.chapter}\n`;
   const written = await host.store.writeTextAtomic(host.workspace, path, fileBody, { reason: "write chapter file", createParents: true });
   if (!written.ok) return written;
 
   const artifact = await host.artifacts.registerArtifact({
     kind: "candidate_output",
-    content: parsed.chapter,
+    content: attempt.chapter,
     mediaType: "text/markdown",
     encoding: "utf8",
     source: meta.source,
@@ -137,9 +183,9 @@ export async function writeNextChapter(
 
   const record: NovelChapterRecord = {
     number: chapterNumber,
-    outline: parsed.outline,
+    outline: attempt.outline,
     path,
-    chars: parsed.chapter.length,
+    chars: attempt.chapter.length,
     ...(artifact.ok ? { artifactId: artifact.value.id } : {})
   };
   const nextState: NovelState = { premise, title, chapters: [...prior, record] };
@@ -149,9 +195,11 @@ export async function writeNextChapter(
   return ok({
     chapterNumber,
     path,
-    chars: parsed.chapter.length,
-    outline: parsed.outline,
-    finishReason: response.value.finishReason
+    chars: attempt.chapter.length,
+    outline: attempt.outline,
+    finishReason: attempt.finishReason,
+    repaired: issues.length > 0,
+    issues
   });
 }
 

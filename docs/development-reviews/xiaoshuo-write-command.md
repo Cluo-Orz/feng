@@ -27,8 +27,12 @@ Delivers a runnable **xiaoshuo command**: `feng write` autonomously writes a ser
 - All outputs are file-native: chapter markdown files, a JSON novel-state, and registered artifacts.
 - The provider key is only ever passed to the adapter's auth header (unchanged from the host layer).
 
+## Self-repair loop (M3e core, within-instance)
+
+`writeNextChapter` now self-checks its own output: if a produced chapter is below `MIN_CHAPTER_CHARS` (500), the writer records the issue and automatically retries once with a correction instruction ("上一稿仅 N 字，过短，请扩写…"), up to `MAX_REPAIRS`. The accepted chapter, a `repaired` flag, and the list of `issues` are returned and persisted. This is feng detecting a deficiency in its own output and repairing/retrying itself — the within-instance core of the nested "采集问题→自己修复→重试" loop, verified by a fake-fetch test (short draft → repaired long draft).
+
 ## Residual risks / follow-ups
 
 - Continuity is outline-carried (prior chapter prose is not re-fed verbatim); for very long novels this is the scalable choice but may drift over many chapters — a future pass could fold the previous chapter's tail in via `artifactCandidateRefs`.
-- Chapter length sometimes exceeds the 900–1500 target (the reasoning model writes long); a length-guard + retry is a natural next step and a good hook for the self-repair (feedback) loop (M3e).
+- The self-repair currently keys on length; richer checks (continuity, constraint adherence) and routing issues through the Debug & Feedback Bridge for cross-instance supervision remain the larger M3e work.
 - `feng write` is a host-level command (needs the gateway/model), deliberately kept out of the module CLI ports to avoid widening `CLIPorts`.

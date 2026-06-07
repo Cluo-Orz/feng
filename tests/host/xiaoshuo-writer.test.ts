@@ -103,6 +103,31 @@ describe("xiaoshuo writer", () => {
     });
   });
 
+  it("self-repairs a too-short chapter by retrying with a correction", async () => {
+    await withRoot(async (root) => {
+      let n = 0;
+      const shortThenLong: FetchLike = async () => {
+        n += 1;
+        const content = n === 1
+          ? "太短了。\n===OUTLINE===\n梗概"
+          : `${"长正文内容。".repeat(120)}\n===OUTLINE===\n扩写后的梗概`;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }),
+          text: async () => ""
+        };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: shortThenLong });
+      const result = await writeNextChapter(host, { premise: "p", title: "t" });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.repaired).toBe(true);
+      expect(result.value.issues.length).toBe(1);
+      expect(result.value.chars).toBeGreaterThanOrEqual(500);
+    });
+  });
+
   it("propagates provider failures and returns an error", async () => {
     await withRoot(async (root) => {
       const failFetch: FetchLike = async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => "boom" });
@@ -153,7 +178,7 @@ describe("xiaoshuo writer", () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ id: "1", model: "m", choices: [{ message: { content: "第1章。\n===OUTLINE===\n梗概1" }, finish_reason: "stop" }], usage: {} }),
+            json: async () => ({ id: "1", model: "m", choices: [{ message: { content: `${"第一章正文。".repeat(120)}\n===OUTLINE===\n梗概1` }, finish_reason: "stop" }], usage: {} }),
             text: async () => ""
           };
         }
