@@ -33,7 +33,7 @@
 ### D. 质量与反馈
 - [x] D1 deterministic 质量检查抓到真实问题：live 抓到 length/geography；年份/人物/章节/大纲/artifact 由单测覆盖。
 - [x] D2 每条问题归因到层级并落盘（feedback.json 带 layer+reason）。
-- [x] D3 反馈不无脑上游吸收：route-feedback 实测 work 全留本地（5/5），xiaoshuo admission 为空；capability→xiaoshuo / system→feng 由单测覆盖。
+- [x] D3 反馈不无脑上游吸收：最新 canonical run 现场 live —— work(geography/length) 留本地，capability(character_continuation) 吸收进 xiaoshuo admission，system=0 未进 feng；三路均有现场证据 + 单测覆盖。
 
 ### E. 端到端
 - [x] E1 从清空 xiaoshuo grow→hatch（live）。

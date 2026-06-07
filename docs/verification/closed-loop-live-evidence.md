@@ -59,9 +59,11 @@ feng route-feedback --target F:\code\libai-chongsheng --agent-dir F:\code\xiaosh
   其余检查（年份漂移、人物承接、章节连续、大纲连续、artifact 缺失）由单测确定性覆盖
   （见 tests/authoring-runtime/quality.test.ts，含 2024→2025 漂移、人物承接、artifact 缺失等 12 例）。
 - D2 feedback.json 每条带 layer + routingReason，例：length→work「单章字数是作品级问题」。
-- D3 `feng route-feedback` 实测：`total=5 work(kept-local)=5 capability->agent=0 system->feng=0`，
-  xiaoshuo 的 .feng/admission 仍为空——**作品事实不被无脑上游吸收**。
-  capability→xiaoshuo / system→feng 的吸收路径由单测确定性覆盖（tests/host/feedback-router.test.ts）。
+- D3 分层路由现场 live（最新 canonical run）：libai 一次跑出 work(geography/length) 与 **capability(character_continuation)** 两类问题；
+  `feng route-feedback` 实测 `total=3 work(kept-local)=2 capability->agent=1 system->feng=0`——
+  capability 级（"第2章开头未承接既有人物(李白)"，写作能力问题）被吸收进 **xiaoshuo** 的 admission
+  （`F:\code\xiaoshuo\.feng\admission\inbox\records\*.json`，decision=admit_as_feedback_candidate，并建 "absorbed capability feedback" grow unit），
+  work 事实留 libai，system=0 未污染 feng。capability→xiaoshuo / system→feng / work→local 三路均有现场证据。
 
 ## E. 端到端
 
