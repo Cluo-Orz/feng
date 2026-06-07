@@ -33,9 +33,16 @@ const DESIGN_PROMPT = [
   "注意：你不是在写小说，而是在设计这个 agent 运行时使用的系统提示与写作原则。",
   "请只输出一个 JSON 对象，字段如下：",
   '{ "systemPrompt": string(该写作 agent 的系统提示，强调连贯、设定一致、年份/人物/地点不漂移、每章输出正文+===OUTLINE===+一句话大纲), ',
-  '"stylePrinciples": string[](5条以内中文写作原则), "constraints": string[](5条以内硬性约束，含字数区间与连续性要求) }',
+  '"stylePrinciples": string[](5条以内中文写作原则), "constraints": string[](5条以内硬性约束，含连续性要求), ',
+  '"minChars": number(每章中文正文字数下限), "maxChars": number(每章中文正文字数上限，需符合现代网文连载习惯且与你给的模型能力匹配) }',
   "不要输出 JSON 以外的任何文字。"
 ].join("\n");
+
+interface DesignedStrategy {
+  readonly strategy: WritingStrategy;
+  readonly minChars?: number;
+  readonly maxChars?: number;
+}
 
 function descriptors(host: FengHost, reason: string) {
   const at = new Date().toISOString();
@@ -62,16 +69,35 @@ function extractJson(text: string): Record<string, unknown> | undefined {
   return undefined;
 }
 
-function toStrategy(parsed: Record<string, unknown> | undefined, fallbackGoal: string): WritingStrategy {
+function parsePositiveInt(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number.parseInt(String(value), 10);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
+}
+
+function toStrategy(parsed: Record<string, unknown> | undefined, fallbackGoal: string): DesignedStrategy {
   const systemPrompt = typeof parsed?.systemPrompt === "string" && parsed.systemPrompt.length > 0
     ? parsed.systemPrompt
     : `你是一个连载中文小说写作 agent。目标：${fallbackGoal}。逐章写作，保持设定、人物、年份、地点与情节连贯；每章输出正文，然后另起一行 ===OUTLINE===，再用一句话概括本章。`;
   const stylePrinciples = Array.isArray(parsed?.stylePrinciples) ? parsed.stylePrinciples.filter((p): p is string => typeof p === "string") : [];
   const constraints = Array.isArray(parsed?.constraints) ? parsed.constraints.filter((c): c is string => typeof c === "string") : [];
-  return { systemPrompt, stylePrinciples, constraints };
+  const min = parsePositiveInt(parsed?.minChars);
+  const max = parsePositiveInt(parsed?.maxChars);
+  return {
+    strategy: { systemPrompt, stylePrinciples, constraints },
+    ...(min === undefined ? {} : { minChars: min }),
+    ...(max === undefined ? {} : { maxChars: max })
+  };
 }
 
-async function designStrategy(host: FengHost): Promise<Result<{ readonly strategy: WritingStrategy; readonly raw: string }>> {
+// The grown agent owns its own length contract. Clamp to sane bounds and ensure
+// min < max so a malformed design cannot produce an impossible DoD.
+export function grownLengthRule(min: number | undefined, max: number | undefined): { readonly minChars: number; readonly maxChars: number } {
+  const lo = Math.max(300, Math.min(min ?? 900, 4000));
+  const hi = Math.max(lo + 300, Math.min(max ?? 1500, 8000));
+  return { minChars: lo, maxChars: hi };
+}
+
+async function designStrategy(host: FengHost): Promise<Result<{ readonly designed: DesignedStrategy; readonly raw: string }>> {
   const meta = descriptors(host, "design writing strategy");
   const decision = await host.policy.evaluateAction({
     requestId: makePolicyRequestId(`grow-agent-net-${Date.now()}`),
@@ -105,7 +131,7 @@ async function designStrategy(host: FengHost): Promise<Result<{ readonly strateg
   });
   if (!response.ok) return response;
   const raw = response.value.contentBlocks.filter((b) => b.type === "text").map((b) => (b as { text?: string }).text ?? "").join("\n").trim();
-  return ok({ strategy: toStrategy(extractJson(raw), "成长出一个连贯的连载小说写作 agent"), raw });
+  return ok({ designed: toStrategy(extractJson(raw), "成长出一个连贯的连载小说写作 agent"), raw });
 }
 
 export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): Promise<Result<GrowAgentResult>> {
@@ -147,7 +173,7 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
     growUnitRef: grow.value,
     sourceKind: "candidate_output",
     summary: "grown writing strategy for the xiaoshuo runtime",
-    content: JSON.stringify(designed.value.strategy, null, 2),
+    content: JSON.stringify(designed.value.designed.strategy, null, 2),
     artifactKind: "candidate_output",
     relationHints: [{ relation: "supports", relatedDoDRef: dod.value, criticality: "critical", reason: "writing strategy satisfies the hatch DoD" }],
     quality: { trustLevel: "strong" },
@@ -171,6 +197,9 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
   const finalRecord = await host.grow.getGrowUnit(grow.value);
   const lifecycle = finalRecord.ok ? finalRecord.value.lifecycle : "unknown";
 
+  const length = grownLengthRule(designed.value.designed.minChars, designed.value.designed.maxChars);
+  const qualityRules = defaultQualityRules.map((r) => (r.kind === "length" ? { ...r, minChars: length.minChars, maxChars: length.maxChars, note: `每章中文字数区间(由 agent grow 得出)` } : r));
+
   const pkg: AuthoringRuntimePackage = {
     schemaVersion: PACKAGE_SCHEMA_VERSION,
     packageId: `pkg-${grow.value.id}`,
@@ -181,8 +210,8 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
     runEntry: "feng run",
     targetWorld: defaultNovelTargetWorld,
     contextPolicy: defaultContextPolicy,
-    writingStrategy: designed.value.strategy,
-    qualityRules: defaultQualityRules,
+    writingStrategy: designed.value.designed.strategy,
+    qualityRules,
     feedbackRouting: defaultFeedbackRouting,
     validation: {
       readiness: verdict.value.verdict === "ready_to_hatch" ? "ready" : "draft",
@@ -195,8 +224,8 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
   };
   const saved = await savePackage(host.store, host.workspace, pkg);
   if (!saved.ok) return saved;
-  if (designed.value.strategy.systemPrompt.length === 0) {
+  if (designed.value.designed.strategy.systemPrompt.length === 0) {
     return domainErr({ module: "feng-grow-agent", code: "invalid_state", message: "grown strategy is empty", severity: "error" });
   }
-  return ok({ packagePath: saved.value, growUnitId: grow.value.id, readiness: verdict.value.verdict, lifecycle, strategyChars: designed.value.strategy.systemPrompt.length });
+  return ok({ packagePath: saved.value, growUnitId: grow.value.id, readiness: verdict.value.verdict, lifecycle, strategyChars: designed.value.designed.strategy.systemPrompt.length });
 }

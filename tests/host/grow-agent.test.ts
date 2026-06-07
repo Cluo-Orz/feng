@@ -2,7 +2,7 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createFengHost, growXiaoshuoAgent } from "../../src/host/index.js";
+import { createFengHost, growXiaoshuoAgent, grownLengthRule } from "../../src/host/index.js";
 import { PACKAGE_PATH } from "../../src/runtime-package/index.js";
 import type { FetchLike } from "../../src/providers/index.js";
 
@@ -29,10 +29,19 @@ async function withRoot(body: (root: string) => Promise<void>): Promise<void> {
 const STRATEGY_JSON = JSON.stringify({
   systemPrompt: "你是连载小说写作 agent，保持设定、人物、年份、地点连贯，每章输出正文与 ===OUTLINE===。",
   stylePrinciples: ["有画面感", "有对话"],
-  constraints: ["每章900-1500字", "章节编号连续"]
+  constraints: ["每章字数达标", "章节编号连续"],
+  minChars: 1500,
+  maxChars: 2800
 });
 
 describe("growXiaoshuoAgent", () => {
+  it("clamps the grown length contract to sane bounds", () => {
+    expect(grownLengthRule(1500, 2800)).toEqual({ minChars: 1500, maxChars: 2800 });
+    expect(grownLengthRule(undefined, undefined)).toEqual({ minChars: 900, maxChars: 1500 });
+    expect(grownLengthRule(50, 50)).toEqual({ minChars: 300, maxChars: 600 });
+    expect(grownLengthRule(99999, 99999)).toEqual({ minChars: 4000, maxChars: 8000 });
+  });
+
   it("grows a real grow unit and hatches a file-native package with grown strategy", async () => {
     await withRoot(async (root) => {
       const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: designFetch(STRATEGY_JSON) });
@@ -51,6 +60,11 @@ describe("growXiaoshuoAgent", () => {
       expect(pkg.qualityRules.length).toBeGreaterThan(0);
       expect(pkg.feedbackRouting.length).toBeGreaterThan(0);
       expect(pkg.validation.grownByGrowUnitId).toBe(result.value.growUnitId);
+
+      // the length DoD is owned by the grown agent, not a hardcoded feng default
+      const lengthRule = pkg.qualityRules.find((r: { kind: string }) => r.kind === "length");
+      expect(lengthRule.minChars).toBe(1500);
+      expect(lengthRule.maxChars).toBe(2800);
 
       // grow unit really exists and advanced beyond a bare intake record
       const grow = await host.grow.getGrowUnit({ kind: "grow_unit", id: result.value.growUnitId } as never);
