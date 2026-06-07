@@ -1,7 +1,10 @@
 import type { FengHost } from "./runtime-host.js";
+import { createFengHost } from "./runtime-host.js";
+import { loadFengConfig } from "./config.js";
 import { writeNovel } from "./xiaoshuo-writer.js";
 import { superviseNovel } from "./supervisor.js";
 import { growXiaoshuoAgent } from "./grow-agent.js";
+import { routeProjectFeedback } from "./feedback-router.js";
 import { loadPackage } from "../runtime-package/index.js";
 import { runChapters, type AuthoringRuntimeDeps } from "../authoring-runtime/index.js";
 
@@ -78,7 +81,34 @@ export async function runGrowAgent(host: FengHost, argv: readonly string[], stdo
     return 1;
   }
   stdout(`[grow-agent] hatched ${result.value.packagePath}`);
-  stdout(`  growUnit=${result.value.growUnitId} readiness=${result.value.readiness} strategyChars=${result.value.strategyChars}`);
+  stdout(`  growUnit=${result.value.growUnitId} lifecycle=${result.value.lifecycle} readiness=${result.value.readiness} strategyChars=${result.value.strategyChars}`);
+  return 0;
+}
+
+export async function runRouteFeedback(host: FengHost, argv: readonly string[], stdout: Out, stderr: Out, fetchImpl?: import("../providers/index.js").FetchLike): Promise<number> {
+  const target = flagValue(argv, "--target");
+  if (target === undefined) {
+    stderr("feng route-feedback error: --target <work-dir> is required");
+    return 2;
+  }
+  const buildHost = async (root: string): Promise<FengHost> => {
+    const config = await loadFengConfig({ workspaceRoot: root, processEnv: { DEEPSEEK_API_KEY: host.config.provider.apiKey, MODEL: host.config.provider.model, OPEN_AI_BASE_URL: host.config.provider.baseUrl } });
+    return createFengHost({ config, ...(fetchImpl === undefined ? {} : { fetchImpl }) });
+  };
+  const workHost = await buildHost(target);
+  const agentDir = flagValue(argv, "--agent-dir");
+  const fengDir = flagValue(argv, "--feng-dir");
+  const result = await routeProjectFeedback({
+    workHost,
+    ...(agentDir === undefined ? {} : { agentHost: await buildHost(agentDir) }),
+    ...(fengDir === undefined ? {} : { fengHost: await buildHost(fengDir) })
+  });
+  if (!result.ok) {
+    stderr(`feng route-feedback error [${result.error.code}]: ${result.error.message}`);
+    return 1;
+  }
+  const r = result.value;
+  stdout(`[route-feedback] total=${r.totalCandidates} work(kept-local)=${r.keptLocal} capability->agent=${r.absorbedToAgent} system->feng=${r.absorbedToFeng}`);
   return 0;
 }
 

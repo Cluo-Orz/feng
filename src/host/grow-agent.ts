@@ -24,6 +24,7 @@ export interface GrowAgentResult {
   readonly packagePath: string;
   readonly growUnitId: string;
   readonly readiness: string;
+  readonly lifecycle: string;
   readonly strategyChars: number;
 }
 
@@ -134,6 +135,14 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
   const designed = await designStrategy(host);
   if (!designed.ok) return designed;
 
+  // Advance the grow unit through its real lifecycle so it does not sit at
+  // intake: created -> planning -> growing -> verifying, then ready_to_hatch
+  // via the readiness verdict.
+  for (const to of ["planning", "growing", "verifying"] as const) {
+    const moved = await host.grow.transitionGrowUnit(grow.value, { to, reason: `advance to ${to} while growing the agent`, source: meta.source, audit: meta.audit });
+    if (!moved.ok) return moved;
+  }
+
   const evidence = await host.evidence.recordEvidenceCandidate({
     growUnitRef: grow.value,
     sourceKind: "candidate_output",
@@ -152,12 +161,15 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
   const verdict = await host.evidence.produceReadinessVerdict(assessment.value.readinessAssessmentRef);
   if (!verdict.ok) return verdict;
 
-  await host.grow.applyReadinessVerdict(grow.value, {
+  const applied = await host.grow.applyReadinessVerdict(grow.value, {
     readinessVerdictRef: verdict.value.artifactRef,
     verdict: { verdict: verdict.value.verdict, reason: verdict.value.reason, evidenceRefs: verdict.value.evidenceArtifactRefs },
     reason: "apply readiness verdict from grown strategy",
     source: meta.source, audit: meta.audit
   });
+  if (!applied.ok) return applied;
+  const finalRecord = await host.grow.getGrowUnit(grow.value);
+  const lifecycle = finalRecord.ok ? finalRecord.value.lifecycle : "unknown";
 
   const pkg: AuthoringRuntimePackage = {
     schemaVersion: PACKAGE_SCHEMA_VERSION,
@@ -186,5 +198,5 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
   if (designed.value.strategy.systemPrompt.length === 0) {
     return domainErr({ module: "feng-grow-agent", code: "invalid_state", message: "grown strategy is empty", severity: "error" });
   }
-  return ok({ packagePath: saved.value, growUnitId: grow.value.id, readiness: verdict.value.verdict, strategyChars: designed.value.strategy.systemPrompt.length });
+  return ok({ packagePath: saved.value, growUnitId: grow.value.id, readiness: verdict.value.verdict, lifecycle, strategyChars: designed.value.strategy.systemPrompt.length });
 }

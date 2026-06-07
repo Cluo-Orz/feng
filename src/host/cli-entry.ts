@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadFengConfig } from "./config.js";
 import { createFengHost } from "./runtime-host.js";
-import { runGrowAgent, runRun, runSupervise, runWrite } from "./host-commands.js";
+import { runGrowAgent, runRouteFeedback, runRun, runSupervise, runWrite } from "./host-commands.js";
 import type { FetchLike } from "../providers/index.js";
 
 export interface RunCliInput {
@@ -15,7 +15,7 @@ export interface RunCliInput {
   readonly stderr?: (text: string) => void;
 }
 
-const hostCommands = new Set(["write", "supervise", "grow-agent", "run"]);
+const hostCommands = new Set(["write", "supervise", "grow-agent", "run", "route-feedback"]);
 
 export async function runCli(input: RunCliInput): Promise<number> {
   const stdout = input.stdout ?? ((text) => process.stdout.write(`${text}\n`));
@@ -40,6 +40,7 @@ export async function runCli(input: RunCliInput): Promise<number> {
     if (command === "write") return runWrite(host, input.argv, stdout, stderr);
     if (command === "supervise") return runSupervise(host, input.argv, stdout, stderr);
     if (command === "grow-agent") return runGrowAgent(host, input.argv, stdout, stderr);
+    if (command === "route-feedback") return runRouteFeedback(host, input.argv, stdout, stderr, input.fetchImpl);
     return runRun(host, input.argv, stdout, stderr);
   }
   const result = await host.cli.run(input.argv);

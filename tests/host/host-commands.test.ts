@@ -102,4 +102,47 @@ describe("host command dispatch via runCli", () => {
       expect(out.join("\n").toLowerCase()).toContain("grow unit");
     });
   });
+
+  it("route-feedback requires --target", async () => {
+    await withRoot(async (root) => {
+      const errors: string[] = [];
+      const code = await runCli({ argv: ["route-feedback"], workspaceRoot: root, processEnv: env, fetchImpl: fetchFor(() => "x"), stdout: () => {}, stderr: (t) => errors.push(t) });
+      expect(code).toBe(2);
+      expect(errors.join(" ")).toContain("--target");
+    });
+  });
+
+  it("route-feedback keeps work facts local and absorbs capability upstream", async () => {
+    await withRoot(async (work) => {
+      const agent = await mkdtemp(path.join(tmpdir(), "feng-rf-cli-agent-"));
+      try {
+        const dir = path.join(work, ".feng", "runtime", "chapters", "chapter-01");
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, "feedback.json"), JSON.stringify({ candidates: [
+          { issueKind: "length", layer: "work", severity: "warning", detail: "字数", routingReason: "本地", chapterNumber: 1 },
+          { issueKind: "character_continuation", layer: "capability", severity: "warning", detail: "人物", routingReason: "回流", chapterNumber: 1 }
+        ] }), "utf8");
+        const out: string[] = [];
+        const code = await runCli({
+          argv: ["route-feedback", "--target", work, "--agent-dir", agent],
+          workspaceRoot: work, processEnv: env, stdout: (t) => out.push(t), stderr: () => {}
+        });
+        expect(code).toBe(0);
+        expect(out.join("\n")).toContain("work(kept-local)=1");
+        expect(out.join("\n")).toContain("capability->agent=1");
+      } finally {
+        await rm(agent, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("grow-agent surfaces a provider failure", async () => {
+    await withRoot(async (root) => {
+      const failFetch: FetchLike = async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => "boom" });
+      const errors: string[] = [];
+      const code = await runCli({ argv: ["grow-agent", "--goal", "x"], workspaceRoot: root, processEnv: env, fetchImpl: failFetch, stdout: () => {}, stderr: (t) => errors.push(t) });
+      expect(code).toBe(1);
+      expect(errors.join(" ")).toContain("grow-agent error");
+    });
+  });
 });

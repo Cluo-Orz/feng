@@ -40,6 +40,7 @@ describe("growXiaoshuoAgent", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error(result.error.message);
       expect(result.value.strategyChars).toBeGreaterThan(0);
+      expect(result.value.lifecycle).toBe("ready_to_hatch");
 
       const pkgText = await readFile(path.join(root, PACKAGE_PATH), "utf8");
       const pkg = JSON.parse(pkgText);
