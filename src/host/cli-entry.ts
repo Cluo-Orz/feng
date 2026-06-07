@@ -1,15 +1,49 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadFengConfig } from "./config.js";
-import { createFengHost } from "./runtime-host.js";
+import { createFengHost, type FengHost } from "./runtime-host.js";
+import { writeNovel } from "./xiaoshuo-writer.js";
+import type { FetchLike } from "../providers/index.js";
 
 export interface RunCliInput {
   readonly argv: readonly string[];
   readonly workspaceRoot: string;
   readonly envFilePath?: string;
   readonly processEnv?: Record<string, string | undefined>;
+  readonly fetchImpl?: FetchLike;
   readonly stdout?: (text: string) => void;
   readonly stderr?: (text: string) => void;
+}
+
+function flagValue(argv: readonly string[], name: string): string | undefined {
+  const i = argv.indexOf(name);
+  return i !== -1 ? argv[i + 1] : undefined;
+}
+
+async function runWrite(
+  host: FengHost,
+  argv: readonly string[],
+  stdout: (t: string) => void,
+  stderr: (t: string) => void
+): Promise<number> {
+  const premise = flagValue(argv, "--premise");
+  const title = flagValue(argv, "--title");
+  const chaptersRaw = flagValue(argv, "--chapters");
+  const chapters = chaptersRaw === undefined ? 1 : Math.max(1, Number.parseInt(chaptersRaw, 10) || 1);
+  const result = await writeNovel(host, {
+    chapters,
+    ...(premise === undefined ? {} : { premise }),
+    ...(title === undefined ? {} : { title })
+  });
+  if (!result.ok) {
+    stderr(`feng write error [${result.error.code}]: ${result.error.message}`);
+    return 1;
+  }
+  for (const chapter of result.value) {
+    stdout(`[chapter ${chapter.chapterNumber}] ${chapter.chars} chars -> ${chapter.path} (${chapter.finishReason})`);
+    stdout(`  outline: ${chapter.outline}`);
+  }
+  return 0;
 }
 
 export async function runCli(input: RunCliInput): Promise<number> {
@@ -26,7 +60,13 @@ export async function runCli(input: RunCliInput): Promise<number> {
     stderr(`feng config error: ${(error as Error).message}`);
     return 78;
   }
-  const host = await createFengHost({ config });
+  const host = await createFengHost({
+    config,
+    ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl })
+  });
+  if (input.argv[0] === "write") {
+    return runWrite(host, input.argv, stdout, stderr);
+  }
   const result = await host.cli.run(input.argv);
   if (!result.ok) {
     stderr(`feng error [${result.error.code}]: ${result.error.message}`);
