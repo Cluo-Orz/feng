@@ -16,7 +16,9 @@ The detailed-design Debug & Feedback Bridge is coupled to **hatched runtimes**: 
 
 ## Verification (live)
 
-`feng supervise --target ../libai-chongsheng --min-chars 2500` against the real 3-chapter novel detected 3 `too_short` issues (1892 / 2004 / 1776 chars) and created 3 file-native feedback units under the supervisor workspace's `.feng/admission/feedback/records/`, reporting `feedbackCandidates=3`.
+`feng supervise --target <novel-dir> --min-chars 2500` against a real 3-chapter novel detected 3 `too_short` issues and created 3 file-native feedback units, reporting `feedbackCandidates=3`.
+
+> Honest correction: the original live run used a **temporary** supervisor workspace that was deleted afterwards, so that evidence is not persistent in `F:\code\feng`. The supervise mechanism is covered deterministically by `tests/host/supervisor.test.ts` (LLM-free), which is the authoritative, reproducible evidence. The broader concept loop superseded this command — see `docs/verification/closed-loop-live-evidence.md` for the persistent `feng grow-agent -> feng run -> feng route-feedback` evidence with on-disk file paths.
 
 `npm run typecheck`, `npm run build`, `npm run test:coverage` pass (97 files / 463 tests, global branch 80.07%). `supervisor.ts` is 155 lines, `cli-entry.ts` 131 (≤ 400). Supervisor tests are LLM-free and deterministic.
 

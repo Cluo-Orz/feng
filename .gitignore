@@ -3,3 +3,16 @@ coverage/
 dist/
 .tmp/
 *.tsbuildinfo
+
+# Third-party agent clones kept locally for reference (not part of feng)
+AssistantAgent/
+CodeWhale/
+Shinsekai/
+hermes-agent/
+learn-claude-code/
+opencode/
+
+# Editor / tooling scratch
+.agents/
+.claude/
+.idea/
