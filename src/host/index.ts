@@ -3,4 +3,6 @@ export * from "./prompts.js";
 export * from "./runtime-host.js";
 export * from "./xiaoshuo-writer.js";
 export * from "./supervisor.js";
+export * from "./grow-agent.js";
+export * from "./host-commands.js";
 export * from "./cli-entry.js";
