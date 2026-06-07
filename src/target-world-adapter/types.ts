@@ -351,6 +351,7 @@ export interface TargetWorldAdapter {
   readonly cancelTargetAction: (ref: TargetActionRequestRef, reason: string) => Promise<Result<TargetActionReceipt>>;
   readonly runTargetValidation: (input: TargetValidationInput) => Promise<Result<TargetValidationReport>>;
   readonly recordTargetDebugSignal: (input: TargetDebugSignalInput) => Promise<Result<TargetDebugSignal>>;
+  readonly getTargetDebugSignal: (ref: TargetDebugSignalRef) => Promise<Result<TargetDebugSignal>>;
   readonly mapTargetFailure: (input: TargetFailureMappingInput) => Promise<Result<TargetFailureMapping>>;
 }
 

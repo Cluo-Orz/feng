@@ -60,6 +60,7 @@ export type ArtifactProducerModule =
   | "runtime-contract-registry"
   | "hatch-builder"
   | "target-world-adapter"
+  | "debug-feedback-bridge"
   | "human"
   | "importer"
   | "unknown";

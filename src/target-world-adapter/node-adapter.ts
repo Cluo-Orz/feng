@@ -31,6 +31,7 @@ import type {
   TargetActionInput,
   TargetActionRequestRef,
   TargetDebugSignalInput,
+  TargetDebugSignalRef,
   TargetFailureMappingInput,
   TargetValidationInput,
   TargetWorldAdapter,
@@ -123,6 +124,10 @@ class NodeTargetWorldAdapter implements TargetWorldAdapter {
 
   recordTargetDebugSignal(input: TargetDebugSignalInput) {
     return recordTargetDebugSignalRecord(this.runtime, input);
+  }
+
+  getTargetDebugSignal(ref: TargetDebugSignalRef) {
+    return this.runtime.storage.readDebugSignal(ref);
   }
 
   mapTargetFailure(input: TargetFailureMappingInput) {

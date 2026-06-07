@@ -141,6 +141,10 @@ export class TargetWorldAdapterStorage {
     return this.writeRecord(debugSignalPath(record.debugSignalId), record, reason);
   }
 
+  readDebugSignal(ref: TargetDebugSignalRef): Promise<Result<TargetDebugSignal>> {
+    return this.readRecord(debugSignalPath(ref.id), "debug signal record is invalid", "debug signal not found");
+  }
+
   addDebugSignal(ref: TargetDebugSignalRef): Promise<Result<WriteReceipt>> {
     return this.addRef(debugSignalIndexPath, ref, "debug signal index is invalid", "write debug signal index");
   }

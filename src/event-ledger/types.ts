@@ -21,7 +21,8 @@ export const ledgerStreamTypes = [
   "skill",
   "tool",
   "policy",
-  "target_world"
+  "target_world",
+  "debug_bridge"
 ] as const;
 
 export type LedgerStreamType = (typeof ledgerStreamTypes)[number];
