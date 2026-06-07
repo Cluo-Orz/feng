@@ -58,10 +58,26 @@ describe("cli core handlers", () => {
 
       const submit = await expectEnvelope(fixture, ["input", "submit", "--grow", growId, "--text", "make boss harder"]);
       expect(submit.exitStatus).toBe("succeeded");
+      expect(submit.headline).toContain("received into inbox");
       expect(submit.refs[0]?.ref).toBeDefined();
 
       const list = await expectEnvelope(fixture, ["input", "list", "--grow", growId]);
       expect(list.data?.["total"]).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("admits an input as visible material when --admit is set", async () => {
+    await withWorkspace(async (workspace) => {
+      const fixture = makeCliFixture(workspace);
+      const growId = await createGrow(fixture);
+      const admitted = await expectEnvelope(fixture, [
+        "input", "submit", "--grow", growId,
+        "--text", "第一章梗概：李白穿越现代成都地铁。",
+        "--summary", "第一章：李白穿越现代成都。",
+        "--admit"
+      ]);
+      expect(admitted.exitStatus).toBe("succeeded");
+      expect(admitted.headline).toContain("admitted as material");
     });
   });
 

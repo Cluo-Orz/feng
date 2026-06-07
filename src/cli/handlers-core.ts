@@ -97,6 +97,7 @@ export const inputHandler: Handler = async (runtime, ctx) => {
   if (!text.ok) return text;
   const received = await inbox.receiveUserInput(growRef(grow.value), {
     content: text.value,
+    ...(intent.flags["summary"] === undefined ? {} : { normalizedSummary: intent.flags["summary"] }),
     mediaType: "text/plain",
     encoding: "utf8",
     privacyClass: "contains_user_content",
@@ -105,11 +106,36 @@ export const inputHandler: Handler = async (runtime, ctx) => {
     audit: cliAudit(runtime, "submit user input via cli")
   });
   if (!received.ok) return received;
-  return ok(success("user input admitted to inbox", {
-    refs: [refView("inbox_item", received.value)],
-    nextActions: [{ kind: "run_command", summary: "classify and decide admission", command: "feng status --grow <ref>" }]
+  if (intent.flags["admit"] !== "true") {
+    return ok(success("user input received into inbox", {
+      refs: [refView("inbox_item", received.value)],
+      nextActions: [{ kind: "run_command", summary: "admit so it becomes visible context", command: "feng input submit --grow <ref> --text <t> --admit" }]
+    }));
+  }
+  const admitted = await admitInboxItem(runtime, ctx, received.value);
+  if (!admitted.ok) return admitted;
+  return ok(success("user input admitted as material (visible to next grow attempt)", {
+    refs: [refView("inbox_item", received.value)]
   }));
 };
+
+async function admitInboxItem(
+  runtime: CLIRuntime,
+  ctx: CLIExecutionContext,
+  inboxItemRef: import("../admission-feedback-inbox/index.js").InboxItemRef
+): Promise<Result<unknown>> {
+  const inbox = runtime.ports.admissionInbox;
+  const normalized = await inbox.normalizeInboxItem(inboxItemRef);
+  if (!normalized.ok) return normalized;
+  const classified = await inbox.classifyInboxItem(inboxItemRef);
+  if (!classified.ok) return classified;
+  return inbox.decideAdmission(inboxItemRef, {
+    decision: "admit_as_material",
+    reason: "admit user input as visible material via cli",
+    source: cliSource(runtime, ctx.workspace.id),
+    audit: cliAudit(runtime, "admit inbox item via cli")
+  });
+}
 
 export const statusHandler: Handler = async (runtime, ctx) => {
   const grow = requireValue(ctx.intent, "grow", 0, "grow unit ref");
