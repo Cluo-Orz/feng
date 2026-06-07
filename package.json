@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "File-native grow/hatch agent system.",
+  "bin": {
+    "feng": "bin/feng.mjs"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
