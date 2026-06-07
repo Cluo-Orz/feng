@@ -14,6 +14,7 @@ export interface NovelChapterRecord {
   readonly path: string;
   readonly chars: number;
   readonly artifactId?: string;
+  readonly issues?: readonly string[];
 }
 
 export interface NovelState {
@@ -186,7 +187,8 @@ export async function writeNextChapter(
     outline: attempt.outline,
     path,
     chars: attempt.chapter.length,
-    ...(artifact.ok ? { artifactId: artifact.value.id } : {})
+    ...(artifact.ok ? { artifactId: artifact.value.id } : {}),
+    ...(issues.length > 0 ? { issues } : {})
   };
   const nextState: NovelState = { premise, title, chapters: [...prior, record] };
   const persisted = await writeNovelState(host, nextState);

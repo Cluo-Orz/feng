@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { loadFengConfig } from "./config.js";
 import { createFengHost, type FengHost } from "./runtime-host.js";
 import { writeNovel } from "./xiaoshuo-writer.js";
+import { superviseNovel } from "./supervisor.js";
 import type { FetchLike } from "../providers/index.js";
 
 export interface RunCliInput {
@@ -46,6 +47,34 @@ async function runWrite(
   return 0;
 }
 
+async function runSupervise(
+  host: FengHost,
+  argv: readonly string[],
+  stdout: (t: string) => void,
+  stderr: (t: string) => void
+): Promise<number> {
+  const target = flagValue(argv, "--target");
+  if (target === undefined) {
+    stderr("feng supervise error: --target <dir> is required");
+    return 2;
+  }
+  const minRaw = flagValue(argv, "--min-chars");
+  const result = await superviseNovel(host, {
+    targetRoot: target,
+    ...(minRaw === undefined ? {} : { minChars: Math.max(1, Number.parseInt(minRaw, 10) || 800) })
+  });
+  if (!result.ok) {
+    stderr(`feng supervise error [${result.error.code}]: ${result.error.message}`);
+    return 1;
+  }
+  const report = result.value;
+  stdout(`[supervise] target=${report.targetRoot} chapters=${report.chaptersFound} issues=${report.issues.length} feedbackCandidates=${report.feedbackCandidateCount}`);
+  for (const issue of report.issues) {
+    stdout(`  - (${issue.kind}${issue.chapter === undefined ? "" : ` ch${issue.chapter}`}) ${issue.detail}`);
+  }
+  return report.issues.length === 0 ? 0 : 0;
+}
+
 export async function runCli(input: RunCliInput): Promise<number> {
   const stdout = input.stdout ?? ((text) => process.stdout.write(`${text}\n`));
   const stderr = input.stderr ?? ((text) => process.stderr.write(`${text}\n`));
@@ -66,6 +95,9 @@ export async function runCli(input: RunCliInput): Promise<number> {
   });
   if (input.argv[0] === "write") {
     return runWrite(host, input.argv, stdout, stderr);
+  }
+  if (input.argv[0] === "supervise") {
+    return runSupervise(host, input.argv, stdout, stderr);
   }
   const result = await host.cli.run(input.argv);
   if (!result.ok) {
