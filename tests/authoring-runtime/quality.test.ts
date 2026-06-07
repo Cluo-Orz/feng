@@ -36,9 +36,18 @@ describe("quality evaluateChapter", () => {
     expect(r.issues.some((i) => i.kind === "length" && i.severity === "error")).toBe(true);
   });
 
-  it("warns on a chapter above the length ceiling", () => {
+  it("warns are non-blocking but a chapter over the hard ceiling FAILS", () => {
     const r = evaluateChapter(base({ chapterText: "长".repeat(3000) }));
-    expect(r.issues.some((i) => i.kind === "length" && i.severity === "warning")).toBe(true);
+    // length over max is a hard DoD violation, not a soft warning
+    expect(r.issues.some((i) => i.kind === "length" && i.severity === "error")).toBe(true);
+    expect(r.status).toBe("fail");
+    expect(r.passed).toBe(false);
+  });
+
+  it("classifies status as pass / pass_with_warnings / fail", () => {
+    expect(evaluateChapter(base({})).status).toBe("pass");
+    expect(evaluateChapter(base({ conflictTerms: ["采石矶"], chapterText: `${"成都".repeat(700)}采石矶` })).status).toBe("pass_with_warnings");
+    expect(evaluateChapter(base({ establishedYear: 2024, chapterText: `${"叙述".repeat(600)}已是2025年` })).status).toBe("fail");
   });
 
   it("catches a year drift (2024 -> 2025)", () => {

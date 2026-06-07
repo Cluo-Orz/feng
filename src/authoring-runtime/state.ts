@@ -19,6 +19,7 @@ export interface RuntimeChapterRecord {
   readonly outline: string;
   readonly chapterPath: string;
   readonly chars: number;
+  readonly qualityStatus: "pass" | "pass_with_warnings" | "fail";
   readonly qualityPassed: boolean;
   readonly issueCount: number;
 }

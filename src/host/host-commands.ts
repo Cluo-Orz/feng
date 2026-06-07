@@ -144,7 +144,7 @@ export async function runRun(host: FengHost, argv: readonly string[], stdout: Ou
   for (const chapter of result.value) {
     const layers = chapter.feedback.byLayer;
     const semantic = chapter.semantic === undefined ? "" : ` semantic=${chapter.semantic.overall}/10`;
-    stdout(`  ch${chapter.chapterNumber}: ${chapter.chars} chars, quality=${chapter.qualityPassed ? "pass" : "FAIL"}, issues=${chapter.quality.issues.length} (work=${layers.work} capability=${layers.capability} system=${layers.system})${semantic} -> ${chapter.artifactDir}`);
+    stdout(`  ch${chapter.chapterNumber}: ${chapter.chars} chars, quality=${chapter.quality.status}, issues=${chapter.quality.issues.length} (work=${layers.work} capability=${layers.capability} system=${layers.system})${semantic} -> ${chapter.artifactDir}`);
     for (const issue of chapter.quality.issues) {
       stdout(`     · ${issue.kind}[${issue.severity}]: ${issue.detail}`);
     }

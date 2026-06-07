@@ -244,7 +244,7 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   const nextState: RuntimeNovelState = {
     premise: project.premise,
     title: project.title,
-    chapters: [...state.chapters, { number: chapterNumber, outline: parsed.outline, chapterPath, chars: parsed.chapter.length, qualityPassed: quality.passed, issueCount: quality.issues.length }]
+    chapters: [...state.chapters, { number: chapterNumber, outline: parsed.outline, chapterPath, chars: parsed.chapter.length, qualityStatus: quality.status, qualityPassed: quality.passed, issueCount: quality.issues.length }]
   };
   const persisted = await writeJsonFile(deps.store, deps.workspace, ".feng/runtime/novel-state.json", nextState, "update runtime novel state");
   if (!persisted.ok) return persisted;

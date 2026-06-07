@@ -24,6 +24,7 @@ export interface QualityInput {
 export interface QualityEval {
   readonly chapterNumber: number;
   readonly chars: number;
+  readonly status: "pass" | "pass_with_warnings" | "fail";
   readonly passed: boolean;
   readonly issues: readonly QualityIssue[];
   readonly checkedAt: string;
@@ -43,7 +44,7 @@ function checkLength(input: QualityInput, r: QualityRule, issues: QualityIssue[]
   const min = r.minChars ?? 0;
   const max = r.maxChars ?? Number.MAX_SAFE_INTEGER;
   if (len < min) issues.push({ kind: "length", severity: "error", detail: `第${input.chapterNumber}章仅${len}字，低于下限${min}` });
-  else if (len > max) issues.push({ kind: "length", severity: "warning", detail: `第${input.chapterNumber}章${len}字，超过上限${max}` });
+  else if (len > max) issues.push({ kind: "length", severity: "error", detail: `第${input.chapterNumber}章${len}字，超过硬性上限${max}` });
 }
 
 function checkChapterContinuity(input: QualityInput, issues: QualityIssue[]): void {
@@ -106,10 +107,14 @@ export function evaluateChapter(input: QualityInput): QualityEval {
   if (rule(input.rules, "geography_consistency") !== undefined) checkGeography(input, issues);
   if (rule(input.rules, "outline_continuity") !== undefined) checkOutlineContinuity(input, issues);
   if (rule(input.rules, "artifact_presence") !== undefined) checkArtifactPresence(input, issues);
+  const hasError = issues.some((i) => i.severity === "error");
+  const hasWarning = issues.some((i) => i.severity === "warning");
+  const status = hasError ? "fail" : hasWarning ? "pass_with_warnings" : "pass";
   return {
     chapterNumber: input.chapterNumber,
     chars: input.chapterText.length,
-    passed: issues.every((i) => i.severity !== "error"),
+    status,
+    passed: status !== "fail",
     issues,
     checkedAt: new Date().toISOString()
   };
