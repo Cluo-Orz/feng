@@ -2,12 +2,22 @@ import { describe, expect, it } from "vitest";
 import { parseSemanticEval, buildSemanticJudgePrompt, SEMANTIC_JUDGE_SYSTEM } from "../../src/authoring-runtime/index.js";
 
 describe("semantic eval parsing", () => {
-  it("parses a clean score JSON and computes the overall average", () => {
-    const e = parseSemanticEval('{"style": 8, "character": 7, "plot": 9, "notes": "节奏好"}', 2, "t");
+  it("parses scores, structured problems, notes, and computes the overall average", () => {
+    const e = parseSemanticEval('{"style": 8, "character": 7, "plot": 9, "problems": [{"dimension":"character","evidence":"李白突然变得胆小","suggestion":"保持其豪放性格"}], "notes": "节奏好"}', 2, "t");
     expect(e.scores).toEqual({ style: 8, character: 7, plot: 9 });
     expect(e.overall).toBe(8);
+    expect(e.problems).toHaveLength(1);
+    expect(e.problems[0]?.dimension).toBe("character");
+    expect(e.problems[0]?.suggestion).toContain("豪放");
     expect(e.notes).toBe("节奏好");
     expect(e.chapterNumber).toBe(2);
+  });
+
+  it("tolerates malformed problem entries and missing fields", () => {
+    const e = parseSemanticEval('{"style": 6, "character": 6, "plot": 6, "problems": ["bad", {"dimension":"plot"}]}', 1, "t");
+    expect(e.problems).toHaveLength(1);
+    expect(e.problems[0]?.dimension).toBe("plot");
+    expect(e.problems[0]?.evidence).toBe("");
   });
 
   it("extracts JSON embedded in surrounding text and clamps scores", () => {
