@@ -68,7 +68,8 @@ export function compileMessageList(
   const systemParts = [
     pkg.writingStrategy.systemPrompt,
     pkg.writingStrategy.stylePrinciples.length === 0 ? "" : `写作原则：\n${pkg.writingStrategy.stylePrinciples.map((p) => `- ${p}`).join("\n")}`,
-    pkg.writingStrategy.constraints.length === 0 ? "" : `硬性约束：\n${pkg.writingStrategy.constraints.map((c) => `- ${c}`).join("\n")}`
+    pkg.writingStrategy.constraints.length === 0 ? "" : `硬性约束：\n${pkg.writingStrategy.constraints.map((c) => `- ${c}`).join("\n")}`,
+    pkg.storyModel.continuityDimensions.length === 0 ? "" : `连贯性检查维度（写作时必须维持）：\n${pkg.storyModel.continuityDimensions.map((d) => `- ${d}`).join("\n")}`
   ].filter((p) => p.length > 0);
   const systemPrompt = systemParts.join("\n\n");
 

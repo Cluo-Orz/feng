@@ -8,6 +8,8 @@ import {
   defaultContextPolicy,
   defaultNovelTargetWorld,
   defaultQualityRules,
+  defaultStoryModel,
+  defaultHarness,
   PACKAGE_PATH,
   PACKAGE_SCHEMA_VERSION,
   type AuthoringRuntimePackage
@@ -25,6 +27,8 @@ function pkg(): AuthoringRuntimePackage {
     targetWorld: defaultNovelTargetWorld,
     contextPolicy: defaultContextPolicy,
     writingStrategy: { systemPrompt: "写作 agent", stylePrinciples: [], constraints: [] },
+    storyModel: defaultStoryModel,
+    harness: defaultHarness,
     qualityRules: defaultQualityRules,
     feedbackRouting: defaultFeedbackRouting,
     validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "ok", checkedAt: "t" },

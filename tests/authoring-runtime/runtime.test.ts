@@ -10,6 +10,8 @@ import {
   defaultNovelTargetWorld,
   defaultQualityRules,
   defaultFeedbackRouting,
+  defaultStoryModel,
+  defaultHarness,
   PACKAGE_SCHEMA_VERSION,
   type AuthoringRuntimePackage
 } from "../../src/runtime-package/index.js";
@@ -29,6 +31,8 @@ function pkg(): AuthoringRuntimePackage {
     targetWorld: defaultNovelTargetWorld,
     contextPolicy: defaultContextPolicy,
     writingStrategy: { systemPrompt: "你是连贯写作 agent。", stylePrinciples: ["生动"], constraints: ["保持连贯"] },
+    storyModel: defaultStoryModel,
+    harness: defaultHarness,
     qualityRules: defaultQualityRules,
     feedbackRouting: defaultFeedbackRouting,
     validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "ok", checkedAt: "t" },

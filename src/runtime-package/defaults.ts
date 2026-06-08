@@ -2,6 +2,8 @@ import type {
   ContextSectionPolicy,
   FeedbackRoutingRule,
   QualityRule,
+  StoryModel,
+  AgentHarness,
   TargetWorldContract
 } from "./types.js";
 
@@ -17,6 +19,24 @@ export const defaultNovelTargetWorld: TargetWorldContract = {
   actionBoundary: ["可写章节文件与大纲", "可读作品资料", "可提出问题", "未经确认不得发布或删除作品"],
   failureHandling: ["产出过短或缺失则记录问题并重试", "设定冲突写入 feedback candidate", "模型失败向上返回错误"],
   dialogueAllowed: false
+};
+
+export const defaultStoryModel: StoryModel = {
+  trackedFacts: [
+    "premise(作品设定)",
+    "world_bible(世界观/规则)",
+    "character_bible(人物设定与性格)",
+    "character_state(人物当前目标/关系/处境/弧线)",
+    "timeline(时间线与年份)",
+    "locations(地点设定)",
+    "unresolved_hooks(未回收伏笔/悬念)",
+    "chapter_outlines(逐章大纲累积)"
+  ],
+  continuityDimensions: ["人物承接", "性格延续", "年份一致", "地点一致", "大纲连续", "悬念推进", "文风一致"]
+};
+
+export const defaultHarness: AgentHarness = {
+  steps: ["run_chapter", "revise_chapter", "evaluate_chapter", "continuity_check", "route_feedback", "re_grow_package", "re_run_sample"]
 };
 
 export const defaultContextPolicy: readonly ContextSectionPolicy[] = [

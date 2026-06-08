@@ -5,6 +5,8 @@ import {
   defaultNovelTargetWorld,
   defaultQualityRules,
   defaultFeedbackRouting,
+  defaultStoryModel,
+  defaultHarness,
   PACKAGE_SCHEMA_VERSION,
   type AuthoringRuntimePackage
 } from "../../src/runtime-package/index.js";
@@ -21,6 +23,8 @@ function pkg(): AuthoringRuntimePackage {
     targetWorld: defaultNovelTargetWorld,
     contextPolicy: defaultContextPolicy,
     writingStrategy: { systemPrompt: "你是写作 agent。", stylePrinciples: ["生动"], constraints: ["900-1500字"] },
+    storyModel: defaultStoryModel,
+    harness: defaultHarness,
     qualityRules: defaultQualityRules,
     feedbackRouting: defaultFeedbackRouting,
     validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "ok", checkedAt: "t" },
@@ -65,6 +69,8 @@ describe("compileMessageList", () => {
     expect(sys).toContain("你是写作 agent");
     expect(sys).toContain("生动");
     expect(sys).toContain("900-1500字");
+    expect(sys).toContain("连贯性检查维度");
+    expect(sys).toContain("人物承接");
     expect(record.systemPromptChars).toBeGreaterThan(0);
   });
 

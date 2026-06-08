@@ -68,6 +68,18 @@ export interface WritingStrategy {
   readonly constraints: readonly string[];
 }
 
+// The structured facts a serialized-authoring agent tracks across a work
+// project, and the harness operations it runs. This is what makes the package
+// an agent design rather than a bare prompt (product-concept 203-211).
+export interface StoryModel {
+  readonly trackedFacts: readonly string[];
+  readonly continuityDimensions: readonly string[];
+}
+
+export interface AgentHarness {
+  readonly steps: readonly string[];
+}
+
 export interface PackageValidation {
   readonly readiness: "ready" | "draft";
   readonly grownInProject: string;
@@ -88,6 +100,8 @@ export interface AuthoringRuntimePackage {
   readonly targetWorld: TargetWorldContract;
   readonly contextPolicy: readonly ContextSectionPolicy[];
   readonly writingStrategy: WritingStrategy;
+  readonly storyModel: StoryModel;
+  readonly harness: AgentHarness;
   readonly qualityRules: readonly QualityRule[];
   readonly feedbackRouting: readonly FeedbackRoutingRule[];
   readonly validation: PackageValidation;

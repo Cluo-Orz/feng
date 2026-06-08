@@ -4,6 +4,7 @@ import { loadFengConfig } from "./config.js";
 import { writeNovel } from "./xiaoshuo-writer.js";
 import { superviseNovel } from "./supervisor.js";
 import { growXiaoshuoAgent } from "./grow-agent.js";
+import { growXiaoshuoAgentLoop } from "./grow-loop.js";
 import { routeProjectFeedback } from "./feedback-router.js";
 import { loadPackage } from "../runtime-package/index.js";
 import { runChapters, type AuthoringRuntimeDeps } from "../authoring-runtime/index.js";
@@ -71,6 +72,24 @@ export async function runGrowAgent(host: FengHost, argv: readonly string[], stdo
   }
   const name = flagValue(argv, "--name");
   const version = flagValue(argv, "--version");
+  if (argv.includes("--loop")) {
+    const loop = await growXiaoshuoAgentLoop(host, {
+      goal,
+      ...(name === undefined ? {} : { name }),
+      ...(flagValue(argv, "--rounds") === undefined ? {} : { maxRounds: intFlag(argv, "--rounds", 2) }),
+      ...(flagValue(argv, "--sample-chapters") === undefined ? {} : { sampleChapters: intFlag(argv, "--sample-chapters", 2) })
+    });
+    if (!loop.ok) {
+      stderr(`feng grow-agent error [${loop.error.code}]: ${loop.error.message}`);
+      return 1;
+    }
+    stdout(`[grow-agent --loop] ${loop.value.packagePath} growUnit=${loop.value.growUnitId} lifecycle=${loop.value.lifecycle} readiness=${loop.value.readiness}`);
+    for (const r of loop.value.rounds) {
+      stdout(`  round ${r.round} (v${r.version}): chapters=${r.chapters} fail=${r.failChapters} capabilityIssues=[${r.capabilityIssueKinds.join(",")}] added=${r.addedConstraints.length}`);
+    }
+    stdout(`  improved=${loop.value.improved} finalCapabilityIssues=${loop.value.finalCapabilityIssues}`);
+    return 0;
+  }
   const result = await growXiaoshuoAgent(host, {
     goal,
     ...(name === undefined ? {} : { name }),

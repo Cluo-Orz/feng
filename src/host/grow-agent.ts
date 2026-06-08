@@ -5,8 +5,10 @@ import { makePolicyRequestId } from "../policy-boundary/index.js";
 import {
   defaultContextPolicy,
   defaultFeedbackRouting,
+  defaultHarness,
   defaultNovelTargetWorld,
   defaultQualityRules,
+  defaultStoryModel,
   savePackage,
   PACKAGE_SCHEMA_VERSION,
   type AuthoringRuntimePackage,
@@ -38,7 +40,7 @@ const DESIGN_PROMPT = [
   "不要输出 JSON 以外的任何文字。"
 ].join("\n");
 
-interface DesignedStrategy {
+export interface DesignedStrategy {
   readonly strategy: WritingStrategy;
   readonly minChars?: number;
   readonly maxChars?: number;
@@ -97,7 +99,51 @@ export function grownLengthRule(min: number | undefined, max: number | undefined
   return { minChars: lo, maxChars: hi };
 }
 
-async function designStrategy(host: FengHost): Promise<Result<{ readonly designed: DesignedStrategy; readonly raw: string }>> {
+export interface BuildPackageInput {
+  readonly name: string;
+  readonly version: string;
+  readonly locked: boolean;
+  readonly strategy: WritingStrategy;
+  readonly minChars?: number;
+  readonly maxChars?: number;
+  readonly grownInProject: string;
+  readonly grownByGrowUnitId?: string;
+  readonly readiness: "ready" | "draft";
+  readonly evidenceSummary: string;
+  readonly model: string;
+  readonly provider: string;
+}
+
+export function buildAuthoringPackage(input: BuildPackageInput): AuthoringRuntimePackage {
+  const length = grownLengthRule(input.minChars, input.maxChars);
+  const qualityRules = defaultQualityRules.map((r) => (r.kind === "length" ? { ...r, minChars: length.minChars, maxChars: length.maxChars, note: "每章中文字数区间(由 agent grow 得出)" } : r));
+  return {
+    schemaVersion: PACKAGE_SCHEMA_VERSION,
+    packageId: `pkg-${input.grownByGrowUnitId ?? input.name}-${input.version}`,
+    name: input.name,
+    kind: "serialized_authoring_agent",
+    version: input.version,
+    locked: input.locked,
+    runEntry: "feng run",
+    targetWorld: defaultNovelTargetWorld,
+    contextPolicy: defaultContextPolicy,
+    writingStrategy: input.strategy,
+    storyModel: defaultStoryModel,
+    harness: defaultHarness,
+    qualityRules,
+    feedbackRouting: defaultFeedbackRouting,
+    validation: {
+      readiness: input.readiness,
+      grownInProject: input.grownInProject,
+      ...(input.grownByGrowUnitId === undefined ? {} : { grownByGrowUnitId: input.grownByGrowUnitId }),
+      evidenceSummary: input.evidenceSummary,
+      checkedAt: new Date().toISOString()
+    },
+    provenance: { model: input.model, provider: input.provider, hatchedAt: new Date().toISOString() }
+  };
+}
+
+export async function designStrategy(host: FengHost): Promise<Result<{ readonly designed: DesignedStrategy; readonly raw: string }>> {
   const meta = descriptors(host, "design writing strategy");
   const decision = await host.policy.evaluateAction({
     requestId: makePolicyRequestId(`grow-agent-net-${Date.now()}`),
@@ -211,6 +257,8 @@ export async function growXiaoshuoAgent(host: FengHost, input: GrowAgentInput): 
     targetWorld: defaultNovelTargetWorld,
     contextPolicy: defaultContextPolicy,
     writingStrategy: designed.value.designed.strategy,
+    storyModel: defaultStoryModel,
+    harness: defaultHarness,
     qualityRules,
     feedbackRouting: defaultFeedbackRouting,
     validation: {

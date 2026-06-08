@@ -4,6 +4,8 @@ export * from "./runtime-host.js";
 export * from "./xiaoshuo-writer.js";
 export * from "./supervisor.js";
 export * from "./grow-agent.js";
+export * from "./grow-revise.js";
+export * from "./grow-loop.js";
 export * from "./feedback-router.js";
 export * from "./host-commands.js";
 export * from "./cli-entry.js";

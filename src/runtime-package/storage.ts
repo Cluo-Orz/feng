@@ -1,6 +1,7 @@
 import { ok, type Result } from "../domain/result.js";
 import { domainErr } from "../domain/index.js";
 import type { FileNativeStore, WorkspaceHandle } from "../file-store/index.js";
+import { defaultHarness, defaultStoryModel } from "./defaults.js";
 import type { AuthoringRuntimePackage } from "./types.js";
 
 // The package lives at a stable, copyable path so it can be `cp`'d from the
@@ -36,7 +37,12 @@ export async function loadPackage(
     if (parsed.kind !== "serialized_authoring_agent" || typeof parsed.writingStrategy?.systemPrompt !== "string") {
       return domainErr({ module: "runtime-package", code: "schema_incompatible", message: "runtime package is missing required fields", severity: "error" });
     }
-    return ok(parsed);
+    const normalized: AuthoringRuntimePackage = {
+      ...parsed,
+      storyModel: parsed.storyModel ?? defaultStoryModel,
+      harness: parsed.harness ?? defaultHarness
+    };
+    return ok(normalized);
   } catch (cause) {
     return domainErr({ module: "runtime-package", code: "schema_incompatible", message: "runtime package is not valid JSON", severity: "error", cause });
   }
