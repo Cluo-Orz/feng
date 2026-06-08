@@ -72,6 +72,10 @@ describe("compileMessageList", () => {
     expect(sys).toContain("连贯性检查维度");
     expect(sys).toContain("人物承接");
     expect(record.systemPromptChars).toBeGreaterThan(0);
+    // the message-list file must record the full system prompt text, not just
+    // its length, so it is a complete file-native record of what was sent.
+    expect(record.systemPrompt).toBe(sys);
+    expect(record.systemPrompt).toContain("900-1500字");
   });
 
   it("marks first chapter and empty long-term/feedback gracefully", () => {

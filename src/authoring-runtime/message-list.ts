@@ -24,6 +24,7 @@ export interface CompiledSection {
 export interface CompiledMessageList {
   readonly chapterNumber: number;
   readonly sections: readonly CompiledSection[];
+  readonly systemPrompt: string;
   readonly systemPromptChars: number;
   readonly compiledAt: string;
 }
@@ -84,6 +85,6 @@ export function compileMessageList(
   ];
   return {
     messages,
-    record: { chapterNumber: state.chapterNumber, sections, systemPromptChars: systemPrompt.length, compiledAt: new Date().toISOString() }
+    record: { chapterNumber: state.chapterNumber, sections, systemPrompt, systemPromptChars: systemPrompt.length, compiledAt: new Date().toISOString() }
   };
 }
