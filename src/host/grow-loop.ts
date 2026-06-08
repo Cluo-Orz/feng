@@ -124,6 +124,7 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
   }
 
   let strategy = designed.value.designed.strategy;
+  let effectiveMax = designed.value.designed.maxChars;
   const rounds: GrowRoundReport[] = [];
   let lastResults: readonly RunChapterResult[] = [];
   for (let round = 1; round <= maxRounds; round += 1) {
@@ -131,7 +132,7 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
     const pkg = buildAuthoringPackage({
       name, version, locked: false, strategy,
       ...(designed.value.designed.minChars === undefined ? {} : { minChars: designed.value.designed.minChars }),
-      ...(designed.value.designed.maxChars === undefined ? {} : { maxChars: designed.value.designed.maxChars }),
+      ...(effectiveMax === undefined ? {} : { maxChars: effectiveMax }),
       grownInProject: host.config.workspaceRoot, grownByGrowUnitId: grow.value.id,
       readiness: "draft", evidenceSummary: `grow round ${round} sample package`,
       model: host.config.provider.model, provider: host.config.provider.provider
@@ -143,22 +144,30 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
     const revision = reviseStrategyForIssues(strategy, capKinds);
     rounds.push({ round, version, chapters: sample.value.length, failChapters: failCount(sample.value), capabilityIssueKinds: capKinds, addedConstraints: revision.added });
     await host.store.writeTextAtomic(host.workspace, `.feng/grow-samples/round-${round}/round-report.json`, JSON.stringify(rounds[rounds.length - 1], null, 2), { reason: "write grow round report", createParents: true });
-    if (capKinds.length === 0) break;
+    // Calibrate the length contract from sample evidence: if chapters overflow
+    // the declared ceiling, the agent widens its own viable maxChars (capped),
+    // learning the contract it can actually meet with this model.
+    const maxObserved = Math.max(...sample.value.map((c) => c.chars), 0);
+    const lengthFail = sample.value.some((c) => c.quality.issues.some((i) => i.kind === "length" && i.severity === "error" && c.chars > (effectiveMax ?? Number.MAX_SAFE_INTEGER)));
+    const widened = lengthFail && effectiveMax !== undefined && maxObserved > effectiveMax;
+    if (widened) effectiveMax = Math.min(8000, Math.ceil((maxObserved + 400) / 100) * 100);
+    if (capKinds.length === 0 && !widened) break;
     strategy = revision.strategy;
   }
 
   const firstCap = rounds[0]?.capabilityIssueKinds.length ?? 0;
   const finalCap = rounds[rounds.length - 1]?.capabilityIssueKinds.length ?? 0;
+  const finalFail = rounds[rounds.length - 1]?.failChapters ?? 0;
   const improved = firstCap === 0 ? true : finalCap < firstCap;
 
   const evidence = await host.evidence.recordEvidenceCandidate({
     growUnitRef: grow.value,
     sourceKind: "validation_report",
-    summary: `grow sample-run evidence over ${rounds.length} round(s): capability issues ${firstCap} -> ${finalCap}`,
-    content: JSON.stringify({ rounds, improved }, null, 2),
+    summary: `grow sample-run evidence over ${rounds.length} round(s): capability issues ${firstCap} -> ${finalCap}, final hard-fail chapters ${finalFail}`,
+    content: JSON.stringify({ rounds, improved, finalFail }, null, 2),
     artifactKind: "validation_report",
     relationHints: [{ relation: "supports", relatedDoDRef: dod.value, criticality: "critical", reason: "sample run evals demonstrate readiness" }],
-    quality: { trustLevel: improved && finalCap === 0 ? "strong" : "weak" },
+    quality: { trustLevel: improved && finalCap === 0 && finalFail === 0 ? "strong" : "weak" },
     source: meta.source, version: meta.version, audit: meta.audit
   });
   if (!evidence.ok) return evidence;
@@ -170,7 +179,11 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
   if (!assessment.ok) return assessment;
   const verdict = await host.evidence.produceReadinessVerdict(assessment.value.readinessAssessmentRef);
   if (!verdict.ok) return verdict;
-  const ready = verdict.value.verdict === "ready_to_hatch" && finalCap === 0;
+  // Ready only when the final sample round has neither capability issues nor any
+  // hard quality failure. A sample chapter that still hard-fails (e.g. the model
+  // cannot meet the agent's own length contract) keeps the package draft/unlocked
+  // rather than faking readiness.
+  const ready = verdict.value.verdict === "ready_to_hatch" && finalCap === 0 && finalFail === 0;
   if (ready) {
     await host.grow.applyReadinessVerdict(grow.value, {
       readinessVerdictRef: verdict.value.artifactRef,
@@ -184,10 +197,10 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
   const finalPkg = buildAuthoringPackage({
     name, version: "1.0.0", locked: ready, strategy,
     ...(designed.value.designed.minChars === undefined ? {} : { minChars: designed.value.designed.minChars }),
-    ...(designed.value.designed.maxChars === undefined ? {} : { maxChars: designed.value.designed.maxChars }),
+    ...(effectiveMax === undefined ? {} : { maxChars: effectiveMax }),
     grownInProject: host.config.workspaceRoot, grownByGrowUnitId: grow.value.id,
     readiness: ready ? "ready" : "draft",
-    evidenceSummary: `rounds=${rounds.length}; capability ${firstCap}->${finalCap}; verdict=${verdict.value.verdict}`,
+    evidenceSummary: `rounds=${rounds.length}; capability ${firstCap}->${finalCap}; finalFail=${finalFail}; verdict=${verdict.value.verdict}`,
     model: host.config.provider.model, provider: host.config.provider.provider
   });
   if (finalPkg.writingStrategy.systemPrompt.length === 0) {

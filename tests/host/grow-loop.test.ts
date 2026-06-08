@@ -114,4 +114,27 @@ describe("growXiaoshuoAgentLoop", () => {
       expect(pkg.validation.readiness).toBe("ready");
     });
   });
+
+  it("calibrates its length contract upward when sample chapters overflow", async () => {
+    await withRoot(async (root) => {
+      let n = 0;
+      // agent declares a tight max (900) but the model writes ~2000 chars;
+      // the loop should widen maxChars from sample evidence
+      const overflowFetch: FetchLike = async () => {
+        n += 1;
+        const content = n === 1
+          ? JSON.stringify({ systemPrompt: "你是写作 agent。", stylePrinciples: [], constraints: [], minChars: 600, maxChars: 900 })
+          : `林越登场。${"正文".repeat(1000)}\n===OUTLINE===\n章`;
+        return { ok: true, status: 200, json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: overflowFetch });
+      const result = await growXiaoshuoAgentLoop(host, { goal: "g", maxRounds: 3, sampleChapters: 1 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      const pkg = JSON.parse(await readFile(path.join(root, PACKAGE_PATH), "utf8"));
+      const lengthRule = pkg.qualityRules.find((r: { kind: string }) => r.kind === "length");
+      // widened from the declared 900 to accommodate the ~2000-char samples
+      expect(lengthRule.maxChars).toBeGreaterThan(900);
+    });
+  });
 });
