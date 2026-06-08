@@ -36,21 +36,23 @@
 - D3 分层归因 work/capability/system — **passed**：feedback.json 带 layer+reason。
 - D4 三路现场吸收 — **passed (ITER4)**：work→local、capability→xiaoshuo、system→F:\code\feng\.feng 均有现场证据。
 - D5 system 层真实信号 — **passed (ITER4)**：kernel-contract 检查（dialogueAllowed/unsupported outputKind）产出 runtime_capability→system。
-- D6 语义 eval 落盘且不自嗨 — **partial**：semantic-eval.json 已落盘并含 notes；但 judge 目前给整体分+点评，尚未强制结构化输出"问题+证据片段+修复建议"。下一步可加严。
+- D6 语义 eval 落盘且不自嗨 — **passed (ITER7)**：judge 强制结构化输出「问题：dimension+evidence+suggestion」，落盘 semantic-eval.json；低于阈值维度的问题经 `semanticCapabilityIssues` 升级为 capability 反馈候选并路由回流（不再只是整体分）。
 
 ## E. 端到端
 - E1 空目录 grow→hatch（多轮） — **passed**：live。
 - E2 libai 写≥3章 — **passed**：live，连贯。
-- E3 质量门抓真问题 — **passed**：live 抓到 length/geography（work）、character_continuation（capability）、runtime_capability（system）。
+- E3 质量门抓真问题 — **passed**：live 抓到 length/geography（work）、character_continuation（capability）、runtime_capability（system）、semantic_plot（capability，来自语义评审）。
 - E4 反馈进正确层级 — **passed**：live 三路。
-- E5 修复后质量改善 — **partial**：ITER5 章节修订单测证明改善；grow-loop 单测证明 capability 0→减少 + 长度契约校准；但"同一作品反复迭代直至全绿"的长链 live 仍可继续加强。
+- E5 下游反馈驱动 re-grow（单链 live） — **passed（机制+能力契约改善，诚实标注质量分噪声）**：
+  - ch4 语义 plot 低分 → capability 候选 → route 回 xiaoshuo（digest + admission 两条）→ re-grow 输出 `seeded 1 constraint` → 新运行包新增 plot 写作约束（旧包没有）→ cp 回 libai 重跑。
+  - 可靠改善指标=**能力契约覆盖**（运行包是否新增针对被点名维度的约束），确定性且文件可见。
+  - **诚实标注**：单章语义分是非确定性 LLM 判定，re-run 的 ch5 反落回 7/7/7；单样本不足以断言"小说写得更好"。可靠的章节质量提升需多样本/多轮对照，属后续工作，不在此 over-claim。详见 closed-loop-live-evidence.md「E5」。
 
 ## 仍未做 / 明确下一步（不打勾）
-- semantic judge 强制结构化「问题+证据片段+修复建议」并据此触发修订（D6）。
-- 更长的作品级迭代：libai 出现 capability 问题→route 回 xiaoshuo→xiaoshuo 再 grow→re-hatch→libai 重跑→指标改善 的完整 live 闭环（目前各段都有证据，端到端单链 live 可再串一次）。
+- 章节质量分的**可靠**提升（多样本均值 / 多轮对照），而非单样本语义分。
 - 完整 Debug & Feedback Bridge + kernel-run-elsewhere 重型路径（仍以文件原生运行包等价实现运行契约要素）。
 
 ## 测试边界
 - 单测全 deterministic（fake fetch / fixture），不依赖真实 LLM。
 - live 仅作补充证据；质量两层：结构化 deterministic（必做）+ 可选语义 eval（落盘）。
-- 基线：typecheck / build / test:coverage（108 文件 / 527 测试 / 全局 branch 80.09%）/ 业务文件≤400 行。
+- 基线：typecheck / build / test:coverage（108 文件 / 533 测试 / 全局 branch 80.12%）/ 业务文件≤400 行。

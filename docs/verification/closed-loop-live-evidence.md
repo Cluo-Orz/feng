@@ -107,3 +107,52 @@ feng route-feedback --target F:\code\libai-chongsheng --agent-dir F:\code\xiaosh
 - 现场 live：DeepSeek 评审 ch1 → style 9 / character 9 / plot 8 / overall 8.7，附中文点评，写入 semantic-eval.json。
 - 确定性覆盖：tests/authoring-runtime/semantic-eval.test.ts（解析/截断/降级）+ runtime.test.ts（--semantic-eval 写出 artifact）。
 - 满足测试边界"optional semantic/LLM eval ... 必须把结果写成文件化 eval artifact"。
+
+## E5：下游反馈驱动的 re-grow 闭环（一次完整现场链路）
+
+接手时的批评（codex #2/#4）：grow 是 one-shot，语义评审只是自夸评分、问题不回流，re-grow 没有被作品项目反馈驱动。本次把这条链路真正打通并现场跑通：
+
+现场链路（DeepSeek 实跑，2026-06-08，目录从 0 重置）：
+
+```
+# 1) 在干净 xiaoshuo 里 grow → ready_to_hatch（证据 sourceKind=validation_report，非 model_self_claim）
+feng grow-agent --loop --rounds 2 --sample-chapters 2 --goal "…" --name xiaoshuo   # cwd=xiaoshuo
+#   storyModel.trackedFacts=8 continuityDims=7 harness.steps=7；minChars=2000 maxChars=5000
+
+# 2) cp 运行包到 libai，写 project.json（premise/title 为李白重生了）
+# 3) libai 用 hatched 包逐章写作，开启语义评审
+feng run --chapters 3 --semantic-eval   # cwd=libai；随后又写 ch4
+
+# 4) ch4 语义评审 plot=低分 → 结构化 problems 路由为 capability 候选（semantic_plot ×2）
+#    feedback.json: byLayer.capability=2
+
+# 5) 分层路由：能力问题回流 xiaoshuo
+feng route-feedback --target F:\code\libai-chongsheng --agent-dir F:\code\xiaoshuo --feng-dir F:\code\feng
+#   -> total=2 work=0 capability->agent=2 system->feng=0
+#   xiaoshuo\.feng\grow-inbox\capability-feedback.json (issueKinds=[semantic_plot])
+#   xiaoshuo\.feng\admission\inbox\records\*.json (2 条吸收记录)
+
+# 6) re-grow：grow loop 读取 digest → 种入约束
+feng grow-agent --loop … # cwd=xiaoshuo
+#   -> "seeded 1 constraint(s) from downstream capability feedback"
+#   新运行包 writingStrategy.constraints 增加："强化情节吸引力与推进：每章设置有效冲突、阻碍与悬念钩子…"
+
+# 7) cp 新包到 libai，再跑一章
+feng run --chapters 1 --semantic-eval
+```
+
+**确定可断言的改善（deterministic、文件可见）**：
+- 真实能力反馈在作品项目现场产生（ch4 semantic_plot ×2，feedback.json byLayer.capability=2）。
+- 反馈被文件原生吸收：`xiaoshuo\.feng\grow-inbox\capability-feedback.json` + admission inbox 两条记录。
+- re-grow **被下游反馈驱动**：grow loop 读 digest 后输出 `seeded 1 constraint(s)`，新运行包能力契约新增针对 plot 维度的写作约束（旧包没有）。这是"作品级反馈 → 能力层 → 运行包改进"的确定性闭环证据。
+
+**诚实标注：单章语义分数不足以断言"小说写得更好了"**。
+- 语义评审是非确定性 LLM 判定；用新包写的 ch5 语义反而回落到 style/character/plot 各 7（capability 候选 6 条）。单样本噪声大，方向可上可下。
+- 因此本闭环的可靠改善指标是**能力契约覆盖**（运行包是否新增了针对被点名维度的约束），而非单章质量分。把"模型生成了一章"或"某次分数升高"当作质量达标，正是本任务明确要避免的。
+- 若要可靠断言章节质量提升，需多样本均值/多轮对照，属后续工作，不在此 over-claim。
+
+**确定性覆盖**（不依赖真实 LLM）：
+- tests/authoring-runtime/semantic-eval.test.ts：`semanticCapabilityIssues` 把低于阈值维度的 problems 转成 capability 问题；高分维度不升级；未知维度忽略。
+- tests/host/feedback-router.test.ts：capability 反馈吸收后写出 `.feng/grow-inbox/capability-feedback.json`（issueKinds/count）。
+- tests/host/grow-loop.test.ts：grow loop 读 digest → 种入约束，运行包 constraints 含对应文本。
+- tests/host/grow-revise.test.ts：semantic_style/character/plot → 写作约束映射。
