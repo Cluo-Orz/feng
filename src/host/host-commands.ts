@@ -84,6 +84,9 @@ export async function runGrowAgent(host: FengHost, argv: readonly string[], stdo
       return 1;
     }
     stdout(`[grow-agent --loop] ${loop.value.packagePath} growUnit=${loop.value.growUnitId} lifecycle=${loop.value.lifecycle} readiness=${loop.value.readiness}`);
+    if (loop.value.seededConstraints.length > 0) {
+      stdout(`  seeded ${loop.value.seededConstraints.length} constraint(s) from downstream capability feedback`);
+    }
     for (const r of loop.value.rounds) {
       stdout(`  round ${r.round} (v${r.version}): chapters=${r.chapters} fail=${r.failChapters} capabilityIssues=[${r.capabilityIssueKinds.join(",")}] added=${r.addedConstraints.length}`);
     }

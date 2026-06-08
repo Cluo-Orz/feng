@@ -1,4 +1,4 @@
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -135,6 +135,34 @@ describe("growXiaoshuoAgentLoop", () => {
       const lengthRule = pkg.qualityRules.find((r: { kind: string }) => r.kind === "length");
       // widened from the declared 900 to accommodate the ~2000-char samples
       expect(lengthRule.maxChars).toBeGreaterThan(900);
+    });
+  });
+
+  it("seeds writing constraints from a downstream capability-feedback digest", async () => {
+    await withRoot(async (root) => {
+      // route-feedback wrote this digest into the agent workspace from a work project
+      await mkdir(path.join(root, ".feng", "grow-inbox"), { recursive: true });
+      await writeFile(
+        path.join(root, ".feng", "grow-inbox", "capability-feedback.json"),
+        JSON.stringify({ issueKinds: ["semantic_character"], count: 1, updatedAt: "t", details: [] }),
+        "utf8"
+      );
+      let n = 0;
+      const cleanFetch: FetchLike = async () => {
+        n += 1;
+        const content = n === 1
+          ? JSON.stringify({ systemPrompt: "你是写作 agent。", stylePrinciples: [], constraints: [] })
+          : `林越登场。${"正文".repeat(500)}\n===OUTLINE===\n章`;
+        return { ok: true, status: 200, json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: cleanFetch });
+      const result = await growXiaoshuoAgentLoop(host, { goal: "g", maxRounds: 2, sampleChapters: 1 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.seededConstraints.length).toBeGreaterThan(0);
+      const pkg = JSON.parse(await readFile(path.join(root, PACKAGE_PATH), "utf8"));
+      // the re-grow folded the downstream capability feedback into its strategy
+      expect(pkg.writingStrategy.constraints.some((c: string) => c.includes("人物"))).toBe(true);
     });
   });
 });

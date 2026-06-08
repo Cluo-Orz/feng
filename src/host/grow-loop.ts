@@ -6,6 +6,7 @@ import { runChapters, type AuthoringRuntimeDeps, type RunChapterResult } from ".
 import { savePackage, type AuthoringRuntimePackage, type QualityCheckKind } from "../runtime-package/index.js";
 import { buildAuthoringPackage, designStrategy } from "./grow-agent.js";
 import { reviseStrategyForIssues } from "./grow-revise.js";
+import { CAPABILITY_DIGEST_PATH } from "./feedback-router.js";
 import type { FengHost } from "./runtime-host.js";
 
 export interface GrowLoopInput {
@@ -32,6 +33,22 @@ export interface GrowLoopResult {
   readonly finalCapabilityIssues: number;
   readonly readiness: string;
   readonly lifecycle: string;
+  readonly seededConstraints: readonly string[];
+}
+
+// Reads the file-native capability-feedback digest that route-feedback writes
+// into this agent workspace from downstream work projects. Their issue kinds
+// seed the initial writing strategy so a re-grow is genuinely driven by the
+// work project's feedback, not by sample runs alone.
+async function readSeedKinds(host: FengHost): Promise<readonly QualityCheckKind[]> {
+  const read = await host.store.readText(host.workspace, CAPABILITY_DIGEST_PATH, { reason: "grow: read capability digest", maxBytes: 256 * 1024 });
+  if (!read.ok) return [];
+  try {
+    const parsed = JSON.parse(read.value.content) as { readonly issueKinds?: readonly string[] };
+    return [...new Set(parsed.issueKinds ?? [])] as readonly QualityCheckKind[];
+  } catch {
+    return [];
+  }
 }
 
 // A small but real sample work project the agent writes against during grow, so
@@ -125,6 +142,10 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
 
   let strategy = designed.value.designed.strategy;
   let effectiveMax = designed.value.designed.maxChars;
+  const seedKinds = await readSeedKinds(host);
+  const seeding = reviseStrategyForIssues(strategy, seedKinds);
+  strategy = seeding.strategy;
+  const seededConstraints = seeding.added;
   const rounds: GrowRoundReport[] = [];
   let lastResults: readonly RunChapterResult[] = [];
   for (let round = 1; round <= maxRounds; round += 1) {
@@ -209,5 +230,5 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
   const saved = await savePackage(host.store, host.workspace, finalPkg);
   if (!saved.ok) return saved;
 
-  return ok({ packagePath: saved.value, growUnitId: grow.value.id, rounds, improved, finalCapabilityIssues: finalCap, readiness: verdict.value.verdict, lifecycle });
+  return ok({ packagePath: saved.value, growUnitId: grow.value.id, rounds, improved, finalCapabilityIssues: finalCap, readiness: verdict.value.verdict, lifecycle, seededConstraints });
 }

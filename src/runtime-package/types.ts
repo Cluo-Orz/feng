@@ -40,7 +40,10 @@ export const qualityCheckKinds = [
   "geography_consistency",
   "outline_continuity",
   "artifact_presence",
-  "runtime_capability"
+  "runtime_capability",
+  "semantic_style",
+  "semantic_character",
+  "semantic_plot"
 ] as const;
 export type QualityCheckKind = (typeof qualityCheckKinds)[number];
 

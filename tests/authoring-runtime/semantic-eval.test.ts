@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSemanticEval, buildSemanticJudgePrompt, SEMANTIC_JUDGE_SYSTEM } from "../../src/authoring-runtime/index.js";
+import { parseSemanticEval, buildSemanticJudgePrompt, semanticCapabilityIssues, SEMANTIC_JUDGE_SYSTEM } from "../../src/authoring-runtime/index.js";
 
 describe("semantic eval parsing", () => {
   it("parses scores, structured problems, notes, and computes the overall average", () => {
@@ -37,5 +37,28 @@ describe("semantic eval parsing", () => {
     expect(SEMANTIC_JUDGE_SYSTEM).toContain("style");
     const prompt = buildSemanticJudgePrompt("字".repeat(9000));
     expect(prompt.length).toBeLessThan(6200);
+  });
+});
+
+describe("semanticCapabilityIssues", () => {
+  it("turns problems on below-bar dimensions into capability issues", () => {
+    const e = parseSemanticEval('{"style": 6, "character": 7, "plot": 9, "problems": [{"dimension":"style","evidence":"比喻堆叠","suggestion":"精简"},{"dimension":"character","evidence":"反应轻率","suggestion":"加层次"},{"dimension":"plot","evidence":"过场","suggestion":"加冲突"}]}', 2, "t");
+    const issues = semanticCapabilityIssues(e);
+    const kinds = issues.map((i) => i.kind);
+    expect(kinds).toContain("semantic_style");
+    expect(kinds).toContain("semantic_character");
+    // plot scored 9 (>= bar 8) so its problem is not escalated
+    expect(kinds).not.toContain("semantic_plot");
+    expect(issues.every((i) => i.severity === "warning")).toBe(true);
+  });
+
+  it("returns nothing when all flagged dimensions are at or above the bar", () => {
+    const e = parseSemanticEval('{"style": 9, "character": 8, "plot": 8, "problems": [{"dimension":"style","evidence":"x","suggestion":"y"}]}', 1, "t");
+    expect(semanticCapabilityIssues(e)).toHaveLength(0);
+  });
+
+  it("ignores problems on unknown dimensions", () => {
+    const e = parseSemanticEval('{"style": 4, "character": 4, "plot": 4, "problems": [{"dimension":"pacing","evidence":"x","suggestion":"y"}]}', 1, "t");
+    expect(semanticCapabilityIssues(e)).toHaveLength(0);
   });
 });

@@ -32,4 +32,12 @@ describe("grow-revise", () => {
     expect(constraintFor("length")).toContain("字数");
     expect(constraintFor("artifact_presence")).toBeUndefined();
   });
+
+  it("maps semantic-judge capability kinds to writing constraints", () => {
+    const revised = reviseStrategyForIssues(base, ["semantic_character", "semantic_plot", "semantic_style"]);
+    expect(revised.added).toHaveLength(3);
+    expect(constraintFor("semantic_character")).toContain("人物");
+    expect(constraintFor("semantic_plot")).toContain("情节");
+    expect(constraintFor("semantic_style")).toContain("文风");
+  });
 });

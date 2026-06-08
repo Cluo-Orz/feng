@@ -20,6 +20,7 @@ export interface RouteFeedbackResult {
 }
 
 const RUNTIME_CHAPTERS = ".feng/runtime/chapters";
+export const CAPABILITY_DIGEST_PATH = ".feng/grow-inbox/capability-feedback.json";
 
 async function readAllCandidates(host: FengHost): Promise<Result<readonly StoredCandidate[]>> {
   const listing = await host.store.listDirectory(host.workspace, RUNTIME_CHAPTERS, { reason: "route-feedback: list chapters", recursive: false });
@@ -94,6 +95,14 @@ export async function routeProjectFeedback(input: {
     const res = await absorb(input.agentHost, "capability", capability);
     if (!res.ok) return res;
     absorbedToAgent = res.value;
+    // File-native projection the agent's grow loop consumes to seed writing
+    // constraints on its next re-grow. The admission inbox remains the audited
+    // record; this digest is the grow-consumable view of downstream capability
+    // feedback, so re-grow is actually driven by the work project, not staged.
+    const kinds = [...new Set(capability.map((c) => c.issueKind))];
+    const digest = JSON.stringify({ issueKinds: kinds, count: capability.length, updatedAt: new Date().toISOString(), details: capability.map((c) => ({ issueKind: c.issueKind, chapter: c.chapterNumber, detail: c.detail })) }, null, 2);
+    const wrote = await input.agentHost.store.writeTextAtomic(input.agentHost.workspace, CAPABILITY_DIGEST_PATH, digest, { reason: "write capability feedback digest", createParents: true });
+    if (!wrote.ok) return wrote;
   }
   let absorbedToFeng = 0;
   if (input.fengHost !== undefined) {

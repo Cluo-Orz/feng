@@ -4,6 +4,9 @@
 // whose result must be persisted to a file. The judge is the model scoring its
 // own chapter on dimensions the structural checks cannot measure.
 
+import type { QualityCheckKind } from "../runtime-package/index.js";
+import type { QualityIssue } from "./quality.js";
+
 export interface SemanticScores {
   readonly style: number;
   readonly character: number;
@@ -75,4 +78,26 @@ export function parseSemanticEval(raw: string, chapterNumber: number, now: strin
         .filter((p): p is SemanticProblem => p !== undefined)
     : [];
   return { chapterNumber, overall, scores, problems, notes, evaluatedAt: now };
+}
+
+// The semantic judge is the second quality layer. Its structured problems must
+// not be a vanity score: when a dimension scores below the bar, its problems
+// become capability-layer feedback so route-feedback can carry them to the
+// agent (xiaoshuo) grow project, where the writing strategy is revised.
+const DIMENSION_KIND: Record<string, QualityCheckKind> = {
+  style: "semantic_style",
+  character: "semantic_character",
+  plot: "semantic_plot"
+};
+
+export function semanticCapabilityIssues(evaluated: SemanticEval, bar = 8): readonly QualityIssue[] {
+  const issues: QualityIssue[] = [];
+  for (const problem of evaluated.problems) {
+    const kind = DIMENSION_KIND[problem.dimension];
+    if (kind === undefined) continue;
+    const score = evaluated.scores[problem.dimension as keyof SemanticScores];
+    if (typeof score === "number" && score >= bar) continue;
+    issues.push({ kind, severity: "warning", detail: `第${evaluated.chapterNumber}章 ${problem.dimension}：${problem.evidence} → ${problem.suggestion}` });
+  }
+  return issues;
 }

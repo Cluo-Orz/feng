@@ -1,4 +1,4 @@
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -42,6 +42,10 @@ describe("routeProjectFeedback", () => {
       expect(result.value.absorbedToAgent).toBe(1);
       expect(result.value.absorbedToFeng).toBe(1);
       expect(result.value.byLayer).toEqual({ work: 1, capability: 1, system: 1 });
+      // capability digest is written file-native into the agent workspace
+      const digest = JSON.parse(await readFile(path.join(agent, ".feng", "grow-inbox", "capability-feedback.json"), "utf8"));
+      expect(digest.issueKinds).toContain("character_continuation");
+      expect(digest.count).toBe(1);
     });
   });
 

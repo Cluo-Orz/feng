@@ -10,7 +10,7 @@ import { compileMessageList, type AuthoringRunState } from "./message-list.js";
 import { evaluateChapter, type QualityEval } from "./quality.js";
 import { checkKernelContract, routeFeedback, type RoutedFeedback } from "./feedback.js";
 import { defaultFeedbackRouting } from "../runtime-package/index.js";
-import { buildSemanticJudgePrompt, parseSemanticEval, SEMANTIC_JUDGE_SYSTEM, type SemanticEval } from "./semantic-eval.js";
+import { buildSemanticJudgePrompt, parseSemanticEval, semanticCapabilityIssues, SEMANTIC_JUDGE_SYSTEM, type SemanticEval } from "./semantic-eval.js";
 import {
   chapterDir,
   chapterFilePath,
@@ -224,11 +224,22 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   await writeTextFile(deps.store, deps.workspace, chapterPath, `# ${project.title} · 第${chapterNumber}章\n\n${parsed.chapter}\n`, "write chapter file");
   await writeJsonFile(deps.store, deps.workspace, `${dir}/model-output.json`, { finishReason, usage, text: parsed.chapter, outline: parsed.outline, repairAttempts, repairs: issuesLog }, "write model output");
 
+  let semantic: SemanticEval | undefined;
+  if (deps.semanticEval === true) {
+    semantic = await runSemanticEval(deps, chapterNumber, parsed.chapter, decision.value.policyDecisionId, meta, now);
+    if (semantic !== undefined) {
+      await writeJsonFile(deps.store, deps.workspace, `${dir}/semantic-eval.json`, semantic, "write semantic eval");
+    }
+  }
+
   // Package routing takes precedence; the kernel's default routing fills any
   // gaps (e.g. an older package that predates a newly added issue kind), so a
-  // system-layer kernel gap is never mis-routed to the work project.
+  // system-layer kernel gap is never mis-routed to the work project. Semantic
+  // judge problems join as capability-layer signals so they are routed (not just
+  // scored) to the agent grow project.
   const routing = [...pkg.feedbackRouting, ...defaultFeedbackRouting];
-  const feedback = routeFeedback(routing, chapterNumber, [...quality.issues, ...checkKernelContract(pkg)]);
+  const semanticIssues = semantic === undefined ? [] : semanticCapabilityIssues(semantic);
+  const feedback = routeFeedback(routing, chapterNumber, [...quality.issues, ...checkKernelContract(pkg), ...semanticIssues]);
 
   await writeJsonFile(deps.store, deps.workspace, `${dir}/trace.json`, {
     chapterNumber,
@@ -243,14 +254,6 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   }, "write runtime trace");
   await writeJsonFile(deps.store, deps.workspace, `${dir}/quality-eval.json`, quality, "write quality eval");
   await writeJsonFile(deps.store, deps.workspace, `${dir}/feedback.json`, feedback, "write feedback candidates");
-
-  let semantic: SemanticEval | undefined;
-  if (deps.semanticEval === true) {
-    semantic = await runSemanticEval(deps, chapterNumber, parsed.chapter, decision.value.policyDecisionId, meta, now);
-    if (semantic !== undefined) {
-      await writeJsonFile(deps.store, deps.workspace, `${dir}/semantic-eval.json`, semantic, "write semantic eval");
-    }
-  }
 
   const nextState: RuntimeNovelState = {
     premise: project.premise,
