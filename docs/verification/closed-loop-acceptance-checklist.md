@@ -1,53 +1,56 @@
-# 概念闭环验收清单 (acceptance checklist)
+# 概念闭环验收清单（诚实状态）
 
-> 来源：docs/product-concept.md(199-211), docs/feng-novel-case-flow.md(157-290)。
-> 本清单是"概念闭环是否真正达成"的判据，不是单测是否通过的判据。
+> 状态用 passed / partial / failed 标注，并指向真实证据（代码、单测、现场 .feng 文件）。
+> 来源：docs/product-concept.md(199-211)、docs/feng-novel-case-flow.md(157-290)、codex 复核意见。
+> 原则：先代码与现场证据，再文档；不提前打勾。
 
-## 断点诊断（接手时状态）
-- `feng write` 是 host-level 命令，直接用 `src/host/prompts.ts` 硬编码 prompt 调 DeepSeek；**没有**加载 xiaoshuo hatch 出的运行包。→ 违反概念 199（"不能只是 prompt 加命令包装"）。
-- `F:\code\xiaoshuo` 的 grow unit 停在 `intake`，agenda/DoD 为空，attempt 为 `completed_no_tool_calls`。→ xiaoshuo 不是被 grow 出来的 agent。
-- `F:\code\libai-chongsheng\.feng` 只有 novel-state/artifact/ledger，**没有** runtime message list / trace / quality eval / 作品级 feedback candidate。
-- libai 三章有真实质量硬伤：字数超界(1892/2004/1776 vs 900-1500)、年份 2024→2025、人物承接断裂(女孩→杨慎之)、地理冲突(成都/采石矶)。→ "能写"但未证明"写得好且可验证"。
+## 历史断点（codex 复核指出，本轮已处理）
+1. grow 是 one-shot（designStrategy→hatch），evidence 为 model_self_claim。
+2. xiaoshuo 只是生成 prompt，没有 story/context/harness 设计。
+3. 质量门太宽：length>max 仅 warning 却 qualityPassed=true。
+4. system→feng 无现场证据（system=0）。
+5. 文档过度验收（checklist 全 [x]）。
 
-## 验收项（每项必须有现场文件证据，不能只靠 review 文档声明）
+## A. xiaoshuo 真实 grow 出小说 agent
+- A1 目标世界契约（输入/输出/动作/失败） — **passed**：运行包 targetWorld。
+- A2 上下文策略（observation/short_term/long_term/feedback） — **passed**：contextPolicy + message-list 编译。
+- A3 写作策略由 LLM grow，非硬编码 — **passed**：grow-agent designStrategy。
+- A4 story/context/harness 模型 — **passed (ITER3)**：运行包 storyModel(premise/world/character/timeline/locations/hooks/outlines + 连贯维度) + harness(run/revise/evaluate/continuity/route/re-grow/re-run)；message-list 把连贯维度编入系统提示。
+- A5 多轮 grow（运行样例→反馈→修订→再验证） — **passed (ITER2)**：`feng grow-agent --loop` 多轮；现场 `.feng/grow-samples/round-N/` 有 round-report + 样例章 + eval。
+- A6 readiness 来自样例运行证据，非 model_self_claim — **passed (ITER2)**：evidence sourceKind=validation_report（"capability 0→0, hard-fail 0"），现场已核。
+- A7 readiness 门槛诚实 — **passed**：仅当最终轮 capability=0 且 hard-fail=0 才 ready/locked，否则 draft。
 
-> 状态：详见 closed-loop-live-evidence.md（现场命令+文件路径）与各模块单测。
+## B. 运行包
+- B1 file-native、契约完整、版本锁 — **passed**：.feng/hatch/xiaoshuo-runtime.json，locked 由 readiness 决定。
+- B2 可 cp 到作品项目并加载 — **passed**：libai 加载运行。
+- B3 版本锁运行时强制 — **passed**：feng run 拒绝 unlocked 包（production_lock_violation）。
 
-### A. xiaoshuo 层（F:\code\xiaoshuo）—— 真实 grow 出小说 agent
-- [x] A1 目标世界定义（输入/输出/动作/失败契约）—— 运行包 targetWorld（live）。
-- [x] A2 上下文策略（区分作品事实/当前章节/长期写作策略/反馈候选）—— 运行包 contextPolicy 4 段（live）。
-- [x] A3 写作策略由 grow（LLM attempt）产生并落盘为 evidence —— grow-agent designStrategy，非硬编码（live, strategyChars=301）。
-- [x] A4 质量 DoD（字数/年份/人物/地理/章节/大纲/artifact）写入运行包 qualityRules（7 条）。
-- [x] A5 feedback routing 策略写入运行包 feedbackRouting（7 条，work/capability/system）。
-- [x] A6 readiness 判定 + hatch 包；grow unit lifecycle=ready_to_hatch, phase=hatch（live，不再 intake）。
+## C. libai 使用 hatched runtime，每章 file-native
+- C1 加载 hatched 运行包（非 prompts.ts） — **passed**。
+- C2 每章 input/message-list/model-output/trace/quality-eval/feedback(+semantic-eval) — **passed**。
+- C3 trace 记录输入/作品事实/策略/冲突/反馈 — **passed**。
 
-### B. 运行包（hatched runtime package）
-- [x] B1 单一 file-native 工件，携带运行入口/契约/message-list 编译/上下文策略/质量/反馈/验证/版本锁。
-- [x] B2 可 `cp` 到 libai 并被加载（live）。
+## D. 质量与反馈
+- D1 结构化质量门诚实（pass/pass_with_warnings/fail） — **passed (ITER1)**：硬性违规=fail；length>max 现在是 error 不是 warning。
+- D2 章节修订（失败章原地修复并改善） — **passed (ITER5)**：eval 驱动修订，保留更优稿；单测：年份漂移硬失败→修订通过。
+- D3 分层归因 work/capability/system — **passed**：feedback.json 带 layer+reason。
+- D4 三路现场吸收 — **passed (ITER4)**：work→local、capability→xiaoshuo、system→F:\code\feng\.feng 均有现场证据。
+- D5 system 层真实信号 — **passed (ITER4)**：kernel-contract 检查（dialogueAllowed/unsupported outputKind）产出 runtime_capability→system。
+- D6 语义 eval 落盘且不自嗨 — **partial**：semantic-eval.json 已落盘并含 notes；但 judge 目前给整体分+点评，尚未强制结构化输出"问题+证据片段+修复建议"。下一步可加严。
 
-### C. libai 层（F:\code\libai-chongsheng）—— 使用 hatched runtime
-- [x] C1 加载 hatched 运行包的 grown systemPrompt，非 prompts.ts（live）。
-- [x] C2 每章 file-native：input/message-list/model-output/trace/quality-eval/feedback + 章节文件 + novel-state（live）。
-- [x] C3 trace 记录输入/作品事实/写作策略/生成/冲突/反馈候选（live）。
+## E. 端到端
+- E1 空目录 grow→hatch（多轮） — **passed**：live。
+- E2 libai 写≥3章 — **passed**：live，连贯。
+- E3 质量门抓真问题 — **passed**：live 抓到 length/geography（work）、character_continuation（capability）、runtime_capability（system）。
+- E4 反馈进正确层级 — **passed**：live 三路。
+- E5 修复后质量改善 — **partial**：ITER5 章节修订单测证明改善；grow-loop 单测证明 capability 0→减少 + 长度契约校准；但"同一作品反复迭代直至全绿"的长链 live 仍可继续加强。
 
-### D. 质量与反馈
-- [x] D1 deterministic 质量检查抓到真实问题：live 抓到 length/geography；年份/人物/章节/大纲/artifact 由单测覆盖。
-- [x] D2 每条问题归因到层级并落盘（feedback.json 带 layer+reason）。
-- [x] D3 反馈不无脑上游吸收：最新 canonical run 现场 live —— work(geography/length) 留本地，capability(character_continuation) 吸收进 xiaoshuo admission，system=0 未进 feng；三路均有现场证据 + 单测覆盖。
-
-### E. 端到端
-- [x] E1 从清空 xiaoshuo grow→hatch（live）。
-- [x] E2 libai 写≥3章（live，连贯、年份一致）。
-- [x] E3 质量检查抓到真实问题（live）。
-- [x] E4 feedback 分层路由（live + 单测）。
-- [~] E5 自修复机制就位（length self-repair，单测证明短稿→≥900字改善）；现场对超长稿触发但模型仍偏长，已诚实记录。
+## 仍未做 / 明确下一步（不打勾）
+- semantic judge 强制结构化「问题+证据片段+修复建议」并据此触发修订（D6）。
+- 更长的作品级迭代：libai 出现 capability 问题→route 回 xiaoshuo→xiaoshuo 再 grow→re-hatch→libai 重跑→指标改善 的完整 live 闭环（目前各段都有证据，端到端单链 live 可再串一次）。
+- 完整 Debug & Feedback Bridge + kernel-run-elsewhere 重型路径（仍以文件原生运行包等价实现运行契约要素）。
 
 ## 测试边界
-- 单测 deterministic，用 fake fetch / fixture，不依赖真实 LLM。
-- LLM 现场验证作为 manual/live，不作为唯一测试。
-- 质量测试两层：结构化 deterministic（必做）+ 可选 LLM 语义 eval（结果落盘成 eval artifact）。
-- "模型生成了一章" ≠ 质量通过；"review 文档声称通过" ≠ 通过（必须查现场文件）。
-- 不破坏现有 typecheck/build/coverage；业务文件≤400 行；功能不打折。
-
-## 诚实修正
-- `docs/development-reviews/cross-instance-supervision.md` 的 live 证据写在临时 supervisor 工作区（已删除），在 `F:\code\feng` 无持久证据。需修正措辞并改为可复现的持久目录证据。
+- 单测全 deterministic（fake fetch / fixture），不依赖真实 LLM。
+- live 仅作补充证据；质量两层：结构化 deterministic（必做）+ 可选语义 eval（落盘）。
+- 基线：typecheck / build / test:coverage（108 文件 / 527 测试 / 全局 branch 80.09%）/ 业务文件≤400 行。
