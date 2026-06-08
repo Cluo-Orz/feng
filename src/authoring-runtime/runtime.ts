@@ -98,14 +98,10 @@ function blocksText(blocks: readonly { readonly type: string; readonly text?: st
 
 const MAX_REPAIRS = 1;
 
-function lengthCorrection(len: number, pkg: AuthoringRuntimePackage): string | undefined {
-  const rule = pkg.qualityRules.find((r) => r.kind === "length");
-  if (rule === undefined) return undefined;
-  const min = rule.minChars ?? 0;
-  const max = rule.maxChars ?? Number.MAX_SAFE_INTEGER;
-  if (len < min) return `上一稿仅${len}字，过短。请在不改变情节的前提下扩写到至少${min}字，补充场景、对话与细节。`;
-  if (len > max) return `上一稿${len}字，过长。请在不改变情节的前提下压缩到${max}字以内，删去冗余铺陈。`;
-  return undefined;
+function buildCorrection(issues: readonly { readonly kind: string; readonly severity: string; readonly detail: string }[]): string | undefined {
+  const errors = issues.filter((i) => i.severity === "error");
+  if (errors.length === 0) return undefined;
+  return `上一稿存在以下必须修复的硬性问题，请在不改变既定情节的前提下重写本章修复它们：\n${errors.map((e) => `- ${e.detail}`).join("\n")}`;
 }
 
 function withCorrection(
@@ -167,9 +163,22 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
   });
   if (!decision.ok) return decision;
 
-  let parsed = { chapter: "", outline: "" };
-  let finishReason = "unknown";
-  let usage: unknown = {};
+  const evalOf = (text: string, outline: string): QualityEval => evaluateChapter({
+    rules: pkg.qualityRules,
+    chapterNumber,
+    chapterText: text,
+    outline,
+    priorChapterNumbers: state.chapters.map((c) => c.number),
+    priorOutlines,
+    ...(project.establishedYear === undefined ? {} : { establishedYear: project.establishedYear }),
+    ...(project.establishedCharacters === undefined ? {} : { establishedCharacters: project.establishedCharacters }),
+    ...(project.conflictTerms === undefined ? {} : { conflictTerms: project.conflictTerms }),
+    messageListWritten: true,
+    traceWritten: true
+  });
+  const errorCount = (e: QualityEval): number => e.issues.filter((i) => i.severity === "error").length;
+
+  let best: { chapter: string; outline: string; quality: QualityEval; finishReason: string; usage: unknown } | undefined;
   let repairAttempts = 0;
   const issuesLog: string[] = [];
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt += 1) {
@@ -193,31 +202,28 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
     if (raw.length === 0) {
       return domainErr({ module: "authoring-runtime", code: "response_invalid", message: "model returned no chapter text", severity: "error", retryable: true });
     }
-    parsed = parseChapterOutput(raw, chapterNumber);
-    finishReason = response.value.finishReason;
-    usage = response.value.usage;
-    const correction = lengthCorrection(parsed.chapter.length, pkg);
-    if (correction === undefined || attempt === MAX_REPAIRS) break;
+    const candidate = parseChapterOutput(raw, chapterNumber);
+    const candidateEval = evalOf(candidate.chapter, candidate.outline);
+    if (best === undefined || errorCount(candidateEval) < errorCount(best.quality)) {
+      best = { chapter: candidate.chapter, outline: candidate.outline, quality: candidateEval, finishReason: response.value.finishReason, usage: response.value.usage };
+    }
+    if (candidateEval.status !== "fail" || attempt === MAX_REPAIRS) break;
+    const correction = buildCorrection(candidateEval.issues);
+    if (correction === undefined) break;
     issuesLog.push(correction);
     repairAttempts += 1;
   }
+  if (best === undefined) {
+    return domainErr({ module: "authoring-runtime", code: "response_invalid", message: "no chapter produced", severity: "error" });
+  }
+  const parsed = { chapter: best.chapter, outline: best.outline };
+  const finishReason = best.finishReason;
+  const usage = best.usage;
+  const quality = best.quality;
   const chapterPath = chapterFilePath(chapterNumber);
   await writeTextFile(deps.store, deps.workspace, chapterPath, `# ${project.title} · 第${chapterNumber}章\n\n${parsed.chapter}\n`, "write chapter file");
   await writeJsonFile(deps.store, deps.workspace, `${dir}/model-output.json`, { finishReason, usage, text: parsed.chapter, outline: parsed.outline, repairAttempts, repairs: issuesLog }, "write model output");
 
-  const quality = evaluateChapter({
-    rules: pkg.qualityRules,
-    chapterNumber,
-    chapterText: parsed.chapter,
-    outline: parsed.outline,
-    priorChapterNumbers: state.chapters.map((c) => c.number),
-    priorOutlines,
-    ...(project.establishedYear === undefined ? {} : { establishedYear: project.establishedYear }),
-    ...(project.establishedCharacters === undefined ? {} : { establishedCharacters: project.establishedCharacters }),
-    ...(project.conflictTerms === undefined ? {} : { conflictTerms: project.conflictTerms }),
-    messageListWritten: true,
-    traceWritten: true
-  });
   // Package routing takes precedence; the kernel's default routing fills any
   // gaps (e.g. an older package that predates a newly added issue kind), so a
   // system-layer kernel gap is never mis-routed to the work project.

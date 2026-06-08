@@ -156,6 +156,31 @@ describe("authoring runtime runChapter", () => {
     });
   });
 
+  it("revises a hard-failing chapter (year drift) and keeps the better candidate", async () => {
+    await withProject(async (root) => {
+      await seedProject(root, { premise: "p", title: "t", establishedYear: 2024, establishedCharacters: ["李白"] });
+      let n = 0;
+      const driftThenFixed: FetchLike = async () => {
+        n += 1;
+        // first draft: wrong year (hard fail); revision: correct year
+        const content = n === 1
+          ? `李白行走，时值2025年。${"正文".repeat(600)}\n===OUTLINE===\n第1章`
+          : `李白行走，时值2024年。${"正文".repeat(600)}\n===OUTLINE===\n第1章`;
+        return { ok: true, status: 200, json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: driftThenFixed });
+      const deps: AuthoringRuntimeDeps = { store: host.store, workspace: host.workspace, llmGateway: host.llmGateway, policy: host.policy, provider: "deepseek", model: "m" };
+      const result = await runChapters(deps, pkg(), 1);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      // the kept chapter is the revised (passing) one, not the drift draft
+      expect(result.value[0]?.repairAttempts).toBe(1);
+      expect(result.value[0]?.quality.status).toBe("pass");
+      expect(result.value[0]?.quality.issues.some((i) => i.kind === "year_consistency")).toBe(false);
+      expect(n).toBe(2);
+    });
+  });
+
   it("errors when the work project has no project.json", async () => {
     await withProject(async (root) => {
       const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: chapterFetch(() => "x") });
