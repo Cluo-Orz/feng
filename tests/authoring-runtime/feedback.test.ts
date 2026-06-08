@@ -1,7 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { routeFeedback } from "../../src/authoring-runtime/index.js";
-import { defaultFeedbackRouting } from "../../src/runtime-package/index.js";
+import { routeFeedback, checkKernelContract } from "../../src/authoring-runtime/index.js";
+import { defaultFeedbackRouting, defaultNovelTargetWorld, type AuthoringRuntimePackage } from "../../src/runtime-package/index.js";
 import type { QualityIssue } from "../../src/authoring-runtime/index.js";
+
+function pkgWith(targetWorld: AuthoringRuntimePackage["targetWorld"]): AuthoringRuntimePackage {
+  return {
+    schemaVersion: "1.0.0", packageId: "p", name: "x", kind: "serialized_authoring_agent", version: "1.0.0",
+    locked: true, runEntry: "feng run", targetWorld,
+    contextPolicy: [], writingStrategy: { systemPrompt: "s", stylePrinciples: [], constraints: [] },
+    storyModel: { trackedFacts: [], continuityDimensions: [] }, harness: { steps: [] },
+    qualityRules: [], feedbackRouting: defaultFeedbackRouting,
+    validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "", checkedAt: "t" },
+    provenance: { model: "m", provider: "p", hatchedAt: "t" }
+  };
+}
+
+describe("checkKernelContract", () => {
+  it("flags dialogueAllowed as a system-layer runtime_capability gap", () => {
+    const issues = checkKernelContract(pkgWith({ ...defaultNovelTargetWorld, dialogueAllowed: true }));
+    expect(issues.some((i) => i.kind === "runtime_capability")).toBe(true);
+  });
+
+  it("flags an unsupported output kind", () => {
+    const issues = checkKernelContract(pkgWith({ ...defaultNovelTargetWorld, outputKinds: ["chapter_text", "audio_narration"] }));
+    expect(issues.some((i) => i.detail.includes("audio_narration"))).toBe(true);
+  });
+
+  it("passes a default novel target world", () => {
+    expect(checkKernelContract(pkgWith(defaultNovelTargetWorld))).toHaveLength(0);
+  });
+
+  it("routes a runtime_capability issue to the system layer", () => {
+    const issues: readonly QualityIssue[] = [{ kind: "runtime_capability", severity: "warning", detail: "kernel gap" }];
+    const routed = routeFeedback(defaultFeedbackRouting, 1, issues);
+    expect(routed.byLayer.system).toBe(1);
+    expect(routed.candidates[0]?.layer).toBe("system");
+  });
+});
 
 describe("feedback routing", () => {
   it("routes each issue kind to its lifecycle layer", () => {

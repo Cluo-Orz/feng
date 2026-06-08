@@ -175,4 +175,25 @@ describe("host command dispatch via runCli", () => {
       expect(errors.join(" ")).toContain("grow-agent error");
     });
   });
+
+  it("grow-agent --loop runs multi-round and prints round reports", async () => {
+    await withRoot(async (root) => {
+      let n = 0;
+      const loopFetch: FetchLike = async () => {
+        n += 1;
+        let content: string;
+        if (n === 1) content = JSON.stringify({ systemPrompt: "你是写作 agent，保持连贯。", stylePrinciples: ["生动"], constraints: ["连续"], minChars: 800, maxChars: 4000 });
+        else if (n === 3) content = `一个陌生人登场。${"正文".repeat(500)}\n===OUTLINE===\n第2章`;
+        else content = `林越继续行动。${"正文".repeat(500)}\n===OUTLINE===\n章`;
+        return { ok: true, status: 200, json: async () => ({ id: String(n), model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }), text: async () => "" };
+      };
+      const out: string[] = [];
+      const code = await runCli({ argv: ["grow-agent", "--loop", "--goal", "成长小说 agent", "--rounds", "2", "--sample-chapters", "2"], workspaceRoot: root, processEnv: env, fetchImpl: loopFetch, stdout: (t) => out.push(t), stderr: () => {} });
+      expect(code).toBe(0);
+      const joined = out.join("\n");
+      expect(joined).toContain("[grow-agent --loop]");
+      expect(joined).toContain("round 1");
+      expect(joined).toContain("improved=true");
+    });
+  });
 });

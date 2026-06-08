@@ -8,7 +8,8 @@ import { makePolicyRequestId } from "../policy-boundary/index.js";
 import type { AuthoringRuntimePackage } from "../runtime-package/index.js";
 import { compileMessageList, type AuthoringRunState } from "./message-list.js";
 import { evaluateChapter, type QualityEval } from "./quality.js";
-import { routeFeedback, type RoutedFeedback } from "./feedback.js";
+import { checkKernelContract, routeFeedback, type RoutedFeedback } from "./feedback.js";
+import { defaultFeedbackRouting } from "../runtime-package/index.js";
 import { buildSemanticJudgePrompt, parseSemanticEval, SEMANTIC_JUDGE_SYSTEM, type SemanticEval } from "./semantic-eval.js";
 import {
   chapterDir,
@@ -217,7 +218,11 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
     messageListWritten: true,
     traceWritten: true
   });
-  const feedback = routeFeedback(pkg.feedbackRouting, chapterNumber, quality.issues);
+  // Package routing takes precedence; the kernel's default routing fills any
+  // gaps (e.g. an older package that predates a newly added issue kind), so a
+  // system-layer kernel gap is never mis-routed to the work project.
+  const routing = [...pkg.feedbackRouting, ...defaultFeedbackRouting];
+  const feedback = routeFeedback(routing, chapterNumber, [...quality.issues, ...checkKernelContract(pkg)]);
 
   await writeJsonFile(deps.store, deps.workspace, `${dir}/trace.json`, {
     chapterNumber,

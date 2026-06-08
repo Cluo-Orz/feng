@@ -4,6 +4,10 @@ dist/
 .tmp/
 *.tsbuildinfo
 
+# feng's own runtime workspace (created when feng is run inside this repo, e.g.
+# absorbing system-layer feedback). It is live runtime state, not source.
+.feng/
+
 # Third-party agent clones kept locally for reference (not part of feng)
 AssistantAgent/
 CodeWhale/

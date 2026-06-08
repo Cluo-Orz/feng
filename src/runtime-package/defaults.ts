@@ -63,6 +63,7 @@ export const defaultFeedbackRouting: readonly FeedbackRoutingRule[] = [
   { issueKind: "character_continuation", layer: "capability", reason: "反复忘前文是写作上下文/记忆能力问题，回流 xiaoshuo" },
   { issueKind: "outline_continuity", layer: "capability", reason: "章节计划与正文断裂是小说能力问题，回流 xiaoshuo" },
   { issueKind: "chapter_continuity", layer: "capability", reason: "章节连续性是写作流程能力问题，回流 xiaoshuo" },
+  { issueKind: "runtime_capability", layer: "system", reason: "运行 kernel 不能表达该 agent 所需能力，是 feng 系统层问题" },
   { issueKind: "artifact_presence", layer: "system", reason: "trace/message-list 缺失是 feng 运行记录底座问题" }
 ];
 
