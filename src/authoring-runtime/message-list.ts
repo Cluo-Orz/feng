@@ -76,6 +76,28 @@ function sectionOf(sections: readonly CompiledSection[], kind: ContextSectionKin
   return sections.find((section) => section.kind === kind);
 }
 
+function listBlock(title: string, values: readonly string[]): string {
+  return values.length === 0 ? "" : `${title}\n${values.map((value) => `- ${value}`).join("\n")}`;
+}
+
+function stablePackageContract(pkg: AuthoringRuntimePackage): string {
+  return [
+    "【稳定目标世界契约】",
+    `目标世界：${pkg.targetWorld.description}`,
+    listBlock("可接收输入", pkg.targetWorld.inputKinds),
+    listBlock("可产出结果", pkg.targetWorld.outputKinds),
+    listBlock("动作边界", pkg.targetWorld.actionBoundary),
+    listBlock("失败处理", pkg.targetWorld.failureHandling),
+    `dialogueAllowed=${pkg.targetWorld.dialogueAllowed}`,
+    listBlock("长期追踪事实", pkg.storyModel.trackedFacts),
+    listBlock("运行验证步骤", pkg.harness.steps),
+    "【稳定质量门禁】",
+    ...pkg.qualityRules.map((rule) => `- ${rule.kind}: ${rule.note}`),
+    "【稳定反馈归因】",
+    ...pkg.feedbackRouting.map((route) => `- ${route.issueKind}->${route.layer}: ${route.reason}`)
+  ].filter((part) => part.length > 0).join("\n");
+}
+
 export function compileMessageList(
   pkg: AuthoringRuntimePackage,
   state: AuthoringRunState
@@ -107,6 +129,7 @@ export function compileMessageList(
     `作品标题：${state.title}`,
     `小说设定：\n${state.premise}`,
     longTerm === undefined ? "" : `${longTerm.title}\n${longTerm.content}`,
+    stablePackageContract(pkg),
     AUTHORING_RUNTIME_STABLE_PROTOCOL
   ].filter((part) => part.length > 0).join("\n\n");
 
