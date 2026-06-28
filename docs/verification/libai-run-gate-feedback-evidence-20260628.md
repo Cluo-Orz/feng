@@ -388,3 +388,82 @@ Judgment:
 The specific system failure "runtime used a length-truncated semantic repair candidate" is fixed.
 The next libai acceptance rerun should be clean-state again, because the current run's chapter 1 was generated before this correction.
 ```
+
+## 2026-06-29 04:39 rerun after short-video feedback grow
+
+Before rerun, cache analysis was written:
+
+```text
+F:\code\libai-chongshengle\.feng\cache-analysis\pre-backup-20260629-043031.md
+```
+
+The failed runtime-fixed project was backed up:
+
+```text
+F:\code\libai-chongshengle-bak-20260629-043031
+```
+
+The newly grown xiaoshuo package was installed:
+
+```text
+packageId=pkg-grow-18270bca-56f7-4d71-843d-45115f67aef6-1.0.0
+hash=ca2f25856e6007f6914ef70a724303db4cde1416111bb102b38dfa8813811a0e
+```
+
+Run result:
+
+```text
+chapter 1: quality=pass_with_warnings semantic=8/10 gates=7/11 blocking=5 coverage_uncovered=1
+chapter 2: quality=pass_with_warnings semantic=8.3/10 gates=8/10 blocking=2 coverage_uncovered=0
+chapter 3: quality=pass_with_warnings semantic=8.7/10 gates=8/10 blocking=2 coverage_uncovered=0
+```
+
+Important positive evidence:
+
+```text
+chapter 2 short-video素材 goal coverage passed.
+goalCoverage=true confidence=0.95
+evidence includes: 短视频里穿仿唐袍的男人用《将进酒》吆喝点赞，李白“瞳孔猛地收缩”“声音里有了怒意”
+```
+
+New blockers:
+
+```text
+chapter 1 goal coverage failed:
+  missing=目标要求“最后被苏小满带到书店暂避”，但正文结尾只承诺“吃完我带你去个地方，先避一避”，未实际到达书店。
+
+chapter 1 semantic_plot warning:
+  苏小满突然出现，需要提前埋伏她的旁观细节。
+
+geography_consistency false positives:
+  runtime flagged 手机支付、流量、身份证、长安、西安 by mere occurrence.
+```
+
+Codex judgment:
+
+```text
+The new xiaoshuo package improved the exact short-video subgoal, but regressed broader no-missing-topic behavior on chapter 1.
+The geography warnings expose a feng runtime quality-evaluator bug: conflictTerms were treated as forbidden geography terms by mere occurrence.
+This package is not accepted.
+```
+
+Feng correction:
+
+```text
+checkGeography now warns only when a monitored term appears near explicit contradiction language such as 以前叫、改名、误作、应为、不是、并非、不在、矛盾 or 冲突.
+Mere occurrence of monitored terms such as 手机支付、流量、身份证、长安、西安 no longer creates geography_consistency warnings.
+```
+
+Verification:
+
+```text
+npm test -- tests/authoring-runtime/quality.test.ts tests/authoring-runtime/runtime.test.ts tests/host/feedback-router.test.ts tests/host/host-commands.test.ts
+npm run build
+```
+
+Next valid step:
+
+```text
+Route the current libai run's real capability issues back to xiaoshuo: chapter 1 goal_coverage and semantic_plot.
+Do not accept the current package until a clean libai rerun passes all quality gates.
+```

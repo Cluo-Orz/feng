@@ -74,9 +74,21 @@ function checkCharacterContinuation(input: QualityInput, issues: QualityIssue[])
   }
 }
 
+function hasExplicitGeographyConflict(text: string, term: string): boolean {
+  let index = text.indexOf(term);
+  while (index !== -1) {
+    const start = Math.max(0, index - 16);
+    const end = Math.min(text.length, index + term.length + 16);
+    const context = text.slice(start, end);
+    if (/(以前叫|原名|改名|改作|误作|错写|应为|不是|并非|不在|矛盾|冲突)/.test(context)) return true;
+    index = text.indexOf(term, index + term.length);
+  }
+  return false;
+}
+
 function checkGeography(input: QualityInput, issues: QualityIssue[]): void {
   for (const term of input.conflictTerms ?? []) {
-    if (input.chapterText.includes(term)) {
+    if (hasExplicitGeographyConflict(input.chapterText, term)) {
       issues.push({ kind: "geography_consistency", severity: "warning", detail: `第${input.chapterNumber}章出现可能冲突的地点设定「${term}」，需复核` });
     }
   }

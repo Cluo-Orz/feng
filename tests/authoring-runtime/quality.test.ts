@@ -46,7 +46,7 @@ describe("quality evaluateChapter", () => {
 
   it("classifies status as pass / pass_with_warnings / fail", () => {
     expect(evaluateChapter(base({})).status).toBe("pass");
-    expect(evaluateChapter(base({ conflictTerms: ["采石矶"], chapterText: `${"成都".repeat(700)}采石矶` })).status).toBe("pass_with_warnings");
+    expect(evaluateChapter(base({ conflictTerms: ["采石矶"], chapterText: `${"成都".repeat(700)}这里以前叫采石矶` })).status).toBe("pass_with_warnings");
     expect(evaluateChapter(base({ establishedYear: 2024, chapterText: `${"叙述".repeat(600)}已是2025年` })).status).toBe("fail");
   });
 
@@ -80,6 +80,14 @@ describe("quality evaluateChapter", () => {
   it("warns on a conflicting geography term", () => {
     const r = evaluateChapter(base({ conflictTerms: ["采石矶"], chapterText: `${"成都的街头".repeat(200)}这里以前叫采石矶` }));
     expect(r.issues.some((i) => i.kind === "geography_consistency")).toBe(true);
+  });
+
+  it("does not warn on mere monitored term occurrence", () => {
+    const r = evaluateChapter(base({
+      conflictTerms: ["手机支付", "流量", "身份证", "长安", "西安"],
+      chapterText: `${"李白在西安想到长安，第一次遇见手机支付和流量话题，还被问到身份证。".repeat(40)}`
+    }));
+    expect(r.issues.some((i) => i.kind === "geography_consistency")).toBe(false);
   });
 
   it("flags outline count mismatch and missing outline", () => {
