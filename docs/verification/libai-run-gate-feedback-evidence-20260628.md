@@ -130,3 +130,85 @@ Rerun libai and require chapter-goal gates to reach blocking=0 before accepting 
 ```
 
 If the work project is backed up, cleared, or replaced before the rerun, first write a cache-hit analysis under the project `.feng/cache-analysis/` directory.
+
+## 2026-06-29 rerun with ready xiaoshuo package
+
+Before replacing the failed work project, cache analysis was written inside the failed project:
+
+```text
+F:\code\libai-chongshengle\.feng\cache-analysis\pre-backup-20260629-005511.md
+```
+
+The failed project was then backed up to:
+
+```text
+F:\code\libai-chongshengle-bak-20260629-005531
+```
+
+Only creator inputs were restored into the clean work project:
+
+```text
+premise.md
+characters.md
+world.md
+chapter-goals.md
+.feng/runtime/project.json
+```
+
+The ready xiaoshuo package was installed:
+
+```text
+packageId=pkg-grow-383e39fc-a814-4701-b9cf-422f2bbb0d34-1.0.0
+hash=2a91d31bf7d8f489e04d87573b0b5bd6744797479332584c61bd5f2c84eb56de
+locked=true
+readiness=ready
+```
+
+Run command:
+
+```text
+node F:\code\feng\bin\feng.mjs run --chapters 3 --semantic-eval --debug-report
+```
+
+Log files:
+
+```text
+F:\code\libai-chongshengle\run-after-xiaoshuo-ready.out.log
+F:\code\libai-chongshengle\run-after-xiaoshuo-ready.err.log
+```
+
+Result:
+
+```text
+chapter 1: quality=pass semantic=8.3/10 gates=12/12 blocking=0 coverage_uncovered=0 cache=41.88%
+chapter 2: quality=pass semantic=8.3/10 gates=12/12 blocking=0 coverage_uncovered=0 cache=23.96%
+chapter 3: quality=pass semantic=8.7/10 gates=12/12 blocking=0 coverage_uncovered=0 cache=37.11%
+```
+
+Goal coverage:
+
+```text
+chapter 1: covered=true confidence=0.95
+chapter 2: covered=true confidence=0.95
+chapter 3: covered=true confidence=0.75
+```
+
+Overall runtime usage:
+
+```text
+calls=13
+inputTokens=37149
+cacheReadTokens=13824
+cacheHitRate=37.21%
+zeroCacheReadCalls=1
+```
+
+Judgment:
+
+```text
+The rerun is accepted as a successful end-to-end libai candidate run.
+xiaoshuo produced root-level business outputs while runtime state stayed under .feng.
+All work quality gates passed and no feedback candidates remained.
+The generated chapters are readable candidate drafts, not final publication copy: semantic judges still suggest better motivation setup, trust-transition pacing, and a sharper challenge from Chen Yan about Li Bai's knowledge source.
+Cache remains below the long-running target overall, so judge-call cache optimization stays open even though this run is accepted functionally.
+```
