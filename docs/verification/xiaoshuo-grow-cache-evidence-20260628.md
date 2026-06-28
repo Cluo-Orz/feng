@@ -121,3 +121,69 @@ Keep dynamic chapter text, request ids, timestamps, paths, and prior outputs aft
 Add tests that compare stable prefixes across repeated chapter/judge/coverage message lists.
 Re-run xiaoshuo grow and require materially better cache evidence before claiming long-running health.
 ```
+
+## 2026-06-28 18:11 rerun after stable-prefix expansion
+
+After `e04002f Expand stable authoring cache context`, `F:\code\xiaoshuo` was recreated and the same grow command was run again:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --goal "成长出一个可复制的中文连载小说写作 agent。它必须不是一个 prompt wrapper，而是能接收作品设定、人物、提纲、已有章节、章节目标和作者反馈，输出章节草稿、改稿、续写计划、设定冲突、质量门禁和反馈候选；能保持长篇上下文、人物、时间线、地点、伏笔和情节推进连贯；能把作品层、小说 agent 能力层、feng 系统层问题正确归因并回流。" --name xiaoshuo --rounds 3 --sample-chapters 2
+```
+
+The run stopped after round 2 because readiness became `ready_to_hatch`.
+
+Final files:
+
+```text
+F:\code\xiaoshuo\.feng\hatch\xiaoshuo-runtime.json
+F:\code\xiaoshuo\.feng\quality-gates\xiaoshuo.json
+F:\code\xiaoshuo\.feng\grow-samples\latest-checkpoint.json
+```
+
+Final quality result:
+
+```text
+readiness=ready_to_hatch
+quality gates 12/12 passed
+blocking=0
+coverage_uncovered=0
+latestRound=2
+```
+
+Round evidence:
+
+```text
+round 1: chapters=2 failChapters=1 blocking=5 goalCoverageIssues=1
+round 2: chapters=2 failChapters=0 blocking=0 goalCoverageIssues=0
+```
+
+This is a stronger quality signal than the previous run because the first round exposed real failures and the second round removed them through grow rather than by manual instruction.
+
+Cache evidence remains insufficient:
+
+```text
+overall: 20 calls, 54627 input tokens, 17536 cache-read tokens, hit=32.10%, zero-cache calls=5
+round 2: 6 calls, 15258 input tokens, 2560 cache-read tokens, hit=16.78%, zero-cache calls=2
+grow_design: 72.23%
+chapter_generation: 0%
+semantic_judge: 21.55%
+semantic_repair_generation: 61.40%
+goal_coverage_judge: 11.25%
+chapter_repair: 93.59%
+```
+
+The important correction is that cache now works for some adjacent repair paths, proving the file-native message-list prefix can be reused. The remaining defect is narrower and more serious:
+
+```text
+chapter_generation stayed 0% across all four generation calls.
+goal_coverage_judge improved but stayed far below the long-running target.
+semantic_judge improved only modestly.
+```
+
+Judgment:
+
+```text
+xiaoshuo is quality-ready as a hatch candidate.
+feng is not cache-ready as a long-running grow system.
+The next system-layer fix should focus on making chapter_generation carry a provider-cacheable stable prefix, not only repair/judge calls.
+```
