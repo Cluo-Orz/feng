@@ -55,6 +55,7 @@ describe("compileMessageList", () => {
     expect(messages[0]?.role).toBe("system");
     expect(messages[1]?.role).toBe("user");
     expect(messages[2]?.role).toBe("user");
+    expect(record.messages).toEqual(messages);
     const kinds = record.sections.map((s) => s.kind);
     expect(kinds).toEqual(["observation", "short_term", "long_term", "feedback"]);
     const userText = messages.flatMap((message) => message.content.map((part) => part.text)).join("\n");
@@ -124,7 +125,10 @@ describe("compileMessageList", () => {
     expect(first.messages[1]).toEqual(second.messages[1]);
     expect(first.messages[2]).not.toEqual(second.messages[2]);
     expect(first.record.cachePrefix).toBe(second.record.cachePrefix);
+    expect(first.record.messages).toEqual(first.messages);
+    expect(first.record.cachePrefixChars).toBeGreaterThan(8000);
     expect(first.messages[1]?.content[0]?.text).toContain("稳定作品上下文");
+    expect(first.messages[1]?.content[0]?.text).toContain("稳定长程运行手册");
     expect(first.messages[1]?.content[0]?.text).not.toContain("扫码失败");
     expect(second.messages[2]?.content[0]?.text).toContain("直播间吟诗");
   });
