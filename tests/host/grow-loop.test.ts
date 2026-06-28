@@ -181,7 +181,8 @@ describe("growXiaoshuoAgentLoop", () => {
       expect(growRecord.value.latestMessageListRef?.id).toBe(result.value.contextMessageListRef?.id);
 
       // file-native round evidence exists
-      const r1 = JSON.parse(await readFile(path.join(root, ".feng", "grow-samples", "round-1", "round-report.json"), "utf8"));
+      const sampleRoot = path.join(root, ".feng", "grow-samples", result.value.growUnitId);
+      const r1 = JSON.parse(await readFile(path.join(sampleRoot, "round-1", "round-report.json"), "utf8"));
       expect(r1.capabilityIssueKinds).toContain("character_continuation");
       const gates = JSON.parse(await readFile(path.join(root, XIAOSHUO_QUALITY_GATE_PATH), "utf8"));
       expect(result.value.qualityGatePath).toBe(XIAOSHUO_QUALITY_GATE_PATH);
@@ -199,14 +200,38 @@ describe("growXiaoshuoAgentLoop", () => {
       expect(pkg.validation.qualityGateRef).toBe(XIAOSHUO_QUALITY_GATE_PATH);
       expect(pkg.validation.targetCoverageRef).toContain("#coverage");
       expect(pkg.validation.qualityGateSummary).toContain("blocking=0");
-      expect(pkg.validation.sampleEvidenceRefs).toContain(".feng/grow-samples/round-1/round-report.json");
-      expect(pkg.validation.sampleEvidenceRefs).toContain(".feng/grow-samples/round-2/.feng/runtime/chapters/chapter-01/quality-gates.json");
-      expect(pkg.validation.sampleEvidenceRefs).toContain(".feng/grow-samples/round-2/.feng/runtime/chapters/chapter-01/goal-coverage-eval.json");
+      expect(pkg.validation.sampleEvidenceRefs).toContain(`.feng/grow-samples/${result.value.growUnitId}/round-1/round-report.json`);
+      expect(pkg.validation.sampleEvidenceRefs).toContain(`.feng/grow-samples/${result.value.growUnitId}/round-2/.feng/runtime/chapters/chapter-01/quality-gates.json`);
+      expect(pkg.validation.sampleEvidenceRefs).toContain(`.feng/grow-samples/${result.value.growUnitId}/round-2/.feng/runtime/chapters/chapter-01/goal-coverage-eval.json`);
       expect(pkg.writingStrategy.constraints.some((c: string) => c.includes("人物承接"))).toBe(true);
       expect(pkg.storyModel.trackedFacts.length).toBeGreaterThan(0);
       expect(pkg.coveragePolicy.noMissingTopic.gateId).toBe("gate-grown-loop-goal-coverage");
       expect(pkg.coveragePolicy.noMissingTopic.title).toBe("本章目标必须落到正文事件");
       expect(pkg.coveragePolicy.noMissingTopic.promptOnlyAllowed).toBe(false);
+    });
+  });
+
+  it("keeps sample projects isolated per grow unit", async () => {
+    await withRoot(async (root) => {
+      const fetch: FetchLike = async (_url, init) => {
+        const text = requestText(init);
+        if (text.includes("feng 的通用 agent 设计内核")) return llmResponse(STRATEGY, "design");
+        return llmResponse(`林越登场并追查徽章。${body(500)}\n===OUTLINE===\n第1章`);
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: withJudges(fetch) });
+      const first = await growXiaoshuoAgentLoop(host, { goal: "第一次 grow", maxRounds: 1, sampleChapters: 1 });
+      expect(first.ok).toBe(true);
+      if (!first.ok) throw new Error(first.error.message);
+      const second = await growXiaoshuoAgentLoop(host, { goal: "第二次 grow", maxRounds: 1, sampleChapters: 1 });
+      expect(second.ok).toBe(true);
+      if (!second.ok) throw new Error(second.error.message);
+
+      expect(first.value.growUnitId).not.toBe(second.value.growUnitId);
+      const firstState = JSON.parse(await readFile(path.join(root, ".feng", "grow-samples", first.value.growUnitId, "round-1", ".feng", "runtime", "novel-state.json"), "utf8"));
+      const secondState = JSON.parse(await readFile(path.join(root, ".feng", "grow-samples", second.value.growUnitId, "round-1", ".feng", "runtime", "novel-state.json"), "utf8"));
+      expect(firstState.chapters).toHaveLength(1);
+      expect(secondState.chapters).toHaveLength(1);
+      expect(second.value.rounds[0]?.sampleDir).toBe(`.feng/grow-samples/${second.value.growUnitId}/round-1`);
     });
   });
 
@@ -392,9 +417,10 @@ describe("growXiaoshuoAgentLoop", () => {
       expect(result.value.readiness).toBe("draft");
       expect(result.value.lifecycle).not.toBe("ready_to_hatch");
       expect(result.value.rounds[0]?.qualityGateBlockingCount).toBeGreaterThan(0);
-      const round = JSON.parse(await readFile(path.join(root, ".feng", "grow-samples", "round-1", "round-report.json"), "utf8"));
+      const sampleRoot = path.join(root, ".feng", "grow-samples", result.value.growUnitId);
+      const round = JSON.parse(await readFile(path.join(sampleRoot, "round-1", "round-report.json"), "utf8"));
       expect(round.qualityGateBlockingCount).toBeGreaterThan(0);
-      const sampleGates = JSON.parse(await readFile(path.join(root, ".feng", "grow-samples", "round-1", ".feng", "runtime", "chapters", "chapter-01", "quality-gates.json"), "utf8"));
+      const sampleGates = JSON.parse(await readFile(path.join(sampleRoot, "round-1", ".feng", "runtime", "chapters", "chapter-01", "quality-gates.json"), "utf8"));
       expect(sampleGates.gates.some((gate: { gateId: string; status: string }) =>
         gate.gateId === "gate-grown-loop-goal-coverage" && gate.status === "failed"
       )).toBe(true);
@@ -413,9 +439,9 @@ describe("growXiaoshuoAgentLoop", () => {
       expect(pkg.validation.readiness).toBe("draft");
       expect(pkg.validation.evidenceSummary).toContain("sampleGateBlocking=");
       expect(pkg.validation.qualityGateSummary).toContain("coverage_uncovered=");
-      expect(pkg.validation.sampleEvidenceRefs).toContain(".feng/grow-samples/round-1/round-report.json");
-      expect(pkg.validation.sampleEvidenceRefs).toContain(".feng/grow-samples/round-1/.feng/runtime/chapters/chapter-01/quality-gates.json");
-      expect(pkg.validation.sampleEvidenceRefs).toContain(".feng/grow-samples/round-1/.feng/runtime/chapters/chapter-01/goal-coverage-eval.json");
+      expect(pkg.validation.sampleEvidenceRefs).toContain(`.feng/grow-samples/${result.value.growUnitId}/round-1/round-report.json`);
+      expect(pkg.validation.sampleEvidenceRefs).toContain(`.feng/grow-samples/${result.value.growUnitId}/round-1/.feng/runtime/chapters/chapter-01/quality-gates.json`);
+      expect(pkg.validation.sampleEvidenceRefs).toContain(`.feng/grow-samples/${result.value.growUnitId}/round-1/.feng/runtime/chapters/chapter-01/goal-coverage-eval.json`);
     });
   });
 

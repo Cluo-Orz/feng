@@ -31,6 +31,7 @@ export interface GrowLoopInput {
 
 export interface GrowRoundReport {
   readonly round: number;
+  readonly sampleDir: string;
   readonly version: string;
   readonly chapters: number;
   readonly failChapters: number;
@@ -438,10 +439,11 @@ function descriptors(reason: string) {
 async function runSample(
   host: FengHost,
   pkg: AuthoringRuntimePackage,
+  growUnitId: string,
   round: number,
   sampleChapters: number
 ): Promise<Result<readonly RunChapterResult[]>> {
-  const relDir = `.feng/grow-samples/round-${round}`;
+  const relDir = `.feng/grow-samples/${growUnitId}/round-${round}`;
   const absDir = path.join(host.config.workspaceRoot, relDir);
   await mkdir(path.join(absDir, ".feng", "runtime"), { recursive: true });
   const opened = await host.store.openWorkspace({ root: absDir });
@@ -485,16 +487,16 @@ function goalCoverageIssueCount(results: readonly RunChapterResult[]): number {
   ).length;
 }
 
-function sampleChapterDir(round: number, chapterNumber: number): string {
-  return `.feng/grow-samples/round-${round}/.feng/runtime/chapters/chapter-${String(chapterNumber).padStart(2, "0")}`;
+function sampleChapterDir(sampleDir: string, chapterNumber: number): string {
+  return `${sampleDir}/.feng/runtime/chapters/chapter-${String(chapterNumber).padStart(2, "0")}`;
 }
 
 function sampleEvidenceRefs(rounds: readonly GrowRoundReport[]): readonly string[] {
   return rounds.flatMap((round) => [
-    `.feng/grow-samples/round-${round.round}/round-report.json`,
+    `${round.sampleDir}/round-report.json`,
     ...Array.from({ length: round.chapters }, (_, index) => {
       const chapterNumber = index + 1;
-      const dir = sampleChapterDir(round.round, chapterNumber);
+      const dir = sampleChapterDir(round.sampleDir, chapterNumber);
       return [
         `${dir}/${WORK_CHAPTER_QUALITY_GATE_FILE}`,
         ...(chapterNumber <= SAMPLE_PROJECT.chapterGoals.length ? [`${dir}/${WORK_CHAPTER_GOAL_COVERAGE_EVAL_FILE}`] : [])
@@ -794,7 +796,7 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
       readiness: "draft", evidenceSummary: `grow round ${round} sample package`,
       model: host.config.provider.model, provider: host.config.provider.provider
     });
-    const sample = await runSample(host, pkg, round, sampleChapters);
+    const sample = await runSample(host, pkg, grow.value.id, round, sampleChapters);
     if (!sample.ok) return sample;
     lastResults = sample.value;
     const capKinds = capabilityKinds(sample.value);
@@ -810,8 +812,9 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
     const addedConstraints = [...issueRevision.added, ...gateRevision.added, ...detailRevision.added];
     const roundUsage = combineLLMUsageSummaries(sample.value.map((chapter) => chapter.llmUsage));
     llmUsageSummaries.push(roundUsage);
-    rounds.push({ round, version, chapters: sample.value.length, failChapters: failCount(sample.value), qualityGateBlockingCount: blockingCount, goalCoverageIssueCount: goalCoverageIssues, capabilityIssueKinds: capKinds, addedConstraints, llmUsage: roundUsage });
-    await host.store.writeTextAtomic(host.workspace, `.feng/grow-samples/round-${round}/round-report.json`, JSON.stringify(rounds[rounds.length - 1], null, 2), { reason: "write grow round report", createParents: true });
+    const sampleDir = `.feng/grow-samples/${grow.value.id}/round-${round}`;
+    rounds.push({ round, sampleDir, version, chapters: sample.value.length, failChapters: failCount(sample.value), qualityGateBlockingCount: blockingCount, goalCoverageIssueCount: goalCoverageIssues, capabilityIssueKinds: capKinds, addedConstraints, llmUsage: roundUsage });
+    await host.store.writeTextAtomic(host.workspace, `${sampleDir}/round-report.json`, JSON.stringify(rounds[rounds.length - 1], null, 2), { reason: "write grow round report", createParents: true });
     // Calibrate the length contract from sample evidence: if chapters overflow
     // the declared ceiling, the agent widens its own viable maxChars (capped),
     // learning the contract it can actually meet with this model.
