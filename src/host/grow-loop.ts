@@ -487,6 +487,16 @@ function goalCoverageIssueCount(results: readonly RunChapterResult[]): number {
   ).length;
 }
 
+function outputBudgetLimited(results: readonly RunChapterResult[]): boolean {
+  return results.some((chapter) =>
+    chapter.feedback.candidates.some((candidate) =>
+      candidate.layer === "system" &&
+      candidate.issueKind === "runtime_capability" &&
+      candidate.detail.includes("finishReason=length")
+    )
+  );
+}
+
 function sampleChapterDir(sampleDir: string, chapterNumber: number): string {
   return `${sampleDir}/.feng/runtime/chapters/chapter-${String(chapterNumber).padStart(2, "0")}`;
 }
@@ -817,11 +827,17 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
     await host.store.writeTextAtomic(host.workspace, `${sampleDir}/round-report.json`, JSON.stringify(rounds[rounds.length - 1], null, 2), { reason: "write grow round report", createParents: true });
     // Calibrate the length contract from sample evidence: if chapters overflow
     // the declared ceiling, the agent widens its own viable maxChars (capped),
-    // learning the contract it can actually meet with this model.
+    // learning the contract it can actually meet with this model. A provider
+    // length stop is also an output-budget signal even when the truncated
+    // candidate happens to stay under the declared character ceiling.
     const maxObserved = Math.max(...sample.value.map((c) => c.chars), 0);
     const lengthFail = sample.value.some((c) => c.quality.issues.some((i) => i.kind === "length" && i.severity === "error" && c.chars > (effectiveMax ?? Number.MAX_SAFE_INTEGER)));
-    const widened = lengthFail && effectiveMax !== undefined && maxObserved > effectiveMax;
-    if (widened) effectiveMax = Math.min(8000, Math.ceil((maxObserved + 400) / 100) * 100);
+    const budgetLimited = outputBudgetLimited(sample.value);
+    const nextMax = effectiveMax === undefined
+      ? undefined
+      : Math.min(8000, Math.ceil((Math.max(maxObserved, effectiveMax) + (budgetLimited ? 1200 : 400)) / 100) * 100);
+    const widened = effectiveMax !== undefined && nextMax !== undefined && (lengthFail || budgetLimited) && nextMax > effectiveMax;
+    if (widened) effectiveMax = nextMax;
     const provisionalDesign = withStrategy(currentDesign, revisedStrategy);
     const wroteProvisionalCheckpoint = await writeRoundCheckpoint(host, {
       goal: input.goal,

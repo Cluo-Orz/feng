@@ -514,6 +514,54 @@ describe("growXiaoshuoAgentLoop", () => {
     });
   });
 
+  it("calibrates output budget upward when the model stops for length", async () => {
+    await withRoot(async (root) => {
+      let chapterCalls = 0;
+      const budgetFetch: FetchLike = async (_url, init) => {
+        const text = requestText(init);
+        if (text.includes("feng 的通用 agent 设计内核")) {
+          return llmResponse(JSON.stringify({
+            systemPrompt: "你是写作 agent。",
+            stylePrinciples: [],
+            constraints: [],
+            minChars: 600,
+            maxChars: 900,
+            coveragePolicy: {
+              noMissingTopic: {
+                enabled: true,
+                gateId: "gate-grown-loop-goal-coverage",
+                title: "本章目标必须落到正文事件",
+                evidenceRequired: "review evidence proves the chapter goal is answered by concrete plot events",
+                promptOnlyAllowed: true,
+                blockingUntilReviewed: true
+              }
+            }
+          }), "design");
+        }
+        chapterCalls += 1;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: `chapter-${chapterCalls}`,
+            model: "m",
+            choices: [{ message: { content: `林越登场并留下线索。${"正文".repeat(350)}\n===OUTLINE===\n章` }, finish_reason: chapterCalls === 1 ? "length" : "stop" }],
+            usage: {}
+          }),
+          text: async () => ""
+        };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: withJudges(budgetFetch) });
+      const result = await growXiaoshuoAgentLoop(host, { goal: "g", maxRounds: 2, sampleChapters: 1 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.rounds).toHaveLength(2);
+      const pkg = JSON.parse(await readFile(path.join(root, PACKAGE_PATH), "utf8"));
+      const lengthRule = pkg.qualityRules.find((r: { kind: string }) => r.kind === "length");
+      expect(lengthRule.maxChars).toBeGreaterThan(900);
+    });
+  });
+
   it("seeds writing constraints from a downstream capability-feedback digest", async () => {
     await withRoot(async (root) => {
       // route-feedback wrote this digest into the agent workspace from a work project
