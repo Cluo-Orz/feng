@@ -3,11 +3,13 @@ import type { ProviderNeutralMessage } from "../context-message-compiler/index.j
 export interface GoalCoverageEval {
   readonly chapterNumber: number;
   readonly goal: string;
+  readonly parseOk: boolean;
   readonly covered: boolean;
   readonly confidence: number;
   readonly evidence: readonly string[];
   readonly missing: readonly string[];
   readonly notes: string;
+  readonly raw: string;
   readonly evaluatedAt: string;
 }
 
@@ -55,14 +57,15 @@ function recordOf(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function extractJson(raw: string): Record<string, unknown> {
+function extractJson(raw: string): { readonly parsed: Record<string, unknown>; readonly parseOk: boolean } {
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
-  if (start === -1 || end <= start) return {};
+  if (start === -1 || end <= start) return { parsed: {}, parseOk: false };
   try {
-    return recordOf(JSON.parse(raw.slice(start, end + 1)));
+    const parsed = recordOf(JSON.parse(raw.slice(start, end + 1)));
+    return { parsed, parseOk: Object.keys(parsed).length > 0 };
   } catch {
-    return {};
+    return { parsed: {}, parseOk: false };
   }
 }
 
@@ -80,15 +83,26 @@ function stringArray(value: unknown): readonly string[] {
 }
 
 export function parseGoalCoverageEval(raw: string, chapterNumber: number, goal: string, now: string): GoalCoverageEval {
-  const parsed = extractJson(raw);
+  const extracted = extractJson(raw);
+  const parsed = extracted.parsed;
+  const evidence = stringArray(parsed.evidence);
+  const missing = stringArray(parsed.missing);
+  const confidence = clampConfidence(parsed.confidence);
+  const schemaOk = extracted.parseOk &&
+    typeof parsed.covered === "boolean" &&
+    Number.isFinite(Number.parseFloat(String(parsed.confidence))) &&
+    Array.isArray(parsed.evidence) &&
+    Array.isArray(parsed.missing);
   return {
     chapterNumber,
     goal,
+    parseOk: schemaOk,
     covered: parsed.covered === true,
-    confidence: clampConfidence(parsed.confidence),
-    evidence: stringArray(parsed.evidence),
-    missing: stringArray(parsed.missing),
+    confidence,
+    evidence,
+    missing,
     notes: typeof parsed.notes === "string" ? parsed.notes : "",
+    raw,
     evaluatedAt: now
   };
 }

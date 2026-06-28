@@ -212,3 +212,84 @@ All work quality gates passed and no feedback candidates remained.
 The generated chapters are readable candidate drafts, not final publication copy: semantic judges still suggest better motivation setup, trust-transition pacing, and a sharper challenge from Chen Yan about Li Bai's knowledge source.
 Cache remains below the long-running target overall, so judge-call cache optimization stays open even though this run is accepted functionally.
 ```
+
+## 2026-06-29 04:11 rerun with routing-safe xiaoshuo package
+
+Before replacing the previous accepted work project, cache analysis was written and preserved:
+
+```text
+F:\code\libai-chongshengle\.feng\cache-analysis\pre-backup-20260629-040208.md
+F:\code\libai-chongshengle-bak-20260629-040208\.feng\cache-analysis\pre-backup-20260629-040208.md
+```
+
+The previous project was backed up to:
+
+```text
+F:\code\libai-chongshengle-bak-20260629-040208
+```
+
+Only creator inputs and `.feng/runtime/project.json` were restored into the clean work project. The newer routing-safe xiaoshuo package was installed:
+
+```text
+packageId=pkg-grow-1111c772-516d-4e2e-8ed9-89126492bece-1.0.0
+hash=fa4fdd9df287c876d095569c8bfac50128933ee99d9fffc2f796a488e0c424e7
+locked=true
+readiness=ready
+```
+
+Run command:
+
+```text
+node F:\code\feng\bin\feng.mjs run --chapters 3 --semantic-eval --debug-report
+```
+
+Log files:
+
+```text
+F:\code\libai-chongshengle\run-after-routing-safe.out.log
+F:\code\libai-chongshengle\run-after-routing-safe.err.log
+```
+
+Result:
+
+```text
+chapter 1: quality=pass semantic=8.7/10 gates=10/11 blocking=1 coverage_uncovered=0 cache=19.77%
+chapter 2: quality=pass semantic=8.7/10 gates=9/10 blocking=2 coverage_uncovered=1 cache=29.69%
+chapter 3: quality=pass semantic=8.7/10 gates=10/10 blocking=0 coverage_uncovered=0 cache=36.10%
+```
+
+Blocking issues:
+
+```text
+chapter 1: runtime_capability -> system
+  semantic repair response was finishReason=length; runtime still used the candidate.
+
+chapter 2: gate-chapter-coverage failed as goal_coverage
+  goal-coverage-eval.json contained covered=false confidence=0 evidence=[] missing=[] notes="".
+  Manual inspection of chapter text shows it substantially covers the target, so the actionable diagnosis is not "xiaoshuo definitely missed the goal".
+```
+
+Codex judgment:
+
+```text
+The run correctly blocked acceptance.
+The chapter 1 issue is a feng/system runtime capability gap.
+The chapter 2 failure exposed a file-native evidence gap: raw goal-coverage judge output was not written with the parsed eval, so the failed judgment cannot be replayed.
+An invalid or non-actionable goal-coverage judge result must not be routed as xiaoshuo goal_coverage capability feedback.
+```
+
+Feng correction added after this run:
+
+```text
+goal-coverage-eval.json now records parseOk and raw judge output.
+Malformed or non-actionable goal coverage evals route as goal_coverage_eval_invalid at the system layer.
+goal_coverage is reserved for valid evals that provide missing target evidence.
+```
+
+Next valid step:
+
+```text
+Commit and push the goal coverage evidence fix.
+Route the current libai feedback so runtime_capability reaches feng and true capability issues reach xiaoshuo.
+Rerun libai from a clean state after deciding whether to first resolve the system-level runtime_capability and goal_coverage_eval_invalid gaps.
+```

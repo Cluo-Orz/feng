@@ -42,6 +42,7 @@ export const qualityCheckKinds = [
   "artifact_presence",
   "runtime_capability",
   "goal_coverage",
+  "goal_coverage_eval_invalid",
   "semantic_style",
   "semantic_character",
   "semantic_plot"

@@ -261,6 +261,31 @@ describe("authoring runtime runChapter", () => {
     });
   });
 
+  it("treats malformed goal coverage judge output as a system evidence problem, not a missed goal", async () => {
+    await withProject(async (root) => {
+      await seedProject(root, { premise: "李白重生现代成都", title: "李白重生了", chapterGoals: ["写出李白第一次适应手机支付"] });
+      const fetch: FetchLike = chapterFetch((n) => n === 1
+        ? `李白第一次学习手机支付，在扫码失败后向店员求助。${"正文".repeat(560)}\n===OUTLINE===\n第${n}章：李白完成第一次手机支付`
+        : n === 2
+          ? '{"style": 9, "character": 9, "plot": 9, "problems": [], "notes": "达标"}'
+          : "我觉得挺好");
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: fetch });
+      const deps: AuthoringRuntimeDeps = { store: host.store, workspace: host.workspace, llmGateway: host.llmGateway, policy: host.policy, provider: "deepseek", model: "m", semanticEval: true };
+      const result = await runChapters(deps, pkg(), 1);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      const gates = JSON.parse(await readFile(path.join(root, ".feng", "runtime", "chapters", "chapter-01", WORK_CHAPTER_QUALITY_GATE_FILE), "utf8"));
+      const goalGate = gates.gates.find((gate: { gateId: string }) => gate.gateId === "gate-chapter-goal-coverage");
+      expect(goalGate?.status).toBe("needs_human_judgment");
+      expect(goalGate?.layer).toBe("system");
+      expect(goalGate?.issueKinds).toEqual(["goal_coverage_eval_invalid"]);
+      expect(gates.coverage.find((item: { requirement: string }) => item.requirement.startsWith("chapter_goal:"))?.status).toBe("waiting_evidence");
+      const coverage = JSON.parse(await readFile(path.join(root, ".feng", "runtime", "chapters", "chapter-01", "goal-coverage-eval.json"), "utf8"));
+      expect(coverage.parseOk).toBe(false);
+      expect(coverage.raw).toBe("我觉得挺好");
+    });
+  });
+
   it("clears no-missing-topic only when goal coverage eval provides explicit positive evidence", async () => {
     await withProject(async (root) => {
       await seedProject(root, { premise: "李白重生现代成都", title: "李白重生了", chapterGoals: ["写出李白第一次适应手机支付"] });

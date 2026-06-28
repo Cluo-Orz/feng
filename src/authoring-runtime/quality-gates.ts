@@ -125,6 +125,7 @@ const titles: Record<QualityCheckKind, string> = {
   artifact_presence: "file-native 运行记录",
   runtime_capability: "运行时能力边界",
   goal_coverage: "本章目标覆盖",
+  goal_coverage_eval_invalid: "目标覆盖评审输出有效性",
   semantic_style: "文风与可读性",
   semantic_character: "人物可信度",
   semantic_plot: "情节推进"
@@ -180,7 +181,15 @@ function statusFromIssues(kind: QualityCheckKind, issues: readonly QualityIssue[
 }
 
 function goalCoveragePassed(evaluated: GoalCoverageEval | undefined): boolean {
-  return evaluated?.covered === true && evaluated.confidence >= 0.7 && evaluated.evidence.length > 0;
+  return evaluated?.parseOk === true && evaluated.covered === true && evaluated.confidence >= 0.7 && evaluated.evidence.length > 0;
+}
+
+function goalCoverageEvalInvalid(evaluated: GoalCoverageEval | undefined): boolean {
+  if (evaluated === undefined) return false;
+  if (evaluated.parseOk !== true) return true;
+  if (evaluated.covered === true && evaluated.evidence.length === 0) return true;
+  if (evaluated.covered === false && evaluated.missing.length === 0) return true;
+  return false;
 }
 
 function goalCoverageGateStatus(
@@ -188,12 +197,14 @@ function goalCoverageGateStatus(
   semanticEvaluated: boolean
 ): QualityGateStatus {
   if (evaluated === undefined) return semanticEvaluated ? "needs_human_judgment" : "waiting_evidence";
+  if (goalCoverageEvalInvalid(evaluated)) return "needs_human_judgment";
   if (goalCoveragePassed(evaluated)) return "passed";
   return evaluated.covered ? "needs_human_judgment" : "failed";
 }
 
 function goalCoverageStatus(evaluated: GoalCoverageEval | undefined): CoverageStatus {
   if (evaluated === undefined) return "waiting_evidence";
+  if (goalCoverageEvalInvalid(evaluated)) return "waiting_evidence";
   return goalCoveragePassed(evaluated) ? "covered" : "uncovered";
 }
 
@@ -688,14 +699,15 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
   if (noMissingTopic.enabled && input.chapterGoal !== undefined && input.chapterGoal.trim().length > 0) {
     const goalCoverage = input.goalCoverage;
     const gateStatus = goalCoverageGateStatus(goalCoverage, semanticEvaluated);
+    const invalidCoverageEval = goalCoverageEvalInvalid(goalCoverage);
     gates.push({
       gateId: noMissingTopic.gateId,
-      layer: gateStatus === "failed" && goalCoverage !== undefined ? "capability" : "work",
+      layer: invalidCoverageEval ? "system" : gateStatus === "failed" && goalCoverage !== undefined ? "capability" : "work",
       title: noMissingTopic.title,
       sourceRequirement: input.chapterGoal,
       evidenceRequired: noMissingTopic.evidenceRequired,
       status: gateStatus,
-      issueKinds: ["goal_coverage"],
+      issueKinds: [invalidCoverageEval ? "goal_coverage_eval_invalid" : "goal_coverage"],
       notes: [
         "generated from the copied hatch package coveragePolicy.noMissingTopic",
         "chapter goal is tracked as an explicit gate instead of being hidden inside the prompt",
@@ -703,7 +715,7 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
         `blockingUntilReviewed=${noMissingTopic.blockingUntilReviewed}`,
         goalCoverage === undefined
           ? "no goal-coverage evaluator has produced evidence yet"
-          : `goalCoverage=${goalCoverage.covered}; confidence=${goalCoverage.confidence}; evidence=${goalCoverage.evidence.length}; missing=${goalCoverage.missing.length}; artifact=${input.artifactDir}/${WORK_CHAPTER_GOAL_COVERAGE_EVAL_FILE}`
+          : `goalCoverage=${goalCoverage.covered}; parseOk=${goalCoverage.parseOk}; confidence=${goalCoverage.confidence}; evidence=${goalCoverage.evidence.length}; missing=${goalCoverage.missing.length}; artifact=${input.artifactDir}/${WORK_CHAPTER_GOAL_COVERAGE_EVAL_FILE}`
       ]
     });
   }
@@ -764,6 +776,7 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
         "coverage requirement was generated from the hatch package coverage policy",
         ...(input.goalCoverage === undefined ? [] : [
           `goalCoverage=${input.goalCoverage.covered}`,
+          `parseOk=${input.goalCoverage.parseOk}`,
           `confidence=${input.goalCoverage.confidence}`,
           `artifact:${input.artifactDir}/${WORK_CHAPTER_GOAL_COVERAGE_EVAL_FILE}`
         ])
