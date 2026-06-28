@@ -84,6 +84,45 @@ describe("synthesizeXiaoshuoQualityGates", () => {
     expect(gate?.status).toBe("failed");
     expect(gate?.notes.join("\n")).toContain("did not declare a dedicated quality rule");
   });
+
+  it("blocks hatch readiness when seeded capability feedback is downgraded to work routing", () => {
+    const downgraded: AuthoringRuntimePackage = {
+      ...pkg(),
+      writingStrategy: {
+        ...pkg().writingStrategy,
+        constraints: [
+          ...pkg().writingStrategy.constraints,
+          "每章正文必须正面回应【本章目标】"
+        ]
+      },
+      feedbackRouting: [
+        ...defaultFeedbackRouting.filter((route) => route.issueKind !== "goal_coverage"),
+        { issueKind: "goal_coverage", layer: "work", reason: "错误地留在作品本地" }
+      ]
+    };
+    const set = synthesizeXiaoshuoQualityGates({
+      goal: "成长出能处理目标覆盖反馈的小说 agent",
+      pkg: downgraded,
+      designArtifacts: { coveragePolicyAuthoredByGrow: true },
+      finalIssueKinds: [],
+      capabilityFeedbackCoverage: [{
+        issueKind: "goal_coverage",
+        mappedConstraint: "每章正文必须正面回应【本章目标】",
+        source: "capability_feedback_adoption:adopted"
+      }],
+      finalFailChapters: 0,
+      sampleGateBlockingCount: 0,
+      sampleRoundCount: 1,
+      readiness: "ready_to_hatch",
+      now: () => "t"
+    });
+
+    const gate = set.gates.find((item) => item.gateId === "gate-seeded-capability-goal-coverage");
+    expect(gate?.status).toBe("failed");
+    expect(gate?.notes.join("\n")).toContain("goal_coverage->work");
+    expect(gate?.notes.join("\n")).toContain("must not be downgraded");
+    expect(set.summary.blockingCount).toBeGreaterThan(0);
+  });
 });
 
 describe("synthesizeWorkProjectQualityGates", () => {

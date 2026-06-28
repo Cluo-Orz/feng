@@ -147,6 +147,10 @@ function layerFor(pkg: AuthoringRuntimePackage, kind: QualityCheckKind): Quality
   return route?.layer ?? "work";
 }
 
+function routeFor(pkg: AuthoringRuntimePackage, kind: QualityCheckKind) {
+  return pkg.feedbackRouting.find((item) => item.issueKind === kind);
+}
+
 function gateStatus(
   rule: QualityRule,
   finalIssueKinds: readonly QualityCheckKind[],
@@ -380,18 +384,22 @@ export function synthesizeXiaoshuoQualityGates(input: SynthesizeXiaoshuoQualityG
 
   for (const [kind, feedback] of capabilityFeedbackByKind.entries()) {
     const mappedConstraint = feedback.find((item) => item.mappedConstraint !== undefined)?.mappedConstraint;
+    const route = routeFor(input.pkg, kind);
+    const routePreservesCapability = route?.layer === "capability";
     const gateId = `gate-seeded-capability-${slug(kind)}`;
     gates.push({
       gateId,
       layer: "capability",
       title: `下游能力反馈吸收：${titles[kind]}`,
       sourceRequirement: `downstream capability feedback: ${kind}`,
-      evidenceRequired: "final grown package must contain an explicit strategy constraint or equivalent gate covering this feedback",
-      status: mappedConstraint === undefined ? "failed" : "passed",
+      evidenceRequired: "final grown package must contain an explicit strategy constraint or equivalent gate covering this feedback, and future matching issues must still route to the capability layer",
+      status: mappedConstraint !== undefined && routePreservesCapability ? "passed" : "failed",
       issueKinds: [kind],
       notes: [
         "generated from downstream capability feedback digest",
         ...(mappedConstraint === undefined ? ["no mapped constraint in final grown package"] : [`mappedConstraint:${mappedConstraint}`]),
+        ...(route === undefined ? ["route:missing"] : [`route:${route.issueKind}->${route.layer}`]),
+        ...(routePreservesCapability ? [] : ["seeded capability feedback must not be downgraded to work-local routing"]),
         ...feedback.flatMap((item) => [
           ...(item.detail === undefined ? [] : [`detail:${item.detail}`]),
           ...(item.feedbackKey === undefined ? [] : [`feedbackKey:${item.feedbackKey}`]),
