@@ -188,6 +188,7 @@ describe("growXiaoshuoAgent", () => {
       expect(messageList.contextMessageListRef.id).toBe(result.value.contextMessageListRef?.id);
       expect(messageList.attemptIntentRef.kind).toBe("attempt_intent");
       expect(messageList.messages[0].content[0].text).toContain("coveragePolicy");
+      expect(messageList.messages[0].content[0].text).toContain("不能降级为 work 本地问题");
       expect(messageList.messages.some((message: { content: { text: string }[] }) => message.content[0]?.text.includes("当前 grow 状态投影"))).toBe(true);
       const modelOutputPath = result.value.designMessageListPath.replace(/message-list\.json$/, "model-output.json");
       const modelOutput = JSON.parse(await readFile(path.join(root, modelOutputPath), "utf8"));

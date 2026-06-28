@@ -71,6 +71,7 @@ const DESIGN_PROMPT = [
   "当前 authoring runtime kernel 不支持对话式输入；除非用户目标明确要求对话型 agent 并接受系统层阻塞，否则 targetWorld.dialogueAllowed 必须为 false。",
   "contextPolicy/storyModel/harness 必须说明该 agent 如何管理长篇上下文、长期事实、连续性维度和运行验证步骤。",
   "qualityRules 和 feedbackRouting 必须是本次 grow 针对当前目标 agent 产出的门禁与归因规则；不要只复述通用评分表。",
+  "如果下游回流或历史采纳状态标明某 issueKind 是 capability feedback，feedbackRouting 必须继续把同类问题路由到 capability，除非明确升级为 system；不能降级为 work 本地问题。",
   "coveragePolicy 用来定义该 agent 在下游项目运行后必须产出的目标覆盖门禁；不能只依赖 prompt 自称已覆盖；gateId 必须匹配 gate-[a-z0-9-]+。",
   "如果目标 agent 的能力包括质量门禁、反馈候选、调试信息或上报信息，优先把它们设计为 runtime 文件/trace/feedback artifact，而不是混入最终正文或主产物。",
   "不得把某个具体下游项目的事实写成通用 agent 规则；作品事实应留在作品项目，能力问题才回流 agent。",
