@@ -51,12 +51,13 @@ function state(overrides: Partial<AuthoringRunState> = {}): AuthoringRunState {
 describe("compileMessageList", () => {
   it("produces system + user messages with all context sections", () => {
     const { messages, record } = compileMessageList(pkg(), state());
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]?.role).toBe("system");
     expect(messages[1]?.role).toBe("user");
+    expect(messages[2]?.role).toBe("user");
     const kinds = record.sections.map((s) => s.kind);
     expect(kinds).toEqual(["observation", "short_term", "long_term", "feedback"]);
-    const userText = messages[1]?.content[0]?.text ?? "";
+    const userText = messages.flatMap((message) => message.content.map((part) => part.text)).join("\n");
     expect(userText).toContain("李白重生现代");
     expect(userText).toContain("第1章：穿越");
     expect(userText).toContain("他握紧了酒葫芦");
@@ -77,6 +78,8 @@ describe("compileMessageList", () => {
     expect(sys).toContain("gate-chapter-goal-coverage");
     expect(sys).toContain("质量门禁、反馈候选、调试信息和上报信息由 runtime 写入文件");
     expect(record.systemPromptChars).toBeGreaterThan(0);
+    expect(record.cachePrefixChars).toBeGreaterThan(record.systemPromptChars);
+    expect(record.stablePrefixMessageCount).toBe(2);
     // the message-list file must record the full system prompt text, not just
     // its length, so it is a complete file-native record of what was sent.
     expect(record.systemPrompt).toBe(sys);
@@ -93,10 +96,37 @@ describe("compileMessageList", () => {
       priorOutlines: [],
       acceptedFeedback: []
     });
-    const userText = messages[1]?.content[0]?.text ?? "";
+    const userText = messages.flatMap((message) => message.content.map((part) => part.text)).join("\n");
     expect(userText).toContain("这是第一章");
     expect(userText).toContain("暂无长期设定");
     expect(userText).toContain("暂无已采纳反馈");
+  });
+
+  it("keeps the cacheable prefix stable when chapter-specific inputs change", () => {
+    const firstState: AuthoringRunState = {
+      premise: "李白重生现代",
+      title: "李白重生了",
+      chapterNumber: 1,
+      chapterGoal: "写出李白第一次扫码失败",
+      priorOutlines: [],
+      characterBible: "李白：诗仙",
+      worldBible: "现代成都",
+      acceptedFeedback: ["注意年份一致"]
+    };
+    const first = compileMessageList(pkg(), firstState);
+    const second = compileMessageList(pkg(), state({
+      chapterNumber: 2,
+      chapterGoal: "写出李白在直播间吟诗",
+      priorOutlines: ["第1章：李白扫码失败"],
+      lastChapterTail: "他看着二维码沉默。"
+    }));
+    expect(first.messages[0]).toEqual(second.messages[0]);
+    expect(first.messages[1]).toEqual(second.messages[1]);
+    expect(first.messages[2]).not.toEqual(second.messages[2]);
+    expect(first.record.cachePrefix).toBe(second.record.cachePrefix);
+    expect(first.messages[1]?.content[0]?.text).toContain("稳定作品上下文");
+    expect(first.messages[1]?.content[0]?.text).not.toContain("扫码失败");
+    expect(second.messages[2]?.content[0]?.text).toContain("直播间吟诗");
   });
 
   it("truncates sections beyond their max chars", () => {

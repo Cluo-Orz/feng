@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSemanticEval, buildSemanticJudgePrompt, semanticCapabilityIssues, SEMANTIC_JUDGE_SYSTEM } from "../../src/authoring-runtime/index.js";
+import { parseSemanticEval, buildSemanticJudgeMessages, buildSemanticJudgePrompt, semanticCapabilityIssues, SEMANTIC_JUDGE_SYSTEM } from "../../src/authoring-runtime/index.js";
 
 describe("semantic eval parsing", () => {
   it("parses scores, structured problems, notes, and computes the overall average", () => {
@@ -35,8 +35,20 @@ describe("semantic eval parsing", () => {
 
   it("builds a judge prompt that truncates very long chapters", () => {
     expect(SEMANTIC_JUDGE_SYSTEM).toContain("style");
+    expect(SEMANTIC_JUDGE_SYSTEM).toContain("稳定评审 rubric");
     const prompt = buildSemanticJudgePrompt("字".repeat(9000));
     expect(prompt.length).toBeLessThan(6200);
+  });
+
+  it("keeps judge rubric stable while chapter text stays dynamic", () => {
+    const first = buildSemanticJudgeMessages("第一章正文");
+    const second = buildSemanticJudgeMessages("第二章正文");
+    expect(first).toHaveLength(2);
+    expect(first[0]).toEqual(second[0]);
+    expect(first[1]).not.toEqual(second[1]);
+    expect(first[0]?.content[0]?.text).toContain("稳定评审 rubric");
+    expect(first[0]?.content[0]?.text).not.toContain("第一章正文");
+    expect(first[1]?.content[0]?.text).toContain("第一章正文");
   });
 });
 

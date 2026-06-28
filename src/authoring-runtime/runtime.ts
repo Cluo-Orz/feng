@@ -13,10 +13,9 @@ import { checkKernelContract, routeFeedback, type RoutedFeedback } from "./feedb
 import { readAuthorFeedbackInstructions } from "./author-feedback.js";
 import { formatQualityGateSummary, synthesizeWorkProjectQualityGates, WORK_CHAPTER_QUALITY_GATE_FILE } from "./quality-gates.js";
 import { defaultFeedbackRouting } from "../runtime-package/index.js";
-import { buildSemanticJudgePrompt, parseSemanticEval, semanticCapabilityIssues, SEMANTIC_JUDGE_SYSTEM, type SemanticEval } from "./semantic-eval.js";
+import { buildSemanticJudgeMessages, parseSemanticEval, semanticCapabilityIssues, type SemanticEval } from "./semantic-eval.js";
 import {
-  buildGoalCoverageJudgePrompt,
-  GOAL_COVERAGE_JUDGE_SYSTEM,
+  buildGoalCoverageJudgeMessages,
   parseGoalCoverageEval,
   WORK_CHAPTER_GOAL_COVERAGE_EVAL_FILE,
   type GoalCoverageEval
@@ -95,10 +94,7 @@ async function runSemanticEval(
       : "\n\n上一轮评审输出不是合法 JSON。本轮只能输出一个 JSON 对象，不能输出 Markdown、解释或额外文字。";
     const response = await deps.llmGateway.sendLLMRequest({
       requestId: makeLLMRequestId(`authoring-judge-ch${chapterNumber}-${attempt}-${Date.now()}`),
-      providerNeutralMessages: [
-        { role: "system", content: [{ type: "text", text: SEMANTIC_JUDGE_SYSTEM }] },
-        { role: "user", content: [{ type: "text", text: `${buildSemanticJudgePrompt(chapterText)}${retryHint}` }] }
-      ],
+      providerNeutralMessages: buildSemanticJudgeMessages(chapterText, retryHint),
       modelSelection: { provider: deps.provider, model: deps.model },
       requiredCapabilities: {},
       streaming: false,
@@ -128,10 +124,7 @@ async function runGoalCoverageEval(
 ): Promise<GoalCoverageEvalRun> {
   const response = await deps.llmGateway.sendLLMRequest({
     requestId: makeLLMRequestId(`authoring-goal-coverage-ch${chapterNumber}-${Date.now()}`),
-    providerNeutralMessages: [
-      { role: "system", content: [{ type: "text", text: GOAL_COVERAGE_JUDGE_SYSTEM }] },
-      { role: "user", content: [{ type: "text", text: buildGoalCoverageJudgePrompt(chapterGoal, chapterText) }] }
-    ],
+    providerNeutralMessages: buildGoalCoverageJudgeMessages(chapterGoal, chapterText),
     modelSelection: { provider: deps.provider, model: deps.model },
     requiredCapabilities: {},
     streaming: false,
@@ -211,8 +204,12 @@ function withCorrection(
   messages: readonly import("../context-message-compiler/index.js").ProviderNeutralMessage[],
   correction: string
 ): readonly import("../context-message-compiler/index.js").ProviderNeutralMessage[] {
-  return messages.map((m) =>
-    m.role === "user"
+  let lastUserIndex = -1;
+  messages.forEach((message, index) => {
+    if (message.role === "user") lastUserIndex = index;
+  });
+  return messages.map((m, index) =>
+    index === lastUserIndex
       ? { ...m, content: [...m.content, { type: "text" as const, text: `\n\n【修订要求】\n${correction}` }] }
       : m
   );

@@ -5,6 +5,7 @@
 // own chapter on dimensions the structural checks cannot measure.
 
 import type { QualityCheckKind } from "../runtime-package/index.js";
+import type { ProviderNeutralMessage } from "../context-message-compiler/index.js";
 import type { QualityIssue } from "./quality.js";
 
 export interface SemanticScores {
@@ -34,12 +35,26 @@ export const SEMANTIC_JUDGE_SYSTEM = [
   "你是严格的中文小说质量评审，倾向于找问题而不是给好评。对给定章节正文：",
   "1) 从三个维度各打 1-10 分：style(文风与可读性)、character(人物可信度与一致性)、plot(情节吸引力与推进)。",
   "2) 必须列出具体问题，每个问题包含：dimension(所属维度)、evidence(引用原文片段或具体位置)、suggestion(可执行的修复建议)。若确无问题可给空数组，但应尽量找出可改进点。",
-  "只输出一个 JSON 对象：{ \"style\": number, \"character\": number, \"plot\": number, \"problems\": [{\"dimension\": string, \"evidence\": string, \"suggestion\": string}], \"notes\": string(50字内总评) }，不要输出其它文字。"
+  "只输出一个 JSON 对象：{ \"style\": number, \"character\": number, \"plot\": number, \"problems\": [{\"dimension\": string, \"evidence\": string, \"suggestion\": string}], \"notes\": string(50字内总评) }，不要输出其它文字。",
+  "",
+  "【稳定评审 rubric】",
+  "style 关注语言是否有画面、节奏、可读性和克制感。低分证据包括：堆砌形容词、解释性旁白过多、比喻重复、句式单调、情绪词替代行动、段落缺少呼吸。",
+  "character 关注人物选择是否可信，言行是否符合身份、处境、前文状态和关系变化。低分证据包括：关键行动缺少动机、人物突然变笨或变勇、对白不像本人、只为推进情节而行动、情绪转折没有铺垫。",
+  "plot 关注本章是否有清晰冲突、阻碍、误判、验证、代价、悬念或阶段收束。低分证据包括：目标只被说明没有事件化、线索凭空出现、答案式推进、巧合解决、整章只是过场、伏笔没有推进。",
+  "评审必须引用章节里的具体片段或位置，不能只写抽象评价。每个低于 8 分的维度至少给一个问题；如果维度不低于 8 分，可以不给该维度问题。",
+  "保持输出 schema 稳定。dimension 只能使用 style、character、plot。evidence 应短而具体；suggestion 应能直接指导重写。"
 ].join("\n");
 
 export function buildSemanticJudgePrompt(chapterText: string): string {
   const body = chapterText.length > 6000 ? chapterText.slice(0, 6000) : chapterText;
   return `请评审以下章节正文并按要求输出 JSON：\n\n${body}`;
+}
+
+export function buildSemanticJudgeMessages(chapterText: string, retryHint = ""): readonly ProviderNeutralMessage[] {
+  return [
+    { role: "system", content: [{ type: "text", text: SEMANTIC_JUDGE_SYSTEM }] },
+    { role: "user", content: [{ type: "text", text: `${buildSemanticJudgePrompt(chapterText)}${retryHint}` }] }
+  ];
 }
 
 function clampScore(value: unknown): number {
