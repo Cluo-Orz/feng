@@ -125,3 +125,66 @@ length/output-budget failures are handled without finishReason=length runtime is
 and cache health for warm generation/judge calls is measured separately.
 ```
 
+## 2026-06-29 00:50 rerun after output-budget calibration
+
+After `a65d96e Calibrate grow output budget on truncation`, xiaoshuo was grown again with a four-round ceiling:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --goal "..." --name xiaoshuo --rounds 4 --sample-chapters 3
+```
+
+Log files:
+
+```text
+F:\code\xiaoshuo\grow-after-budget-fix.out.log
+F:\code\xiaoshuo\grow-after-budget-fix.err.log
+```
+
+Result:
+
+```text
+[grow] .feng/hatch/xiaoshuo-runtime.json growUnit=grow-383e39fc-a814-4701-b9cf-422f2bbb0d34 lifecycle=ready_to_hatch readiness=ready
+  seeded 1 constraint(s) from downstream capability feedback
+  round 1 (v0.1.0): chapters=3 fail=0 capabilityIssues=[semantic_style,semantic_plot] added=3 cache=45.18% (14848/32866 input tokens, calls=13, zero=1)
+  round 2 (v0.2.0): chapters=3 fail=0 capabilityIssues=[] added=0 cache=35.38% (7552/21344 input tokens, calls=9, zero=1)
+  round 3 (v0.3.0): chapters=3 fail=0 capabilityIssues=[] added=0 cache=47.04% (9216/19593 input tokens, calls=9, zero=0)
+  improved=true finalCapabilityIssues=0 cache=45.08% (35328/78361 input tokens, calls=33, zero=2)
+```
+
+Final package:
+
+```text
+packageId=pkg-grow-383e39fc-a814-4701-b9cf-422f2bbb0d34-1.0.0
+locked=true
+validation.readiness=ready
+quality gates 14/14 passed
+blocking=0
+coverage_uncovered=0
+sample evidence under .feng/grow-samples/grow-383e39fc-a814-4701-b9cf-422f2bbb0d34/
+```
+
+Round progression:
+
+```text
+round 1: capability=[semantic_style, semantic_plot], sample blocking=2
+round 2: capability=[], sample blocking=2, goalCoverageIssueCount=1
+round 3: capability=[], sample blocking=0, goalCoverageIssueCount=0
+```
+
+Important cache evidence:
+
+```text
+overall cache=45.08%
+chapter_generation phase total=67.94%
+round 3 chapter_generation=87.04%, zero-cache calls=0
+semantic_judge=30.88%
+goal_coverage_judge=26.84%
+```
+
+Judgment:
+
+```text
+The xiaoshuo agent is now a valid ready hatch candidate for the next libai run.
+The chapter generation warm-cache behavior is acceptable in the final round.
+Judge-call cache remains a system-level optimization gap and should not be hidden by the ready hatch result.
+```
