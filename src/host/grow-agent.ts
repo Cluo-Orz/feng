@@ -479,6 +479,29 @@ async function contextMessageText(host: FengHost, ref: MessageListRef | undefine
   }
 }
 
+function isLengthRangeConstraint(constraint: string): boolean {
+  const compact = constraint.replace(/\s+/g, "");
+  const hasLengthTerm = /字数|字符数|正文长度|输出长度|章节长度|单章正文|每章正文|正文字符|章节字符/.test(compact);
+  const hasLengthUnitRange = /\d{2,5}(?:-|~|～|至|到)\d{2,5}(?:字|字符)/.test(compact);
+  return hasLengthUnitRange || (hasLengthTerm && /\d{2,5}.*\d{2,5}/.test(compact));
+}
+
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
+}
+
+function withCanonicalLengthConstraint(
+  strategy: WritingStrategy,
+  length: { readonly minChars: number; readonly maxChars: number }
+): WritingStrategy {
+  const canonical = `正文长度必须满足 qualityRules.length：${length.minChars}-${length.maxChars} 字符。`;
+  const constraints = uniqueStrings([
+    ...strategy.constraints.filter((constraint) => !isLengthRangeConstraint(constraint)),
+    canonical
+  ]);
+  return { ...strategy, constraints };
+}
+
 // The grown agent owns its own length contract. Clamp to sane bounds and ensure
 // min < max so a malformed design cannot produce an impossible DoD.
 export function grownLengthRule(min: number | undefined, max: number | undefined): { readonly minChars: number; readonly maxChars: number } {
@@ -516,6 +539,7 @@ export interface BuildPackageInput {
 export function buildAuthoringPackage(input: BuildPackageInput): AuthoringRuntimePackage {
   const length = grownLengthRule(input.minChars, input.maxChars);
   const qualityRules = packageQualityRules(input.qualityRules ?? defaultQualityRules, length);
+  const strategy = withCanonicalLengthConstraint(input.strategy, length);
   return {
     schemaVersion: PACKAGE_SCHEMA_VERSION,
     packageId: `pkg-${input.grownByGrowUnitId ?? input.name}-${input.version}`,
@@ -526,7 +550,7 @@ export function buildAuthoringPackage(input: BuildPackageInput): AuthoringRuntim
     runEntry: "feng run",
     targetWorld: input.targetWorld ?? defaultNovelTargetWorld,
     contextPolicy: input.contextPolicy ?? defaultContextPolicy,
-    writingStrategy: input.strategy,
+    writingStrategy: strategy,
     storyModel: input.storyModel ?? defaultStoryModel,
     harness: input.harness ?? defaultHarness,
     coveragePolicy: input.coveragePolicy ?? defaultCoveragePolicy,

@@ -3,9 +3,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { compileMessageList } from "../../src/authoring-runtime/index.js";
-import { createFengHost, growXiaoshuoAgent, grownLengthRule } from "../../src/host/index.js";
+import { buildAuthoringPackage, createFengHost, growXiaoshuoAgent, grownLengthRule } from "../../src/host/index.js";
 import { makeGrowUnitId, makeRef } from "../../src/domain/index.js";
-import { PACKAGE_PATH } from "../../src/runtime-package/index.js";
+import {
+  defaultContextPolicy,
+  defaultCoveragePolicy,
+  defaultFeedbackRouting,
+  defaultHarness,
+  defaultNovelTargetWorld,
+  defaultStoryModel,
+  PACKAGE_PATH
+} from "../../src/runtime-package/index.js";
 import type { FetchLike } from "../../src/providers/index.js";
 
 const provider = { provider: "deepseek", apiKey: "k", baseUrl: "https://api.deepseek.com", model: "m", maxTokens: 256, reasoningModel: true };
@@ -83,6 +91,42 @@ describe("growXiaoshuoAgent", () => {
     expect(grownLengthRule(undefined, undefined)).toEqual({ minChars: 900, maxChars: 1500 });
     expect(grownLengthRule(50, 50)).toEqual({ minChars: 300, maxChars: 600 });
     expect(grownLengthRule(99999, 99999)).toEqual({ minChars: 4000, maxChars: 8000 });
+  });
+
+  it("keeps hatch writing constraints consistent with the executable length gate", () => {
+    const pkg = buildAuthoringPackage({
+      name: "xiaoshuo",
+      version: "1.0.0",
+      locked: true,
+      strategy: {
+        systemPrompt: "写作 agent",
+        stylePrinciples: [],
+        constraints: [
+          "单章正文字符数在 1500~3000 之间",
+          "保持人物连续"
+        ]
+      },
+      targetWorld: defaultNovelTargetWorld,
+      contextPolicy: defaultContextPolicy,
+      storyModel: defaultStoryModel,
+      harness: defaultHarness,
+      coveragePolicy: defaultCoveragePolicy,
+      qualityRules: [{ kind: "length", note: "章节正文字数在1500-4000之间" }],
+      feedbackRouting: defaultFeedbackRouting,
+      minChars: 1500,
+      maxChars: 4000,
+      grownInProject: "/x",
+      readiness: "ready",
+      evidenceSummary: "ok",
+      model: "m",
+      provider: "deepseek"
+    });
+    expect(pkg.writingStrategy.constraints).not.toContain("单章正文字符数在 1500~3000 之间");
+    expect(pkg.writingStrategy.constraints).toContain("正文长度必须满足 qualityRules.length：1500-4000 字符。");
+    expect(pkg.writingStrategy.constraints).toContain("保持人物连续");
+    const lengthRule = pkg.qualityRules.find((rule) => rule.kind === "length");
+    expect(lengthRule?.minChars).toBe(1500);
+    expect(lengthRule?.maxChars).toBe(4000);
   });
 
   it("grows a real grow unit and writes a draft design package without claiming hatch readiness", async () => {
