@@ -104,6 +104,20 @@ describe("openai-compatible adapter", () => {
     await expect(adapter.send?.(context())).rejects.toMatchObject({ status: 429 });
   });
 
+  it("hard-times out even when fetch ignores abort", async () => {
+    let signal: AbortSignal | undefined;
+    const adapter = createOpenAICompatibleAdapter({
+      ...baseConfig,
+      fetchImpl: fakeFetch(async (_url, init) => {
+        signal = init.signal;
+        return new Promise(() => undefined);
+      })
+    });
+
+    await expect(adapter.send?.(context({ timeoutMs: 5 }))).rejects.toMatchObject({ code: "timeout" });
+    expect(signal?.aborted).toBe(true);
+  });
+
   it("tolerates an unreadable error body", async () => {
     const adapter = createOpenAICompatibleAdapter({
       ...baseConfig,

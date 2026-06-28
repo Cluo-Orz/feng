@@ -40,6 +40,7 @@ export interface OpenAICompatibleConfig {
 
 interface ProviderError extends Error {
   status?: number;
+  code?: string;
 }
 
 const defaultFetch: FetchLike = (url, init) =>
@@ -127,17 +128,28 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
       const payload = buildRequestPayload(config, context);
       const timeoutMs = context.request.timeoutMs ?? 120_000;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let timedOut = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+          reject(timeoutError(config.provider, timeoutMs));
+        }, timeoutMs);
+      });
       try {
-        const response = await fetchImpl(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${config.apiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
+        const response = await Promise.race([
+          fetchImpl(endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.apiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          }),
+          timeout
+        ]);
         if (!response.ok) {
           const detail = await safeText(response);
           const error: ProviderError = new Error(`provider ${config.provider} returned ${response.status}: ${detail}`);
@@ -145,11 +157,26 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
           throw error;
         }
         return await response.json();
+      } catch (cause) {
+        if (timedOut && !isTimeoutError(cause)) throw timeoutError(config.provider, timeoutMs, cause);
+        throw cause;
       } finally {
-        clearTimeout(timer);
+        if (timer !== undefined) clearTimeout(timer);
       }
     }
   };
+}
+
+function timeoutError(provider: string, timeoutMs: number, cause?: unknown): ProviderError {
+  const error: ProviderError = new Error(`provider ${provider} timed out after ${timeoutMs}ms`);
+  error.code = "timeout";
+  if (cause !== undefined) error.cause = cause;
+  return error;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error ? (error as { readonly code?: unknown }).code : undefined;
+  return code === "timeout";
 }
 
 async function safeText(response: FetchResponseLike): Promise<string> {
