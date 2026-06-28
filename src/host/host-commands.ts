@@ -574,5 +574,10 @@ export async function runRun(host: FengHost, argv: readonly string[], stdout: Ou
       stdout(`     · ${issue.kind}[${issue.severity}]: ${issue.detail}`);
     }
   }
+  const blocked = result.value.filter((chapter) => chapter.qualityGateBlockingCount > 0);
+  if (blocked.length > 0) {
+    stderr(`[run] blocked: ${blocked.length}/${result.value.length} chapter(s) have unresolved quality gates; route feedback or review gates before treating outputs as accepted`);
+    return 1;
+  }
   return 0;
 }

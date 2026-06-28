@@ -464,13 +464,15 @@ describe("host command dispatch via runCli", () => {
         provenance: { model: "m", provider: "deepseek", hatchedAt: "t" }
       }), "utf8");
       const out: string[] = [];
+      const errors: string[] = [];
       const code = await runCli({
         argv: ["run", "--debug-report"],
         workspaceRoot: root, processEnv: env,
         fetchImpl: fetchFor(() => `李白使用手机支付。${"正文".repeat(50)}\n===OUTLINE===\n梗概`),
-        stdout: (t) => out.push(t), stderr: () => {}
+        stdout: (t) => out.push(t), stderr: (t) => errors.push(t)
       });
-      expect(code).toBe(0);
+      expect(code).toBe(1);
+      expect(errors.join("\n")).toContain("[run] blocked");
       expect(out.join("\n")).toContain("debug report: .feng/runtime/debug-reports/latest.json");
       const reportText = await readFile(path.join(root, ".feng", "runtime", "debug-reports", "latest.json"), "utf8");
       const report = JSON.parse(reportText);
@@ -509,13 +511,15 @@ describe("host command dispatch via runCli", () => {
         provenance: { model: "m", provider: "deepseek", hatchedAt: "t" }
       }), "utf8");
       const out: string[] = [];
+      const errors: string[] = [];
       const code = await runCli({
         argv: ["run", "--semantic-eval", "--debug-report"],
         workspaceRoot: root, processEnv: env,
         fetchImpl: withMissingGoalJudge(fetchFor(() => `李白在现代街头观察车流。${"正文".repeat(80)}\n===OUTLINE===\n第1章：李白观察现代城市`)),
-        stdout: (t) => out.push(t), stderr: () => {}
+        stdout: (t) => out.push(t), stderr: (t) => errors.push(t)
       });
-      expect(code).toBe(0);
+      expect(code).toBe(1);
+      expect(errors.join("\n")).toContain("[run] blocked");
       expect(out.join("\n")).toContain("debug report: .feng/runtime/debug-reports/latest.json");
       const reportText = await readFile(path.join(root, ".feng", "runtime", "debug-reports", "latest.json"), "utf8");
       const report = JSON.parse(reportText);
