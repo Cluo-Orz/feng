@@ -181,6 +181,30 @@ describe("host command dispatch via runCli", () => {
     });
   });
 
+  it("feng grow without --goal reuses file-native goal state", async () => {
+    await withRoot(async (root) => {
+      await mkdir(path.join(root, ".feng", "quality-gates"), { recursive: true });
+      const goal = "从文件状态复用的中文连载小说写作 agent 目标";
+      await writeFile(path.join(root, ".feng", "quality-gates", "xiaoshuo.json"), JSON.stringify({ goal }), "utf8");
+
+      const out: string[] = [];
+      const code = await runCli({
+        argv: ["grow", "--name", "xiaoshuo", "--rounds", "1", "--sample-chapters", "1"],
+        workspaceRoot: root, processEnv: env,
+        fetchImpl: withJudges(fetchFor((n) => n === 1 ? STRATEGY : `李白在第${n}章。${"正文".repeat(600)}\n===OUTLINE===\n第${n}章梗概`)),
+        stdout: (t) => out.push(t), stderr: () => {}
+      });
+      expect(code).toBe(0);
+      expect(out.join("\n")).toContain("source=.feng/quality-gates/xiaoshuo.json");
+
+      const attemptsRoot = path.join(root, ".feng", "grow-agent", "design-attempts");
+      const growIds = await readdir(attemptsRoot);
+      const messageList = JSON.parse(await readFile(path.join(attemptsRoot, growIds[0] as string, "loop-design", "message-list.json"), "utf8"));
+      expect(messageList.goal).toBe(goal);
+      expect(JSON.stringify(messageList.messages)).toContain(goal);
+    });
+  });
+
   it("install-runtime copies a locked hatch package into a work project and records the receipt", async () => {
     await withRoot(async (agent) => {
       const work = await mkdtemp(path.join(tmpdir(), "feng-install-work-"));

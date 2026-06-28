@@ -242,6 +242,14 @@ F:\code\libai-chongshengle
 根据实际失败调整实现、测试和门禁，而不是把失败解释成“文档已覆盖”。
 ```
 
+后续端到端流程中，`feng grow` 不应再依赖每轮变化的长 `--goal` 参数。目标应该来自当前目录已经沉淀的 file-native 状态，例如 grow unit、quality gates、hatch package 或专门的目标文件。命令行可以表达固定运行形态和边界，例如：
+
+```text
+feng grow --name xiaoshuo --rounds 4 --sample-chapters 3
+```
+
+如果每次都把不同的目标文本放进命令参数，会让外部执行器把它们视为不同命令，也会让产品心智滑向“用户不断重写目标”，而不是“同一个 grow 单元在同一个文件化目标下持续成长”。当目标确实需要改变时，应该通过文件化目标变更、反馈采纳或 grow unit 边界更新来表达，并留下可审计证据。
+
 Codex 判断一个步骤“正确”，不能只看命令退出码。它至少要检查：
 
 ```text

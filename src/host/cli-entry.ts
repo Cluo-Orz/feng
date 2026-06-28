@@ -20,7 +20,7 @@ const hostCommands = new Set(["write", "supervise", "grow-agent", "install-runti
 function isHighLevelGrow(argv: readonly string[]): boolean {
   if (argv[0] !== "grow") return false;
   const action = argv[1];
-  return argv.includes("--goal") && (action === undefined || action.startsWith("--"));
+  return action === undefined || action.startsWith("--");
 }
 
 export async function runCli(input: RunCliInput): Promise<number> {

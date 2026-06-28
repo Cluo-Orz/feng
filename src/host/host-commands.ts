@@ -65,6 +65,44 @@ async function inferAgentDirFromRuntimePackage(host: FengHost): Promise<string |
   return existingDirectory(loaded.value.pkg.validation.grownInProject);
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+async function readJsonObject(host: FengHost, logicalPath: string, reason: string): Promise<Record<string, unknown> | undefined> {
+  const read = await host.store.readText(host.workspace, logicalPath, { reason, maxBytes: 1024 * 1024 });
+  if (!read.ok) return undefined;
+  try {
+    const parsed = JSON.parse(read.value.content) as unknown;
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function inferGrowGoal(host: FengHost, name: string): Promise<{ readonly goal: string; readonly source: string }> {
+  const qualityGates = await readJsonObject(host, `.feng/quality-gates/${name}.json`, "infer grow goal from quality gates");
+  const qualityGoal = nonEmptyString(qualityGates?.goal);
+  if (qualityGoal !== undefined) return { goal: qualityGoal, source: `.feng/quality-gates/${name}.json` };
+
+  const loaded = await loadPackageWithMetadata(host.store, host.workspace);
+  if (loaded.ok && loaded.value.pkg.name === name) {
+    const description = nonEmptyString(loaded.value.pkg.targetWorld.description);
+    if (description !== undefined) return { goal: description, source: loaded.value.packagePath };
+  }
+
+  const listed = await host.grow.listGrowUnits({ includeArchived: false, limit: 20 });
+  if (listed.ok) {
+    const matched = listed.value.records.find((record) => record.title === name && record.goalBoundarySummary.trim().length > 0)
+      ?? listed.value.records.find((record) => record.goalBoundarySummary.trim().length > 0);
+    if (matched !== undefined) {
+      return { goal: matched.goalBoundarySummary.trim(), source: `.feng/grow-units/records/${matched.growUnitId}.json` };
+    }
+  }
+
+  return { goal: `成长出一个可复制、可运行、可验证的 ${name} agent`, source: "default" };
+}
+
 export async function runWrite(host: FengHost, argv: readonly string[], stdout: Out, stderr: Out): Promise<number> {
   const premise = flagValue(argv, "--premise");
   const title = flagValue(argv, "--title");
@@ -155,12 +193,10 @@ export async function runGrowAgent(host: FengHost, argv: readonly string[], stdo
 }
 
 export async function runGrow(host: FengHost, argv: readonly string[], stdout: Out, stderr: Out): Promise<number> {
-  const goal = flagValue(argv, "--goal");
-  if (goal === undefined) {
-    stderr("feng grow error: --goal <text> is required for high-level agent grow");
-    return 2;
-  }
   const name = flagValue(argv, "--name") ?? flagValue(argv, "--agent") ?? "agent";
+  const explicitGoal = flagValue(argv, "--goal");
+  const inferred = explicitGoal === undefined ? await inferGrowGoal(host, name) : { goal: explicitGoal, source: "--goal" };
+  const goal = inferred.goal;
   const draftOnly = argv.includes("--draft");
   if (!draftOnly) {
     const loop = await growXiaoshuoAgentLoop(host, {
@@ -174,6 +210,7 @@ export async function runGrow(host: FengHost, argv: readonly string[], stdout: O
       return 1;
     }
     stdout(`[grow] ${loop.value.packagePath} growUnit=${loop.value.growUnitId} lifecycle=${loop.value.lifecycle} readiness=${loop.value.readiness}`);
+    if (explicitGoal === undefined) stdout(`  goal: ${goal} (source=${inferred.source})`);
     if (loop.value.seededConstraints.length > 0) {
       stdout(`  seeded ${loop.value.seededConstraints.length} constraint(s) from downstream capability feedback`);
     }
@@ -193,9 +230,10 @@ export async function runGrow(host: FengHost, argv: readonly string[], stdout: O
     return 1;
   }
   stdout(`[grow] drafted ${result.value.packagePath}`);
+  if (explicitGoal === undefined) stdout(`  goal: ${goal} (source=${inferred.source})`);
   stdout(`  growUnit=${result.value.growUnitId} lifecycle=${result.value.lifecycle} readiness=${result.value.readiness} strategyChars=${result.value.strategyChars}`);
   stdout(`  ${formatCacheSummary(result.value.llmUsage)}`);
-  stdout("  design-only draft: rerun `feng grow --goal <text>` without --draft to produce sample-run evidence and a locked hatch package");
+  stdout("  design-only draft: rerun `feng grow` without --draft to produce sample-run evidence and a locked hatch package");
   return 0;
 }
 

@@ -188,3 +188,66 @@ The xiaoshuo agent is now a valid ready hatch candidate for the next libai run.
 The chapter generation warm-cache behavior is acceptable in the final round.
 Judge-call cache remains a system-level optimization gap and should not be hidden by the ready hatch result.
 ```
+
+## 2026-06-29 04:02 command-shape and routing-safe package update
+
+The previous sections are historical evidence. Starting from this point, follow-up grow runs should not pass a changing long `--goal` string on every command. The high-level command shape is:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
+```
+
+When `--goal` is omitted, `feng grow` now infers the goal from file-native state, in this order:
+
+```text
+.feng/quality-gates/<name>.json
+.feng/hatch/<name>-runtime.json
+.feng/grow-units/records/<latest-or-matching-grow>.json
+default fallback only if no prior state exists
+```
+
+This matters because the stable command represents one continuing grow unit in one workspace. Changing the goal text in every CLI invocation makes external execution approval noisy and weakens the product mental model.
+
+After the capability-routing gate fix, the package `pkg-grow-0d40b957-8b32-4173-bffd-79bc5cb83b3a-1.0.0` was explicitly rejected even though it said `readiness=ready`, because it downgraded seeded `goal_coverage` capability feedback to `work`. That rejection is recorded in:
+
+```text
+F:\code\xiaoshuo\.feng\cache-analysis\pre-rerun-20260629-034803.md
+```
+
+The accepted rerun is:
+
+```text
+F:\code\xiaoshuo\grow-after-routing-gate-fix.out.log
+F:\code\xiaoshuo\grow-after-routing-gate-fix.err.log
+```
+
+Result:
+
+```text
+[grow] .feng/hatch/xiaoshuo-runtime.json growUnit=grow-1111c772-516d-4e2e-8ed9-89126492bece lifecycle=ready_to_hatch readiness=ready
+  seeded 1 constraint(s) from downstream capability feedback
+  capability adoption: .feng/grow-inbox/capability-feedback-adoption.json
+  round 1 (v0.1.0): chapters=3 fail=0 capabilityIssues=[] added=0 cache=28.72% (8064/28082 input tokens, calls=11, zero=2)
+  improved=true finalCapabilityIssues=0 cache=28.56% (8704/30472 input tokens, calls=12, zero=2)
+```
+
+Accepted package:
+
+```text
+packageId=pkg-grow-1111c772-516d-4e2e-8ed9-89126492bece-1.0.0
+locked=true
+validation.readiness=ready
+quality gates 12/12 passed
+blocking=0
+coverage_uncovered=0
+goal_coverage routes to capability
+length contract: 2000-8000 chars
+```
+
+Judgment:
+
+```text
+This xiaoshuo package is the current valid candidate for the next libai end-to-end rerun.
+The package preserves the multi-layer feedback loop: downstream goal_coverage failures remain capability feedback to xiaoshuo.
+Cache health is still weak overall and must be analyzed before backing up or replacing libai.
+```
