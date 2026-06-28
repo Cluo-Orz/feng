@@ -251,3 +251,66 @@ This xiaoshuo package is the current valid candidate for the next libai end-to-e
 The package preserves the multi-layer feedback loop: downstream goal_coverage failures remain capability feedback to xiaoshuo.
 Cache health is still weak overall and must be analyzed before backing up or replacing libai.
 ```
+
+## 2026-06-29 04:29 rerun after libai short-video subgoal miss
+
+The clean libai run after runtime fixes exposed a real goal coverage miss:
+
+```text
+chapter=2
+issueKind=goal_coverage
+judge parseOk=true
+missing=目标要求看到诗被作为短视频素材，正文只出现书籍商品，完全没有提及短视频素材
+```
+
+That feedback was routed to xiaoshuo:
+
+```text
+F:\code\xiaoshuo\.feng\grow-inbox\capability-feedback.json
+issueKinds=[goal_coverage]
+count=1
+```
+
+Before rerun, cache analysis was written:
+
+```text
+F:\code\xiaoshuo\.feng\cache-analysis\pre-rerun-20260629-042454.md
+```
+
+Grow command used the fixed command shape with no `--goal`:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
+```
+
+Result:
+
+```text
+[grow] .feng/hatch/xiaoshuo-runtime.json growUnit=grow-18270bca-56f7-4d71-843d-45115f67aef6 lifecycle=ready_to_hatch readiness=ready
+  goal: 成长出一个可复制的中文连载小说写作 (source=.feng/quality-gates/xiaoshuo.json)
+  seeded 1 constraint(s) from downstream capability feedback
+  capability adoption: .feng/grow-inbox/capability-feedback-adoption.json
+  round 1 (v0.1.0): chapters=3 fail=0 capabilityIssues=[] added=0 cache=35.82% (9600/26800 input tokens, calls=11, zero=1)
+  improved=true finalCapabilityIssues=0 cache=35.94% (10368/28848 input tokens, calls=12, zero=1)
+```
+
+Accepted package:
+
+```text
+packageId=pkg-grow-18270bca-56f7-4d71-843d-45115f67aef6-1.0.0
+locked=true
+validation.readiness=ready
+quality gates 12/12 passed
+blocking=0
+coverage_uncovered=0
+goal_coverage routes to capability
+length contract: 1500-5000 chars
+```
+
+Important judgment:
+
+```text
+The new package should not hard-code libai-specific "short video" facts into xiaoshuo.
+It must instead preserve a general no-missing-topic behavior and prove it by passing the next libai rerun.
+Cache improved from 28.56% to 35.94% but remains far below the long-running target.
+```
