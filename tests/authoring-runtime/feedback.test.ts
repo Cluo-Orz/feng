@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { routeFeedback, checkKernelContract } from "../../src/authoring-runtime/index.js";
-import { defaultFeedbackRouting, defaultNovelTargetWorld, type AuthoringRuntimePackage } from "../../src/runtime-package/index.js";
+import { defaultContextPolicy, defaultCoveragePolicy, defaultFeedbackRouting, defaultNovelTargetWorld, type AuthoringRuntimePackage } from "../../src/runtime-package/index.js";
 import type { QualityIssue } from "../../src/authoring-runtime/index.js";
 
-function pkgWith(targetWorld: AuthoringRuntimePackage["targetWorld"]): AuthoringRuntimePackage {
+function pkgWith(
+  targetWorld: AuthoringRuntimePackage["targetWorld"],
+  contextPolicy: AuthoringRuntimePackage["contextPolicy"] = []
+): AuthoringRuntimePackage {
   return {
     schemaVersion: "1.0.0", packageId: "p", name: "x", kind: "serialized_authoring_agent", version: "1.0.0",
     locked: true, runEntry: "feng run", targetWorld,
-    contextPolicy: [], writingStrategy: { systemPrompt: "s", stylePrinciples: [], constraints: [] },
+    contextPolicy, writingStrategy: { systemPrompt: "s", stylePrinciples: [], constraints: [] },
     storyModel: { trackedFacts: [], continuityDimensions: [] }, harness: { steps: [] },
+    coveragePolicy: defaultCoveragePolicy,
     qualityRules: [], feedbackRouting: defaultFeedbackRouting,
     validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "", checkedAt: "t" },
     provenance: { model: "m", provider: "p", hatchedAt: "t" }
@@ -24,6 +28,21 @@ describe("checkKernelContract", () => {
   it("flags an unsupported output kind", () => {
     const issues = checkKernelContract(pkgWith({ ...defaultNovelTargetWorld, outputKinds: ["chapter_text", "audio_narration"] }));
     expect(issues.some((i) => i.detail.includes("audio_narration"))).toBe(true);
+  });
+
+  it("flags an unsupported input kind while allowing grown reader feedback input", () => {
+    const ok = checkKernelContract(pkgWith({ ...defaultNovelTargetWorld, inputKinds: ["premise", "reader_feedback", "author_feedback"] }));
+    expect(ok.some((i) => i.detail.includes("reader_feedback"))).toBe(false);
+    const issues = checkKernelContract(pkgWith({ ...defaultNovelTargetWorld, inputKinds: ["premise", "image_reference"] }));
+    expect(issues.some((i) => i.kind === "runtime_capability" && i.detail.includes("image_reference"))).toBe(true);
+  });
+
+  it("flags unsupported context sections as a context kernel gap", () => {
+    const issues = checkKernelContract(pkgWith(defaultNovelTargetWorld, [
+      ...defaultContextPolicy,
+      { kind: "episodic_memory" as never, title: "事件记忆", source: "unsupported", maxChars: 1000 }
+    ]));
+    expect(issues.some((i) => i.kind === "runtime_capability" && i.detail.includes("episodic_memory"))).toBe(true);
   });
 
   it("passes a default novel target world", () => {

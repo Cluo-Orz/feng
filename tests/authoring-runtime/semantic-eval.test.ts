@@ -57,8 +57,15 @@ describe("semanticCapabilityIssues", () => {
     expect(semanticCapabilityIssues(e)).toHaveLength(0);
   });
 
-  it("ignores problems on unknown dimensions", () => {
+  it("turns below-bar scores without structured problems into review-blocking capability issues", () => {
+    const e = parseSemanticEval('{"style": 0, "character": 7, "plot": 9, "problems": []}', 1, "t");
+    const issues = semanticCapabilityIssues(e);
+    expect(issues.map((i) => i.kind)).toEqual(["semantic_style", "semantic_character"]);
+    expect(issues[0]?.detail).toContain("未给出结构化问题");
+  });
+
+  it("ignores unknown problem dimensions but still escalates below-bar tracked scores", () => {
     const e = parseSemanticEval('{"style": 4, "character": 4, "plot": 4, "problems": [{"dimension":"pacing","evidence":"x","suggestion":"y"}]}', 1, "t");
-    expect(semanticCapabilityIssues(e)).toHaveLength(0);
+    expect(semanticCapabilityIssues(e).map((issue) => issue.kind)).toEqual(["semantic_style", "semantic_character", "semantic_plot"]);
   });
 });

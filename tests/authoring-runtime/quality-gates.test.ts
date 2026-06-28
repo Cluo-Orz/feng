@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+import { synthesizeWorkProjectQualityGates, synthesizeXiaoshuoQualityGates, type QualityGateSet } from "../../src/authoring-runtime/index.js";
+import {
+  defaultContextPolicy,
+  defaultCoveragePolicy,
+  defaultFeedbackRouting,
+  defaultHarness,
+  defaultNovelTargetWorld,
+  defaultQualityRules,
+  defaultStoryModel,
+  PACKAGE_SCHEMA_VERSION,
+  type AuthoringRuntimePackage
+} from "../../src/runtime-package/index.js";
+
+function pkg(): AuthoringRuntimePackage {
+  return {
+    schemaVersion: PACKAGE_SCHEMA_VERSION,
+    packageId: "pkg-1",
+    name: "xiaoshuo",
+    kind: "serialized_authoring_agent",
+    version: "1.0.0",
+    locked: true,
+    runEntry: "feng run",
+    targetWorld: defaultNovelTargetWorld,
+    contextPolicy: defaultContextPolicy,
+    writingStrategy: {
+      systemPrompt: "你是写小说 agent，维护长篇上下文、设定冲突、质量门禁和反馈候选。",
+      stylePrinciples: ["连贯"],
+      constraints: ["归因作品层、能力层、系统层问题"]
+    },
+    storyModel: defaultStoryModel,
+    harness: defaultHarness,
+    coveragePolicy: defaultCoveragePolicy,
+    qualityRules: defaultQualityRules,
+    feedbackRouting: defaultFeedbackRouting,
+    validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "ok", checkedAt: "t" },
+    provenance: { model: "m", provider: "deepseek", hatchedAt: "t" }
+  };
+}
+
+function gates(goal: string): QualityGateSet {
+  return synthesizeXiaoshuoQualityGates({
+    goal,
+    pkg: pkg(),
+    designArtifacts: { coveragePolicyAuthoredByGrow: true },
+    finalIssueKinds: [],
+    finalFailChapters: 0,
+    sampleGateBlockingCount: 0,
+    sampleRoundCount: 1,
+    readiness: "ready",
+    now: () => "t"
+  });
+}
+
+describe("synthesizeXiaoshuoQualityGates", () => {
+  it("maps long-context, output-contract, and feedback-routing goal items to gates", () => {
+    const set = gates([
+      "输出章节草稿、改稿、续写计划、设定冲突、质量门禁和反馈候选",
+      "能保持长篇上下文、人物、时间线、地点、伏笔和情节推进连贯",
+      "能把作品层、小说 agent 能力层、feng 系统层问题正确归因并回流"
+    ].join("；"));
+    const goalItems = set.coverage.filter((item) => item.requirement.startsWith("goal_item:"));
+    expect(goalItems.length).toBeGreaterThan(0);
+    expect(goalItems.every((item) => item.status !== "uncovered")).toBe(true);
+    expect(goalItems.some((item) => item.mappedGateIds.includes("gate-runtime-contract"))).toBe(true);
+    expect(goalItems.some((item) => item.mappedGateIds.includes("gate-feedback-routing"))).toBe(true);
+    expect(goalItems.some((item) => item.mappedGateIds.includes("gate-outline-continuity"))).toBe(true);
+    expect(set.gates.find((gate) => gate.gateId === "gate-user-goal-item-coverage")?.status).toBe("passed");
+  });
+
+  it("creates explicit gates for final capability issues not declared by the package", () => {
+    const set = synthesizeXiaoshuoQualityGates({
+      goal: "成长出高质量写作 agent",
+      pkg: pkg(),
+      designArtifacts: { coveragePolicyAuthoredByGrow: true },
+      finalIssueKinds: ["semantic_plot"],
+      finalFailChapters: 0,
+      sampleGateBlockingCount: 1,
+      sampleRoundCount: 1,
+      readiness: "waiting_validation",
+      now: () => "t"
+    });
+    const gate = set.gates.find((item) => item.gateId === "gate-final-capability-semantic-plot");
+    expect(gate?.status).toBe("failed");
+    expect(gate?.notes.join("\n")).toContain("did not declare a dedicated quality rule");
+  });
+});
+
+describe("synthesizeWorkProjectQualityGates", () => {
+  it("uses routed semantic/runtime feedback when judging a package quality rule", () => {
+    const runtimePackage: AuthoringRuntimePackage = {
+      ...pkg(),
+      qualityRules: [...defaultQualityRules, { kind: "semantic_plot", note: "情节必须有推进" }]
+    };
+    const set = synthesizeWorkProjectQualityGates({
+      project: { premise: "p", title: "t" },
+      pkg: runtimePackage,
+      chapterNumber: 1,
+      artifactDir: ".feng/runtime/chapters/chapter-01",
+      quality: { chapterNumber: 1, chars: 1200, status: "pass", passed: true, issues: [], checkedAt: "t" },
+      feedback: {
+        byLayer: { work: 0, capability: 1, system: 0 },
+        candidates: [{
+          issueKind: "semantic_plot",
+          layer: "capability",
+          severity: "warning",
+          detail: "情节推进不足",
+          routingReason: "semantic judge",
+          chapterNumber: 1
+        }]
+      },
+      semanticEvaluated: true,
+      now: () => "t"
+    });
+    expect(set.gates.find((gate) => gate.gateId === "gate-semantic-plot")?.status).toBe("needs_human_judgment");
+  });
+});

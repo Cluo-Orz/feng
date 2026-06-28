@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadFengConfig } from "./config.js";
 import { createFengHost } from "./runtime-host.js";
-import { runGrowAgent, runRouteFeedback, runRun, runSupervise, runWrite } from "./host-commands.js";
+import { runAuthorFeedback, runGrow, runGrowAgent, runInstallRuntime, runResolveSystemFeedback, runReviewWorkGate, runRouteFeedback, runRun, runSupervise, runWrite } from "./host-commands.js";
 import type { FetchLike } from "../providers/index.js";
 
 export interface RunCliInput {
@@ -15,7 +15,13 @@ export interface RunCliInput {
   readonly stderr?: (text: string) => void;
 }
 
-const hostCommands = new Set(["write", "supervise", "grow-agent", "run", "route-feedback"]);
+const hostCommands = new Set(["write", "supervise", "grow-agent", "install-runtime", "run", "route-feedback", "resolve-system-feedback", "review-work-gate", "author-feedback"]);
+
+function isHighLevelGrow(argv: readonly string[]): boolean {
+  if (argv[0] !== "grow") return false;
+  const action = argv[1];
+  return argv.includes("--goal") && (action === undefined || action.startsWith("--"));
+}
 
 export async function runCli(input: RunCliInput): Promise<number> {
   const stdout = input.stdout ?? ((text) => process.stdout.write(`${text}\n`));
@@ -36,11 +42,16 @@ export async function runCli(input: RunCliInput): Promise<number> {
     ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl })
   });
   const command = input.argv[0];
+  if (isHighLevelGrow(input.argv)) return runGrow(host, input.argv, stdout, stderr);
   if (command !== undefined && hostCommands.has(command)) {
     if (command === "write") return runWrite(host, input.argv, stdout, stderr);
     if (command === "supervise") return runSupervise(host, input.argv, stdout, stderr);
     if (command === "grow-agent") return runGrowAgent(host, input.argv, stdout, stderr);
+    if (command === "install-runtime") return runInstallRuntime(host, input.argv, stdout, stderr, input.fetchImpl);
     if (command === "route-feedback") return runRouteFeedback(host, input.argv, stdout, stderr, input.fetchImpl);
+    if (command === "resolve-system-feedback") return runResolveSystemFeedback(host, input.argv, stdout, stderr);
+    if (command === "review-work-gate") return runReviewWorkGate(host, input.argv, stdout, stderr);
+    if (command === "author-feedback") return runAuthorFeedback(host, input.argv, stdout, stderr);
     return runRun(host, input.argv, stdout, stderr);
   }
   const result = await host.cli.run(input.argv);

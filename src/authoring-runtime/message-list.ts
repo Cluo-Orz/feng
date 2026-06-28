@@ -26,6 +26,11 @@ export interface CompiledMessageList {
   readonly sections: readonly CompiledSection[];
   readonly systemPrompt: string;
   readonly systemPromptChars: number;
+  readonly coveragePolicy?: {
+    readonly noMissingTopicGateId: string;
+    readonly promptOnlyAllowed: boolean;
+    readonly blockingUntilReviewed: boolean;
+  };
   readonly compiledAt: string;
 }
 
@@ -70,7 +75,11 @@ export function compileMessageList(
     pkg.writingStrategy.systemPrompt,
     pkg.writingStrategy.stylePrinciples.length === 0 ? "" : `写作原则：\n${pkg.writingStrategy.stylePrinciples.map((p) => `- ${p}`).join("\n")}`,
     pkg.writingStrategy.constraints.length === 0 ? "" : `硬性约束：\n${pkg.writingStrategy.constraints.map((c) => `- ${c}`).join("\n")}`,
-    pkg.storyModel.continuityDimensions.length === 0 ? "" : `连贯性检查维度（写作时必须维持）：\n${pkg.storyModel.continuityDimensions.map((d) => `- ${d}`).join("\n")}`
+    pkg.storyModel.continuityDimensions.length === 0 ? "" : `连贯性检查维度（写作时必须维持）：\n${pkg.storyModel.continuityDimensions.map((d) => `- ${d}`).join("\n")}`,
+    pkg.coveragePolicy.noMissingTopic.enabled
+      ? `目标覆盖门禁：${pkg.coveragePolicy.noMissingTopic.title}；gate=${pkg.coveragePolicy.noMissingTopic.gateId}；promptOnlyAllowed=${pkg.coveragePolicy.noMissingTopic.promptOnlyAllowed}`
+      : "",
+    "运行输出边界：本轮模型输出只写目标正文与 ===OUTLINE=== 后的一句话大纲；质量门禁、反馈候选、调试信息和上报信息由 runtime 写入文件，不要混入正文。"
   ].filter((p) => p.length > 0);
   const systemPrompt = systemParts.join("\n\n");
 
@@ -85,6 +94,17 @@ export function compileMessageList(
   ];
   return {
     messages,
-    record: { chapterNumber: state.chapterNumber, sections, systemPrompt, systemPromptChars: systemPrompt.length, compiledAt: new Date().toISOString() }
+    record: {
+      chapterNumber: state.chapterNumber,
+      sections,
+      systemPrompt,
+      systemPromptChars: systemPrompt.length,
+      coveragePolicy: {
+        noMissingTopicGateId: pkg.coveragePolicy.noMissingTopic.gateId,
+        promptOnlyAllowed: pkg.coveragePolicy.noMissingTopic.promptOnlyAllowed,
+        blockingUntilReviewed: pkg.coveragePolicy.noMissingTopic.blockingUntilReviewed
+      },
+      compiledAt: new Date().toISOString()
+    }
   };
 }

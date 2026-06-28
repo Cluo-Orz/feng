@@ -41,6 +41,7 @@ export const qualityCheckKinds = [
   "outline_continuity",
   "artifact_presence",
   "runtime_capability",
+  "goal_coverage",
   "semantic_style",
   "semantic_character",
   "semantic_plot"
@@ -52,6 +53,20 @@ export interface QualityRule {
   readonly minChars?: number;
   readonly maxChars?: number;
   readonly note?: string;
+}
+
+export interface NoMissingTopicPolicy {
+  readonly enabled: boolean;
+  readonly gateId: string;
+  readonly sourceKind: "chapter_goal";
+  readonly title: string;
+  readonly evidenceRequired: string;
+  readonly promptOnlyAllowed: boolean;
+  readonly blockingUntilReviewed: boolean;
+}
+
+export interface CoveragePolicy {
+  readonly noMissingTopic: NoMissingTopicPolicy;
 }
 
 export const feedbackLayers = ["work", "capability", "system"] as const;
@@ -90,6 +105,10 @@ export interface PackageValidation {
   readonly grownByGrowUnitId?: string;
   readonly grownByAttemptId?: string;
   readonly evidenceSummary: string;
+  readonly qualityGateRef?: string;
+  readonly targetCoverageRef?: string;
+  readonly qualityGateSummary?: string;
+  readonly sampleEvidenceRefs?: readonly string[];
   readonly checkedAt: string;
 }
 
@@ -106,6 +125,7 @@ export interface AuthoringRuntimePackage {
   readonly writingStrategy: WritingStrategy;
   readonly storyModel: StoryModel;
   readonly harness: AgentHarness;
+  readonly coveragePolicy: CoveragePolicy;
   readonly qualityRules: readonly QualityRule[];
   readonly feedbackRouting: readonly FeedbackRoutingRule[];
   readonly validation: PackageValidation;

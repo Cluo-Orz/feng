@@ -1,6 +1,7 @@
 import type {
   ContextSectionPolicy,
   FeedbackRoutingRule,
+  CoveragePolicy,
   QualityRule,
   StoryModel,
   AgentHarness,
@@ -39,6 +40,18 @@ export const defaultHarness: AgentHarness = {
   steps: ["run_chapter", "revise_chapter", "evaluate_chapter", "continuity_check", "route_feedback", "re_grow_package", "re_run_sample"]
 };
 
+export const defaultCoveragePolicy: CoveragePolicy = {
+  noMissingTopic: {
+    enabled: true,
+    gateId: "gate-chapter-goal-coverage",
+    sourceKind: "chapter_goal",
+    title: "本章目标不漏题",
+    evidenceRequired: "semantic judge or author review confirms the chapter answered the chapter goal",
+    promptOnlyAllowed: false,
+    blockingUntilReviewed: true
+  }
+};
+
 export const defaultContextPolicy: readonly ContextSectionPolicy[] = [
   { kind: "observation", title: "本轮目标与设定", source: "premise + chapter_goal", maxChars: 2000 },
   { kind: "short_term", title: "前情提要", source: "prior chapter outlines + last chapter tail", maxChars: 2400 },
@@ -65,6 +78,7 @@ export const defaultFeedbackRouting: readonly FeedbackRoutingRule[] = [
   { issueKind: "chapter_continuity", layer: "capability", reason: "章节连续性是写作流程能力问题，回流 xiaoshuo" },
   { issueKind: "runtime_capability", layer: "system", reason: "运行 kernel 不能表达该 agent 所需能力，是 feng 系统层问题" },
   { issueKind: "artifact_presence", layer: "system", reason: "trace/message-list 缺失是 feng 运行记录底座问题" },
+  { issueKind: "goal_coverage", layer: "capability", reason: "章节没有正面回应本章目标，属于目标执行与任务服从能力问题，回流 xiaoshuo" },
   { issueKind: "semantic_style", layer: "capability", reason: "文风可读性不足是写作能力问题，回流 xiaoshuo" },
   { issueKind: "semantic_character", layer: "capability", reason: "人物可信度/一致性不足是写作能力问题，回流 xiaoshuo" },
   { issueKind: "semantic_plot", layer: "capability", reason: "情节吸引力/推进不足是写作能力问题，回流 xiaoshuo" }

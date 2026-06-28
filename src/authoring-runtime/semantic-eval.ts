@@ -25,6 +25,8 @@ export interface SemanticEval {
   readonly scores: SemanticScores;
   readonly problems: readonly SemanticProblem[];
   readonly notes: string;
+  readonly parseOk: boolean;
+  readonly raw: string;
   readonly evaluatedAt: string;
 }
 
@@ -48,11 +50,13 @@ function clampScore(value: unknown): number {
 
 export function parseSemanticEval(raw: string, chapterNumber: number, now: string): SemanticEval {
   let parsed: Record<string, unknown> = {};
+  let parseOk = false;
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start !== -1 && end > start) {
     try {
       parsed = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+      parseOk = true;
     } catch {
       parsed = {};
     }
@@ -77,7 +81,7 @@ export function parseSemanticEval(raw: string, chapterNumber: number, now: strin
         })
         .filter((p): p is SemanticProblem => p !== undefined)
     : [];
-  return { chapterNumber, overall, scores, problems, notes, evaluatedAt: now };
+  return { chapterNumber, overall, scores, problems, notes, parseOk, raw, evaluatedAt: now };
 }
 
 // The semantic judge is the second quality layer. Its structured problems must
@@ -92,12 +96,27 @@ const DIMENSION_KIND: Record<string, QualityCheckKind> = {
 
 export function semanticCapabilityIssues(evaluated: SemanticEval, bar = 8): readonly QualityIssue[] {
   const issues: QualityIssue[] = [];
+  const covered = new Set<string>();
   for (const problem of evaluated.problems) {
     const kind = DIMENSION_KIND[problem.dimension];
     if (kind === undefined) continue;
     const score = evaluated.scores[problem.dimension as keyof SemanticScores];
     if (typeof score === "number" && score >= bar) continue;
+    covered.add(problem.dimension);
     issues.push({ kind, severity: "warning", detail: `第${evaluated.chapterNumber}章 ${problem.dimension}：${problem.evidence} → ${problem.suggestion}` });
+  }
+  for (const dimension of Object.keys(DIMENSION_KIND)) {
+    if (covered.has(dimension)) continue;
+    const score = evaluated.scores[dimension as keyof SemanticScores];
+    if (typeof score !== "number" || score >= bar) continue;
+    const evidence = evaluated.parseOk
+      ? "语义评审未给出结构化问题"
+      : "语义评审输出不可解析";
+    issues.push({
+      kind: DIMENSION_KIND[dimension] as QualityCheckKind,
+      severity: "warning",
+      detail: `第${evaluated.chapterNumber}章 ${dimension} 评分 ${score} 低于门槛 ${bar}，${evidence}；需要重评或重写后提供可追溯证据`
+    });
   }
   return issues;
 }

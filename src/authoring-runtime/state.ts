@@ -18,6 +18,9 @@ export interface RuntimeChapterRecord {
   readonly number: number;
   readonly outline: string;
   readonly chapterPath: string;
+  readonly outlinePath?: string;
+  readonly feedbackCandidatesPath?: string;
+  readonly settingConflictsPath?: string;
   readonly chars: number;
   readonly qualityStatus: "pass" | "pass_with_warnings" | "fail";
   readonly qualityPassed: boolean;
@@ -35,6 +38,10 @@ export const STATE_PATH = ".feng/runtime/novel-state.json";
 
 export const chapterDir = (n: number): string => `.feng/runtime/chapters/chapter-${String(n).padStart(2, "0")}`;
 export const chapterFilePath = (n: number): string => `chapters/chapter-${String(n).padStart(2, "0")}.md`;
+export const outlineFilePath = (n: number): string => `outlines/chapter-${String(n).padStart(2, "0")}.md`;
+export const OUTLINE_INDEX_PATH = "outline.md";
+export const feedbackCandidatesFilePath = (n: number): string => `feedback-candidates/chapter-${String(n).padStart(2, "0")}.json`;
+export const settingConflictsFilePath = (n: number): string => `setting-conflicts/chapter-${String(n).padStart(2, "0")}.json`;
 
 export interface ParsedChapter {
   readonly chapter: string;

@@ -7,6 +7,7 @@ import {
   defaultFeedbackRouting,
   defaultStoryModel,
   defaultHarness,
+  defaultCoveragePolicy,
   PACKAGE_SCHEMA_VERSION,
   type AuthoringRuntimePackage
 } from "../../src/runtime-package/index.js";
@@ -25,6 +26,7 @@ function pkg(): AuthoringRuntimePackage {
     writingStrategy: { systemPrompt: "你是写作 agent。", stylePrinciples: ["生动"], constraints: ["900-1500字"] },
     storyModel: defaultStoryModel,
     harness: defaultHarness,
+    coveragePolicy: defaultCoveragePolicy,
     qualityRules: defaultQualityRules,
     feedbackRouting: defaultFeedbackRouting,
     validation: { readiness: "ready", grownInProject: "/x", evidenceSummary: "ok", checkedAt: "t" },
@@ -71,11 +73,16 @@ describe("compileMessageList", () => {
     expect(sys).toContain("900-1500字");
     expect(sys).toContain("连贯性检查维度");
     expect(sys).toContain("人物承接");
+    expect(sys).toContain("目标覆盖门禁");
+    expect(sys).toContain("gate-chapter-goal-coverage");
+    expect(sys).toContain("质量门禁、反馈候选、调试信息和上报信息由 runtime 写入文件");
     expect(record.systemPromptChars).toBeGreaterThan(0);
     // the message-list file must record the full system prompt text, not just
     // its length, so it is a complete file-native record of what was sent.
     expect(record.systemPrompt).toBe(sys);
     expect(record.systemPrompt).toContain("900-1500字");
+    expect(record.coveragePolicy?.noMissingTopicGateId).toBe("gate-chapter-goal-coverage");
+    expect(record.coveragePolicy?.promptOnlyAllowed).toBe(false);
   });
 
   it("marks first chapter and empty long-term/feedback gracefully", () => {
