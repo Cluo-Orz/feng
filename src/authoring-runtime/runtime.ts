@@ -378,8 +378,10 @@ export async function runChapter(deps: AuthoringRuntimeDeps, pkg: AuthoringRunti
       });
       if (!response.ok) return response;
       llmUsageSamples.push({ phase: "semantic_repair_generation", usage: response.value.usage });
-      const responseFinishIssue = finishReasonIssue(chapterNumber, `语义修复${attempt + 1}`, response.value.finishReason);
-      if (responseFinishIssue !== undefined) runtimeIssues.push(responseFinishIssue);
+      if (response.value.finishReason === "length") {
+        semanticRepairs.push(`语义修复${attempt + 1} 被模型输出长度截断(finishReason=length)，已丢弃该修复候选并保留上一版正文。`);
+        continue;
+      }
       const raw = blocksText(response.value.contentBlocks);
       if (raw.length === 0) break;
       const candidate = parseChapterOutput(raw, chapterNumber);

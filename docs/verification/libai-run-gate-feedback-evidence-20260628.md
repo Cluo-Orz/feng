@@ -356,3 +356,35 @@ The failed goal coverage judge was not allowed to pollute xiaoshuo capability fe
 The only routed blocker from this run is a feng/system runtime capability gap.
 Before another acceptance rerun, feng should resolve or grow against semantic-repair length truncation.
 ```
+
+## 2026-06-29 04:18 runtime semantic-repair truncation fix
+
+The routed system blocker was:
+
+```text
+第1章 语义修复1 被模型输出长度截断(finishReason=length)；当前 runtime 仍继续使用该候选，需要 feng 调整输出预算、分阶段写作或截断检测策略
+```
+
+Feng correction:
+
+```text
+Semantic repair is now treated as an optional improvement candidate.
+If a semantic repair response returns finishReason=length, the runtime discards that repair candidate and keeps the previous chapter text.
+The discarded repair is recorded in model-output.json semanticRepairs.
+The original semantic issues remain available as capability feedback if they still fail the semantic gate.
+Main chapter generation or structural repair truncation still remains a system risk.
+```
+
+Verification:
+
+```text
+npm test -- tests/authoring-runtime/runtime.test.ts tests/authoring-runtime/goal-coverage.test.ts tests/host/host-commands.test.ts tests/host/feedback-router.test.ts
+npm run build
+```
+
+Judgment:
+
+```text
+The specific system failure "runtime used a length-truncated semantic repair candidate" is fixed.
+The next libai acceptance rerun should be clean-state again, because the current run's chapter 1 was generated before this correction.
+```

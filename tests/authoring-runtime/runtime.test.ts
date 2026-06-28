@@ -202,6 +202,46 @@ describe("authoring runtime runChapter", () => {
     });
   });
 
+  it("drops truncated semantic repair candidates instead of using them as the chapter output", async () => {
+    await withProject(async (root) => {
+      await seedProject(root, { premise: "李白重生现代成都", title: "李白重生了" });
+      let call = 0;
+      const fetch: FetchLike = async () => {
+        call += 1;
+        const content = call === 1
+          ? `原稿正文：李白在现代继续行动。${"正文".repeat(600)}\n===OUTLINE===\n第1章：李白推进剧情`
+          : call === 2
+            ? '{"style": 7, "character": 9, "plot": 9, "problems": [{"dimension": "style", "evidence": "语言平直", "suggestion": "增强画面"}], "notes": "需修文风"}'
+            : `截断修复稿：不应该被采用。${"修复".repeat(600)}\n===OUTLINE===\n第1章：截断修复`;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: String(call),
+            model: "m",
+            choices: [{ message: { content }, finish_reason: call === 3 ? "length" : "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+          }),
+          text: async () => ""
+        };
+      };
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: fetch });
+      const deps: AuthoringRuntimeDeps = { store: host.store, workspace: host.workspace, llmGateway: host.llmGateway, policy: host.policy, provider: "deepseek", model: "m", semanticEval: true };
+      const result = await runChapters(deps, pkg(), 1);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      const dir = path.join(root, ".feng", "runtime", "chapters", "chapter-01");
+      const chapter = await readFile(path.join(root, "chapters", "chapter-01.md"), "utf8");
+      expect(chapter).toContain("原稿正文");
+      expect(chapter).not.toContain("截断修复稿");
+      const output = JSON.parse(await readFile(path.join(dir, "model-output.json"), "utf8"));
+      expect(output.runtimeIssues).toHaveLength(0);
+      expect(output.semanticRepairs.join("\n")).toContain("已丢弃该修复候选");
+      const feedback = JSON.parse(await readFile(path.join(dir, "feedback.json"), "utf8"));
+      expect(feedback.candidates.some((candidate: { issueKind: string }) => candidate.issueKind === "semantic_style")).toBe(true);
+    });
+  });
+
   it("tracks a chapter goal as explicit no-missing-topic evidence instead of hiding it in the prompt", async () => {
     await withProject(async (root) => {
       await seedProject(root, { premise: "李白重生现代成都", title: "李白重生了", chapterGoals: ["写出李白第一次适应手机支付"] });
