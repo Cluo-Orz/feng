@@ -125,14 +125,13 @@ describe("compileMessageList", () => {
     expect(first.messages[1]).not.toEqual(second.messages[1]);
     expect(first.record.cachePrefix).toBe(second.record.cachePrefix);
     expect(first.record.messages).toEqual(first.messages);
-    expect(first.record.cachePrefixChars).toBeGreaterThan(8000);
+    expect(first.record.cachePrefixChars).toBeGreaterThan(first.record.systemPromptChars);
     const boundary = first.record.stablePrefixBoundary.charOffset;
     const firstUser = first.messages[1]?.content[0]?.text ?? "";
     const secondUser = second.messages[1]?.content[0]?.text ?? "";
     expect(firstUser.slice(0, boundary)).toBe(secondUser.slice(0, boundary));
     expect(firstUser.slice(boundary)).not.toBe(secondUser.slice(boundary));
     expect(first.messages[1]?.content[0]?.text).toContain("稳定作品上下文");
-    expect(first.messages[1]?.content[0]?.text).toContain("稳定长程运行手册");
     expect(firstUser.slice(0, boundary)).not.toContain("扫码失败");
     expect(firstUser.slice(boundary)).toContain("扫码失败");
     expect(second.messages[1]?.content[0]?.text).toContain("直播间吟诗");

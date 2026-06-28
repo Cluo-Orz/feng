@@ -187,3 +187,56 @@ xiaoshuo is quality-ready as a hatch candidate.
 feng is not cache-ready as a long-running grow system.
 The next system-layer fix should focus on making chapter_generation carry a provider-cacheable stable prefix, not only repair/judge calls.
 ```
+
+## 2026-06-28 18:32 and 18:45 cache experiments
+
+Two short reruns were used to test cache hypotheses without waiting for full grow completion.
+
+Experiment A used `70063b6 Expand authoring generation cache prefix`:
+
+```text
+backup: F:\code\xiaoshuo-cacheprefix-multimsg-bak-20260628-184401
+pre-backup analysis: F:\code\xiaoshuo-cacheprefix-multimsg-bak-20260628-184401\.feng\cache-analysis\pre-backup-20260628-184401.md
+messages=3
+stablePrefixMessageCount=2
+cachePrefixChars=8377
+chapter-01/chapter-02 cachePrefix hash=6d750c47eb4a1ecb
+authoring-ch1-0 hit=0.00%
+authoring-ch2-0 hit=0.00%
+overall partial hit=44.13%
+```
+
+This disproved the weak hypothesis that the generation prefix was merely too short. The prefix was long and byte-stable, but cross-chapter `chapter_generation` still had no cache read.
+
+Experiment B used `44bd7b1 Place authoring dynamic input after stable prefix`:
+
+```text
+backup: F:\code\xiaoshuo-cacheprefix-singlemsg-bak-20260628-184923
+pre-backup analysis: F:\code\xiaoshuo-cacheprefix-singlemsg-bak-20260628-184923\.feng\cache-analysis\pre-backup-20260628-184923.md
+messages=2
+stablePrefixMessageCount=1
+stablePrefixBoundary.charOffset=7636
+cachePrefixChars=8105
+chapter-01/chapter-02 cachePrefix hash=bcf65016b3be97e8
+authoring-ch1-0 hit=0.00%
+authoring-ch2-0 hit=0.00%
+overall partial hit=17.27%
+```
+
+This disproved the next hypothesis that provider cache was failing because dynamic input began in a separate user message. Even when the dynamic difference was moved after a long stable prefix inside the same user message, cross-chapter `chapter_generation` still had no cache read.
+
+Follow-up code judgment:
+
+```text
+Keep: recording the full provider-neutral messages in message-list.json.
+Keep: recording stablePrefixBoundary so the stable/dynamic split is auditable.
+Remove: the long hardcoded generation prompt expansion, because live evidence showed it increased cold input size without improving cross-chapter generation cache.
+```
+
+Current conclusion:
+
+```text
+Do not keep extending prompt text blindly.
+The next investigation should inspect provider gateway behavior and whether explicit cache-control, provider-specific prompt-cache APIs, or a different request shape is required.
+Until then, feng can claim quality-ready xiaoshuo hatch evidence, but not cache-ready long-running growth evidence.
+```
