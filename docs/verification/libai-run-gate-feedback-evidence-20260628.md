@@ -293,3 +293,66 @@ Commit and push the goal coverage evidence fix.
 Route the current libai feedback so runtime_capability reaches feng and true capability issues reach xiaoshuo.
 Rerun libai from a clean state after deciding whether to first resolve the system-level runtime_capability and goal_coverage_eval_invalid gaps.
 ```
+
+## 2026-06-29 04:16 review and route current failed run
+
+Because chapter 2 was generated before the `goal_coverage_eval_invalid` fix, its gate still looked like a capability `goal_coverage` failure. Codex reviewed the actual chapter text before routing feedback.
+
+Manual review command:
+
+```text
+node F:\code\feng\bin\feng.mjs review-work-gate --chapter 2 --gate gate-chapter-coverage --decision passed --reason "Codex review: chapter text visibly covers the bookstore poetry-commodity shock, short-video anger, Su Xiaoman identity test, improvised poem, and partial trust shift; the failed judge output had no actionable missing evidence." --reviewer codex
+```
+
+Review result:
+
+```text
+.feng/runtime/chapters/chapter-02/gate-review.json
+quality gates 10/10 passed; blocking=0; coverage_uncovered=0
+```
+
+Feedback route command:
+
+```text
+node F:\code\feng\bin\feng.mjs route-feedback --agent-dir F:\code\xiaoshuo --feng-dir F:\code\feng
+```
+
+Route result:
+
+```text
+total=2
+work(kept-local)=0
+capability->agent=0
+system->feng=2
+```
+
+System digest:
+
+```text
+F:\code\feng\.feng\grow-inbox\system-feedback.json
+issueKinds=[runtime_capability]
+count=2
+```
+
+The two system entries are the direct runtime feedback and the corresponding quality-gate evidence for the same chapter 1 problem:
+
+```text
+第1章 语义修复1 被模型输出长度截断(finishReason=length)；当前 runtime 仍继续使用该候选，需要 feng 调整输出预算、分阶段写作或截断检测策略
+gate-routed-runtime-capability needs_human_judgment
+```
+
+Xiaoshuo capability digest:
+
+```text
+F:\code\xiaoshuo\.feng\grow-inbox\capability-feedback.json
+issueKinds=[]
+count=0
+```
+
+Judgment:
+
+```text
+The failed goal coverage judge was not allowed to pollute xiaoshuo capability feedback.
+The only routed blocker from this run is a feng/system runtime capability gap.
+Before another acceptance rerun, feng should resolve or grow against semantic-repair length truncation.
+```
