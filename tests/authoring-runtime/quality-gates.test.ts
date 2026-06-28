@@ -153,4 +153,83 @@ describe("synthesizeWorkProjectQualityGates", () => {
     });
     expect(set.gates.find((gate) => gate.gateId === "gate-semantic-plot")?.status).toBe("needs_human_judgment");
   });
+
+  it("does not fail feedback routing when all generated issues have routed candidates", () => {
+    const set = synthesizeWorkProjectQualityGates({
+      project: { premise: "p", title: "t" },
+      pkg: pkg(),
+      chapterNumber: 1,
+      artifactDir: ".feng/runtime/chapters/chapter-01",
+      quality: {
+        chapterNumber: 1,
+        chars: 1200,
+        status: "pass_with_warnings",
+        passed: true,
+        issues: [
+          { kind: "geography_consistency", severity: "warning", detail: "地点待复核" },
+          { kind: "geography_consistency", severity: "warning", detail: "地点待复核" }
+        ],
+        checkedAt: "t"
+      },
+      feedback: {
+        byLayer: { work: 1, capability: 1, system: 0 },
+        candidates: [
+          { issueKind: "geography_consistency", layer: "work", severity: "warning", detail: "地点待复核", routingReason: "本地修正", chapterNumber: 1 },
+          { issueKind: "semantic_plot", layer: "capability", severity: "warning", detail: "情节引入太巧", routingReason: "回流能力", chapterNumber: 1 }
+        ]
+      },
+      semanticEvaluated: true,
+      now: () => "t"
+    });
+    const gate = set.gates.find((item) => item.gateId === "gate-feedback-routing");
+    expect(gate?.status).toBe("passed");
+    expect(gate?.notes.join("\n")).toContain("generatedIssues=2");
+    expect(gate?.notes.join("\n")).toContain("candidates=2");
+  });
+
+  it("materializes goal coverage through the explicit chapter gate instead of a duplicate quality gate", () => {
+    const runtimePackage: AuthoringRuntimePackage = {
+      ...pkg(),
+      coveragePolicy: {
+        noMissingTopic: {
+          ...defaultCoveragePolicy.noMissingTopic,
+          gateId: "gate-goal-coverage",
+          title: "章节目标全覆盖门禁"
+        }
+      },
+      qualityRules: [
+        { kind: "goal_coverage", note: "正文中每个 chapter_goal 要点必须能在文中找到" },
+        ...defaultQualityRules
+      ]
+    };
+    const set = synthesizeWorkProjectQualityGates({
+      project: { premise: "p", title: "t" },
+      pkg: runtimePackage,
+      chapterNumber: 1,
+      chapterGoal: "写出李白被苏小满带到书店暂避",
+      artifactDir: ".feng/runtime/chapters/chapter-01",
+      quality: { chapterNumber: 1, chars: 1200, status: "pass", passed: true, issues: [], checkedAt: "t" },
+      feedback: { byLayer: { work: 0, capability: 0, system: 0 }, candidates: [] },
+      semanticEvaluated: true,
+      goalCoverage: {
+        chapterNumber: 1,
+        goal: "写出李白被苏小满带到书店暂避",
+        parseOk: true,
+        covered: false,
+        confidence: 0.9,
+        evidence: [],
+        missing: ["没有真正进入书店"],
+        notes: "漏题",
+        raw: "{}",
+        evaluatedAt: "t"
+      },
+      now: () => "t"
+    });
+    const goalGates = set.gates.filter((gate) => gate.issueKinds.includes("goal_coverage"));
+    expect(goalGates).toHaveLength(1);
+    expect(goalGates[0]?.gateId).toBe("gate-goal-coverage");
+    expect(goalGates[0]?.status).toBe("failed");
+    expect(set.coverage.find((item) => item.requirement.startsWith("chapter_goal:"))?.mappedGateIds).toEqual(["gate-goal-coverage"]);
+    expect(set.coverage.some((item) => item.requirement === "quality:goal_coverage")).toBe(false);
+  });
 });

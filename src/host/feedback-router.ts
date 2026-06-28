@@ -113,6 +113,10 @@ function detailGateKey(detail: Pick<FeedbackDigestDetail, "chapter" | "gateId">)
   return detail.chapter === undefined || detail.gateId === undefined ? undefined : `${detail.chapter}:${detail.gateId}`;
 }
 
+function detailIssueKey(detail: Pick<FeedbackDigestDetail, "chapter" | "issueKind">): string | undefined {
+  return detail.chapter === undefined ? undefined : `${detail.chapter}:${detail.issueKind}`;
+}
+
 export function feedbackDigestDetailKey(detail: Pick<FeedbackDigestDetail, "issueKind" | "chapter" | "detail" | "gateId" | "artifactPath">): string {
   return [detail.issueKind, String(detail.chapter ?? ""), detail.detail, detail.gateId ?? "", detail.artifactPath ?? ""].join("|");
 }
@@ -169,30 +173,65 @@ async function readGateCandidates(
   }
 }
 
-async function readPassedGateIds(host: FengHost, chapterName: string): Promise<ReadonlySet<string>> {
+async function readClearedGateIds(host: FengHost, chapterName: string): Promise<ReadonlySet<string>> {
   const path = `${RUNTIME_CHAPTERS}/${chapterName}/${WORK_CHAPTER_QUALITY_GATE_FILE}`;
   const read = await host.store.readText(host.workspace, path, { reason: "route-feedback: read passed quality gates", maxBytes: 256 * 1024 });
   if (!read.ok) return new Set();
   try {
     const parsed = JSON.parse(read.value.content) as QualityGateSet;
-    return new Set(parsed.gates.filter((gate) => gate.status === "passed").map((gate) => gate.gateId));
+    const byGateId = new Map<string, QualityGateRecord[]>();
+    for (const gate of parsed.gates) {
+      const existing = byGateId.get(gate.gateId) ?? [];
+      byGateId.set(gate.gateId, [...existing, gate]);
+    }
+    return new Set([...byGateId.entries()]
+      .filter(([, gates]) => gates.length > 0 && gates.every((gate) => gate.status === "passed"))
+      .map(([gateId]) => gateId));
   } catch {
     return new Set();
   }
 }
 
-async function readPassedGateKeys(host: FengHost): Promise<Result<ReadonlySet<string>>> {
+interface ClearedFeedbackKeys {
+  readonly gateKeys: ReadonlySet<string>;
+  readonly issueKeys: ReadonlySet<string>;
+}
+
+async function readClearedFeedbackKeys(host: FengHost): Promise<Result<ClearedFeedbackKeys>> {
   const listing = await host.store.listDirectory(host.workspace, RUNTIME_CHAPTERS, { reason: "route-feedback: list chapters for passed gates", recursive: false });
-  if (!listing.ok) return listing.error.code === "not_found" ? ok(new Set<string>()) : listing;
-  const keys = new Set<string>();
+  if (!listing.ok) {
+    return listing.error.code === "not_found" ? ok({ gateKeys: new Set<string>(), issueKeys: new Set<string>() }) : listing;
+  }
+  const gateKeys = new Set<string>();
+  const issueKeys = new Set<string>();
   for (const entry of listing.value.entries) {
     if (entry.kind !== "directory") continue;
     const chapterNumber = parseChapterNumber(entry.name);
     if (chapterNumber <= 0) continue;
-    const passed = await readPassedGateIds(host, entry.name);
-    for (const gateId of passed) keys.add(`${chapterNumber}:${gateId}`);
+    const path = `${RUNTIME_CHAPTERS}/${entry.name}/${WORK_CHAPTER_QUALITY_GATE_FILE}`;
+    const read = await host.store.readText(host.workspace, path, { reason: "route-feedback: read passed quality gates", maxBytes: 256 * 1024 });
+    if (!read.ok) continue;
+    try {
+      const parsed = JSON.parse(read.value.content) as QualityGateSet;
+      const byGateId = new Map<string, QualityGateRecord[]>();
+      const byIssueKind = new Map<string, QualityGateRecord[]>();
+      for (const gate of parsed.gates) {
+        byGateId.set(gate.gateId, [...(byGateId.get(gate.gateId) ?? []), gate]);
+        for (const issueKind of gate.issueKinds) {
+          byIssueKind.set(issueKind, [...(byIssueKind.get(issueKind) ?? []), gate]);
+        }
+      }
+      for (const [gateId, gates] of byGateId.entries()) {
+        if (gates.length > 0 && gates.every((gate) => gate.status === "passed")) gateKeys.add(`${chapterNumber}:${gateId}`);
+      }
+      for (const [issueKind, gates] of byIssueKind.entries()) {
+        if (gates.length > 0 && gates.every((gate) => gate.status === "passed")) issueKeys.add(`${chapterNumber}:${issueKind}`);
+      }
+    } catch {
+      continue;
+    }
   }
-  return ok(keys);
+  return ok({ gateKeys, issueKeys });
 }
 
 async function readAllCandidates(host: FengHost): Promise<Result<readonly StoredCandidate[]>> {
@@ -203,7 +242,7 @@ async function readAllCandidates(host: FengHost): Promise<Result<readonly Stored
       if (entry.kind !== "directory") continue;
       const existingKeys = new Set<string>();
       const existingGateKeys = new Set<string>();
-      const passedGateIds = await readPassedGateIds(host, entry.name);
+      const passedGateIds = await readClearedGateIds(host, entry.name);
       const read = await host.store.readText(host.workspace, `${RUNTIME_CHAPTERS}/${entry.name}/feedback.json`, { reason: "route-feedback: read feedback", maxBytes: 256 * 1024 });
       if (read.ok) {
         try {
@@ -242,7 +281,7 @@ async function readDebugReportCandidates(host: FengHost, existingKeys: Set<strin
     const currentPassedGateIds = async (chapterNumber: number): Promise<ReadonlySet<string>> => {
       const cached = passedByChapter.get(chapterNumber);
       if (cached !== undefined) return cached;
-      const passed = await readPassedGateIds(host, chapterNameForNumber(chapterNumber));
+      const passed = await readClearedGateIds(host, chapterNameForNumber(chapterNumber));
       passedByChapter.set(chapterNumber, passed);
       return passed;
     };
@@ -332,7 +371,7 @@ async function writeDigest(
   path: string,
   layer: FeedbackLayer,
   candidates: readonly StoredCandidate[],
-  clearedGateKeys: ReadonlySet<string>
+  clearedKeys: ClearedFeedbackKeys
 ): Promise<Result<string | undefined>> {
   const existing = await readExistingDigestDetails(host, path, layer);
   if (!existing.ok) return existing;
@@ -355,7 +394,9 @@ async function writeDigest(
   }
   const details = [...detailsByKey.values()].filter((detail) => {
     const gateKey = detailGateKey(detail);
-    return gateKey === undefined || !clearedGateKeys.has(gateKey);
+    const issueKey = detailIssueKey(detail);
+    return (gateKey === undefined || !clearedKeys.gateKeys.has(gateKey)) &&
+      (issueKey === undefined || !clearedKeys.issueKeys.has(issueKey));
   });
   const existingKeys = existing.value.map((detail) => detail.feedbackKey ?? feedbackDigestDetailKey(detail)).sort();
   const nextKeys = details.map((detail) => detail.feedbackKey ?? feedbackDigestDetailKey(detail)).sort();
@@ -508,8 +549,8 @@ export async function routeProjectFeedback(input: {
 }): Promise<Result<RouteFeedbackResult>> {
   const all = await readAllCandidates(input.workHost);
   if (!all.ok) return all;
-  const clearedGateKeys = await readPassedGateKeys(input.workHost);
-  if (!clearedGateKeys.ok) return clearedGateKeys;
+  const clearedKeys = await readClearedFeedbackKeys(input.workHost);
+  if (!clearedKeys.ok) return clearedKeys;
   const byLayer: Record<FeedbackLayer, number> = { work: 0, capability: 0, system: 0 };
   for (const candidate of all.value) byLayer[candidate.layer] += 1;
   const capability = all.value.filter((c) => c.layer === "capability");
@@ -527,7 +568,7 @@ export async function routeProjectFeedback(input: {
     // constraints on its next re-grow. The admission inbox remains the audited
     // record; this digest is the grow-consumable view of downstream capability
     // feedback, so re-grow is actually driven by the work project, not staged.
-    const wrote = await writeDigest(input.agentHost, CAPABILITY_DIGEST_PATH, "capability", absorbed.value, clearedGateKeys.value);
+    const wrote = await writeDigest(input.agentHost, CAPABILITY_DIGEST_PATH, "capability", absorbed.value, clearedKeys.value);
     if (!wrote.ok) return wrote;
     capabilityDigestPath = wrote.value;
   }
@@ -542,7 +583,7 @@ export async function routeProjectFeedback(input: {
     // System feedback is the feng-level counterpart of capability feedback:
     // an auditable, file-native projection that feng can later evaluate in its
     // own grow loop without reading the entire downstream work project.
-    const wrote = await writeDigest(input.fengHost, SYSTEM_DIGEST_PATH, "system", absorbed.value, clearedGateKeys.value);
+    const wrote = await writeDigest(input.fengHost, SYSTEM_DIGEST_PATH, "system", absorbed.value, clearedKeys.value);
     if (!wrote.ok) return wrote;
     systemDigestPath = wrote.value;
   }

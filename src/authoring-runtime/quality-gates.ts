@@ -139,6 +139,16 @@ function unique<T>(values: readonly T[]): readonly T[] {
   return Array.from(new Set(values));
 }
 
+function qualityIssueKey(issue: Pick<QualityIssue, "kind" | "severity" | "detail">): string {
+  return `${issue.kind}|${issue.severity}|${issue.detail}`;
+}
+
+function uniqueQualityIssues(values: readonly QualityIssue[]): readonly QualityIssue[] {
+  const byKey = new Map<string, QualityIssue>();
+  for (const issue of values) byKey.set(qualityIssueKey(issue), issue);
+  return [...byKey.values()];
+}
+
 function isQualityCheckKind(value: string): value is QualityCheckKind {
   return (qualityCheckKinds as readonly string[]).includes(value);
 }
@@ -206,6 +216,20 @@ function goalCoverageStatus(evaluated: GoalCoverageEval | undefined): CoverageSt
   if (evaluated === undefined) return "waiting_evidence";
   if (goalCoverageEvalInvalid(evaluated)) return "waiting_evidence";
   return goalCoveragePassed(evaluated) ? "covered" : "uncovered";
+}
+
+function reserveGateId(used: Set<string>, preferred: string, fallbackBase?: string): string {
+  const first = preferred.length > 0 ? preferred : `gate-${slug(fallbackBase ?? "gate")}`;
+  if (!used.has(first)) {
+    used.add(first);
+    return first;
+  }
+  const base = slug(fallbackBase ?? first);
+  let index = 2;
+  while (used.has(`gate-${base}-${index}`)) index += 1;
+  const gateId = `gate-${base}-${index}`;
+  used.add(gateId);
+  return gateId;
 }
 
 function feedbackGateId(issueKind: string): string {
@@ -637,7 +661,10 @@ export function synthesizeXiaoshuoQualityGates(input: SynthesizeXiaoshuoQualityG
 export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQualityGatesInput): QualityGateSet {
   const generatedAt = (input.now ?? (() => new Date().toISOString()))();
   const semanticEvaluated = input.semanticEvaluated === true;
-  const qualityKinds = unique(input.pkg.qualityRules.map((rule) => rule.kind));
+  const noMissingTopic = input.pkg.coveragePolicy.noMissingTopic;
+  const noMissingTopicActive = noMissingTopic.enabled && input.chapterGoal !== undefined && input.chapterGoal.trim().length > 0;
+  const materialQualityRules = input.pkg.qualityRules.filter((rule) => !(rule.kind === "goal_coverage" && noMissingTopicActive));
+  const qualityKinds = unique(materialQualityRules.map((rule) => rule.kind));
   const feedbackIssues: QualityIssue[] = input.feedback.candidates
     .filter((candidate) => isQualityCheckKind(candidate.issueKind))
     .map((candidate) => ({
@@ -645,31 +672,40 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
       severity: candidate.severity,
       detail: candidate.detail
     }));
-  const qualityIssues = unique([...input.quality.issues, ...feedbackIssues]);
+  const qualityIssues = uniqueQualityIssues([...input.quality.issues, ...feedbackIssues]);
   const feedbackKinds = unique(input.feedback.candidates.map((candidate) => candidate.issueKind));
   const routedOnlyKinds = feedbackKinds.filter((kind) => !qualityKinds.includes(kind as QualityCheckKind));
+  const usedGateIds = new Set<string>();
+  const qualityGateIds = new Map<QualityCheckKind, string>();
+  const routedGateIds = new Map<string, string>();
 
-  const gates: QualityGateRecord[] = input.pkg.qualityRules.map((rule) => ({
-    gateId: `gate-${slug(rule.kind)}`,
-    layer: layerFor(input.pkg, rule.kind),
-    title: titles[rule.kind],
-    sourceRequirement: rule.note ?? `quality rule ${rule.kind}`,
-    evidenceRequired: evidenceText(rule),
-    status: statusFromIssues(rule.kind, qualityIssues, semanticEvaluated),
-    issueKinds: [rule.kind],
-    notes: [
-      "generated from the loaded hatch package quality rule",
-      `quality_status=${input.quality.status}`,
-      ...(rule.kind === "length" ? [`chars=${input.quality.chars}`, `min=${rule.minChars ?? "unset"} max=${rule.maxChars ?? "unset"}`] : [])
-    ]
-  }));
+  const gates: QualityGateRecord[] = materialQualityRules.map((rule) => {
+    const gateId = reserveGateId(usedGateIds, `gate-${slug(rule.kind)}`);
+    qualityGateIds.set(rule.kind, gateId);
+    return {
+      gateId,
+      layer: layerFor(input.pkg, rule.kind),
+      title: titles[rule.kind],
+      sourceRequirement: rule.note ?? `quality rule ${rule.kind}`,
+      evidenceRequired: evidenceText(rule),
+      status: statusFromIssues(rule.kind, qualityIssues, semanticEvaluated),
+      issueKinds: [rule.kind],
+      notes: [
+        "generated from the loaded hatch package quality rule",
+        `quality_status=${input.quality.status}`,
+        ...(rule.kind === "length" ? [`chars=${input.quality.chars}`, `min=${rule.minChars ?? "unset"} max=${rule.maxChars ?? "unset"}`] : [])
+      ]
+    };
+  });
 
   for (const issueKind of routedOnlyKinds) {
     const candidates = input.feedback.candidates.filter((candidate) => candidate.issueKind === issueKind);
     const worst = candidates.some((candidate) => candidate.severity === "error") ? "failed" : "needs_human_judgment";
     const knownKind = isQualityCheckKind(issueKind) ? issueKind : undefined;
+    const gateId = reserveGateId(usedGateIds, feedbackGateId(issueKind));
+    routedGateIds.set(issueKind, gateId);
     gates.push({
-      gateId: feedbackGateId(issueKind),
+      gateId,
       layer: candidates[0]?.layer ?? "work",
       title: knownKind === undefined ? `反馈问题：${issueKind}` : titles[knownKind],
       sourceRequirement: `runtime feedback candidate ${issueKind}`,
@@ -695,13 +731,15 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
     ]
   });
 
-  const noMissingTopic = input.pkg.coveragePolicy.noMissingTopic;
-  if (noMissingTopic.enabled && input.chapterGoal !== undefined && input.chapterGoal.trim().length > 0) {
+  const noMissingTopicGateId = noMissingTopicActive
+    ? reserveGateId(usedGateIds, noMissingTopic.gateId, "chapter-goal-coverage")
+    : noMissingTopic.gateId;
+  if (noMissingTopicActive) {
     const goalCoverage = input.goalCoverage;
     const gateStatus = goalCoverageGateStatus(goalCoverage, semanticEvaluated);
     const invalidCoverageEval = goalCoverageEvalInvalid(goalCoverage);
     gates.push({
-      gateId: noMissingTopic.gateId,
+      gateId: noMissingTopicGateId,
       layer: invalidCoverageEval ? "system" : gateStatus === "failed" && goalCoverage !== undefined ? "capability" : "work",
       title: noMissingTopic.title,
       sourceRequirement: input.chapterGoal,
@@ -726,9 +764,14 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
     title: "本轮问题归因与上报",
     sourceRequirement: "every generated issue must be attributed to work/capability/system before absorption",
     evidenceRequired: "feedback.json records all generated candidates and by-layer counts",
-    status: input.feedback.candidates.length >= qualityIssues.length ? "passed" : "failed",
+    status: input.feedback.candidates.length >= qualityIssues.length &&
+      input.feedback.byLayer.work + input.feedback.byLayer.capability + input.feedback.byLayer.system === input.feedback.candidates.length
+      ? "passed"
+      : "failed",
     issueKinds: [],
     notes: [
+      `generatedIssues=${qualityIssues.length}`,
+      `candidates=${input.feedback.candidates.length}`,
       `work=${input.feedback.byLayer.work}`,
       `capability=${input.feedback.byLayer.capability}`,
       `system=${input.feedback.byLayer.system}`
@@ -747,7 +790,10 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
   });
 
   const qualityGateId = (kind: string): string => {
-    if (qualityKinds.includes(kind as QualityCheckKind)) return `gate-${slug(kind)}`;
+    const qualityGate = isQualityCheckKind(kind) ? qualityGateIds.get(kind) : undefined;
+    if (qualityGate !== undefined) return qualityGate;
+    const routedGate = routedGateIds.get(kind);
+    if (routedGate !== undefined) return routedGate;
     return feedbackGateId(kind);
   };
 
@@ -766,11 +812,11 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
       mappedGateIds: ["gate-work-input-coverage"],
       notes: ["work project premise is read from .feng/runtime/project.json"]
     },
-    ...(input.chapterGoal === undefined || !noMissingTopic.enabled ? [] : [{
+    ...(!noMissingTopicActive ? [] : [{
       requirement: `chapter_goal:${input.chapterGoal}`,
       source: "work_project" as const,
       status: goalCoverageStatus(input.goalCoverage),
-      mappedGateIds: [noMissingTopic.gateId],
+      mappedGateIds: [noMissingTopicGateId],
       notes: [
         "tracked explicitly so the chapter cannot silently ignore the user's current target",
         "coverage requirement was generated from the hatch package coverage policy",
@@ -782,11 +828,11 @@ export function synthesizeWorkProjectQualityGates(input: SynthesizeWorkProjectQu
         ])
       ]
     }]),
-    ...input.pkg.qualityRules.map((rule): TargetCoverageRecord => ({
+    ...materialQualityRules.map((rule): TargetCoverageRecord => ({
       requirement: `quality:${rule.kind}`,
       source: "quality_rule",
       status: "covered",
-      mappedGateIds: [`gate-${slug(rule.kind)}`],
+      mappedGateIds: [qualityGateIds.get(rule.kind) ?? `gate-${slug(rule.kind)}`],
       notes: [rule.note ?? "quality rule generated by hatch package"]
     })),
     ...input.feedback.candidates.map((candidate): TargetCoverageRecord => ({

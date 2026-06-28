@@ -156,6 +156,102 @@ describe("routeProjectFeedback", () => {
     });
   });
 
+  it("does not treat a duplicate passed gate id as clearing a failed gate with the same id", async () => {
+    await withRoots(async (work, agent) => {
+      await seedQualityGates(work, 1, [
+        {
+          gateId: "gate-goal-coverage",
+          layer: "capability",
+          title: "本章目标覆盖",
+          sourceRequirement: "generic goal coverage rule",
+          evidenceRequired: "quality rule",
+          status: "passed",
+          issueKinds: ["goal_coverage"],
+          notes: ["generic rule passed"]
+        },
+        {
+          gateId: "gate-goal-coverage",
+          layer: "capability",
+          title: "章节目标全覆盖门禁",
+          sourceRequirement: "最后被苏小满带到书店暂避",
+          evidenceRequired: "goal coverage evaluator",
+          status: "failed",
+          issueKinds: ["goal_coverage"],
+          notes: ["goalCoverage=false; missing=1"]
+        }
+      ]);
+      const workHost = await createFengHost({ config: { workspaceRoot: work, provider } });
+      const agentHost = await createFengHost({ config: { workspaceRoot: agent, provider } });
+      const result = await routeProjectFeedback({ workHost, agentHost });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.totalCandidates).toBe(1);
+      expect(result.value.absorbedToAgent).toBe(1);
+      const digest = JSON.parse(await readFile(path.join(agent, CAPABILITY_DIGEST_PATH), "utf8"));
+      expect(digest.count).toBe(1);
+      expect(digest.details[0].detail).toContain("书店暂避");
+    });
+  });
+
+  it("prunes stale same-chapter goal coverage feedback even when the old gate id changed", async () => {
+    await withRoots(async (work, agent) => {
+      await mkdir(path.join(agent, ".feng", "grow-inbox"), { recursive: true });
+      await writeFile(
+        path.join(agent, CAPABILITY_DIGEST_PATH),
+        JSON.stringify({
+          schemaVersion: "1.0.0",
+          kind: "capability_feedback_digest",
+          layer: "capability",
+          issueKinds: ["goal_coverage"],
+          count: 1,
+          updatedAt: "old",
+          details: [{
+            issueKind: "goal_coverage",
+            chapter: 2,
+            detail: "旧包 gate-chapter-coverage 漏掉短视频素材",
+            source: "quality_gate",
+            gateId: "gate-chapter-coverage",
+            artifactPath: ".feng/runtime/chapters/chapter-02/quality-gates.json"
+          }]
+        }),
+        "utf8"
+      );
+      await seedQualityGates(work, 2, [
+        {
+          gateId: "gate-goal-coverage",
+          layer: "capability",
+          title: "本章目标覆盖",
+          sourceRequirement: "generic goal coverage rule",
+          evidenceRequired: "quality rule",
+          status: "passed",
+          issueKinds: ["goal_coverage"],
+          notes: ["generic rule passed"]
+        },
+        {
+          gateId: "gate-chapter-goal-coverage",
+          layer: "work",
+          title: "章节目标全覆盖门禁",
+          sourceRequirement: "看到短视频素材",
+          evidenceRequired: "goal coverage evaluator",
+          status: "passed",
+          issueKinds: ["goal_coverage"],
+          notes: ["goalCoverage=true; missing=0"]
+        }
+      ]);
+      const workHost = await createFengHost({ config: { workspaceRoot: work, provider } });
+      const agentHost = await createFengHost({ config: { workspaceRoot: agent, provider } });
+      const result = await routeProjectFeedback({ workHost, agentHost });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.totalCandidates).toBe(0);
+      expect(result.value.absorbedToAgent).toBe(0);
+      expect(result.value.capabilityDigestPath).toBe(CAPABILITY_DIGEST_PATH);
+      const digest = JSON.parse(await readFile(path.join(agent, CAPABILITY_DIGEST_PATH), "utf8"));
+      expect(digest.count).toBe(0);
+      expect(digest.details).toEqual([]);
+    });
+  });
+
   it("turns capability quality-gate gaps into upstream grow input even without feedback.json issues", async () => {
     await withRoots(async (work, agent) => {
       await seedQualityGates(work, 1, [{

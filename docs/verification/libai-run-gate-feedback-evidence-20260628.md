@@ -467,3 +467,42 @@ Next valid step:
 Route the current libai run's real capability issues back to xiaoshuo: chapter 1 goal_coverage and semantic_plot.
 Do not accept the current package until a clean libai rerun passes all quality gates.
 ```
+
+## 2026-06-29 04:50 route-feedback gate and stale feedback correction
+
+While reviewing the 04:39 rerun before feeding it back into xiaoshuo, Codex found two feng-level routing defects:
+
+```text
+1. gate-feedback-routing compared feedback candidate count against a duplicated issue list, so already-routed work/capability issues could be mislabeled as a system routing failure.
+2. capability-feedback digests were pruned only by exact gateId. Old goal_coverage feedback from a previous package could survive after the same chapter goal passed under a newer gateId.
+```
+
+Why this matters:
+
+```text
+The concept requires "不能漏题" to be produced as a real gate, and also requires feng not to absorb every downstream problem blindly.
+These two defects polluted that boundary: real chapter 1 goal_coverage needed to reach xiaoshuo, while stale chapter 2 short-video feedback and false gate-feedback-routing system noise needed to stay out of the next grow input.
+```
+
+Correction:
+
+```text
+Work-project gates now materialize goal_coverage through the explicit chapter-goal coverage gate instead of duplicating it as a generic quality rule gate.
+gate-feedback-routing now passes when deduplicated generated issues have routed candidates and by-layer counts match the candidate list.
+route-feedback clears old digest entries by chapter+issueKind when the current run proves that issue kind has passed, even if the old gateId changed.
+Duplicate gateIds no longer clear a failed gate unless every gate with that id has passed.
+```
+
+Verification:
+
+```text
+npm test -- tests/authoring-runtime/quality-gates.test.ts tests/host/feedback-router.test.ts tests/authoring-runtime/runtime.test.ts tests/host/host-commands.test.ts
+npm run build
+```
+
+Next valid step:
+
+```text
+Commit and push this feng correction, then rerun libai from a clean state before letting xiaoshuo grow again.
+The rerun should confirm that chapter 1 goal_coverage and semantic_plot are the only meaningful xiaoshuo capability signals, without stale chapter 2 feedback or gate-feedback-routing system noise.
+```
