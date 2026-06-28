@@ -51,10 +51,9 @@ function state(overrides: Partial<AuthoringRunState> = {}): AuthoringRunState {
 describe("compileMessageList", () => {
   it("produces system + user messages with all context sections", () => {
     const { messages, record } = compileMessageList(pkg(), state());
-    expect(messages).toHaveLength(3);
+    expect(messages).toHaveLength(2);
     expect(messages[0]?.role).toBe("system");
     expect(messages[1]?.role).toBe("user");
-    expect(messages[2]?.role).toBe("user");
     expect(record.messages).toEqual(messages);
     const kinds = record.sections.map((s) => s.kind);
     expect(kinds).toEqual(["observation", "short_term", "long_term", "feedback"]);
@@ -80,7 +79,8 @@ describe("compileMessageList", () => {
     expect(sys).toContain("质量门禁、反馈候选、调试信息和上报信息由 runtime 写入文件");
     expect(record.systemPromptChars).toBeGreaterThan(0);
     expect(record.cachePrefixChars).toBeGreaterThan(record.systemPromptChars);
-    expect(record.stablePrefixMessageCount).toBe(2);
+    expect(record.stablePrefixMessageCount).toBe(1);
+    expect(record.stablePrefixBoundary.messageIndex).toBe(1);
     // the message-list file must record the full system prompt text, not just
     // its length, so it is a complete file-native record of what was sent.
     expect(record.systemPrompt).toBe(sys);
@@ -122,15 +122,20 @@ describe("compileMessageList", () => {
       lastChapterTail: "他看着二维码沉默。"
     }));
     expect(first.messages[0]).toEqual(second.messages[0]);
-    expect(first.messages[1]).toEqual(second.messages[1]);
-    expect(first.messages[2]).not.toEqual(second.messages[2]);
+    expect(first.messages[1]).not.toEqual(second.messages[1]);
     expect(first.record.cachePrefix).toBe(second.record.cachePrefix);
     expect(first.record.messages).toEqual(first.messages);
     expect(first.record.cachePrefixChars).toBeGreaterThan(8000);
+    const boundary = first.record.stablePrefixBoundary.charOffset;
+    const firstUser = first.messages[1]?.content[0]?.text ?? "";
+    const secondUser = second.messages[1]?.content[0]?.text ?? "";
+    expect(firstUser.slice(0, boundary)).toBe(secondUser.slice(0, boundary));
+    expect(firstUser.slice(boundary)).not.toBe(secondUser.slice(boundary));
     expect(first.messages[1]?.content[0]?.text).toContain("稳定作品上下文");
     expect(first.messages[1]?.content[0]?.text).toContain("稳定长程运行手册");
-    expect(first.messages[1]?.content[0]?.text).not.toContain("扫码失败");
-    expect(second.messages[2]?.content[0]?.text).toContain("直播间吟诗");
+    expect(firstUser.slice(0, boundary)).not.toContain("扫码失败");
+    expect(firstUser.slice(boundary)).toContain("扫码失败");
+    expect(second.messages[1]?.content[0]?.text).toContain("直播间吟诗");
   });
 
   it("truncates sections beyond their max chars", () => {

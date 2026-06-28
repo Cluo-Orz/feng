@@ -30,6 +30,10 @@ export interface CompiledMessageList {
   readonly cachePrefix: string;
   readonly cachePrefixChars: number;
   readonly stablePrefixMessageCount: number;
+  readonly stablePrefixBoundary: {
+    readonly messageIndex: number;
+    readonly charOffset: number;
+  };
   readonly coveragePolicy?: {
     readonly noMissingTopicGateId: string;
     readonly promptOnlyAllowed: boolean;
@@ -328,10 +332,10 @@ export function compileMessageList(
     `请输出第 ${state.chapterNumber} 章正文，然后另起一行输出 ===OUTLINE===，再用一句话(50字内)概括本章作为后续前情。`
   ].filter((part) => part.length > 0).join("\n\n");
 
+  const userMessage = `${stableBody}\n\n${dynamicBody}`;
   const messages: readonly ProviderNeutralMessage[] = [
     { role: "system", content: [{ type: "text", text: systemPrompt }] },
-    { role: "user", content: [{ type: "text", text: stableBody }] },
-    { role: "user", content: [{ type: "text", text: dynamicBody }] }
+    { role: "user", content: [{ type: "text", text: userMessage }] }
   ];
   const cachePrefix = `${systemPrompt}\n\n${stableBody}`;
   return {
@@ -344,7 +348,8 @@ export function compileMessageList(
       systemPromptChars: systemPrompt.length,
       cachePrefix,
       cachePrefixChars: cachePrefix.length,
-      stablePrefixMessageCount: 2,
+      stablePrefixMessageCount: 1,
+      stablePrefixBoundary: { messageIndex: 1, charOffset: stableBody.length },
       coveragePolicy: {
         noMissingTopicGateId: pkg.coveragePolicy.noMissingTopic.gateId,
         promptOnlyAllowed: pkg.coveragePolicy.noMissingTopic.promptOnlyAllowed,
