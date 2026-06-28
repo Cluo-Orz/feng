@@ -268,6 +268,8 @@ Message Compiler 是 feng 的核心子系统之一。它把 grow 单元的事实
 
 成熟的长程 agent 不只是把所有上下文塞进模型，而是保护可复用前缀。feng 的目标不应停留在“能跑”，而应能解释为什么当前调用命中了多少缓存、哪些内容导致缓存失效，以及下一轮 grow 是否需要修复编译策略。对于重复 grow/run 流程，80%-95% 的缓存命中率是合理参照；10% 左右或更低应被当作系统性风险，而不是正常现象。
 
+缓存健康不能只看聚合值，也不能忽略 provider 的冷启动和前缀发现机制。有些 provider 会在前两次共享前缀的分叉请求后，才让后续同前缀请求明显命中。feng 的缓存门禁应同时记录 cold prefix-discovery calls、warm comparable calls 和 phase aggregate；只有 warm comparable calls 才能直接对照 80%-95% 目标。对于小说样例，若要判断章节生成缓存，至少需要三次同稳定前缀的 generation 调用，否则第二章 0 命中不能单独证明 Message Compiler 失败。
+
 因此，备份前的缓存分析不是运维附录，而是 Message Compiler 的健康检查入口。分析至少要回答：稳定前缀是否保持逐字节稳定，动态内容是否被放在可变段，工具面或 skill 面变化是否被显式记录，provider usage 是否足够完整，0 命中调用集中在哪些阶段。若分析显示命中率显著偏低，下一轮 grow 应优先判断是否需要调整 message list 编译策略，而不是只继续复制目录或增加调用次数。
 
 ### Grow Runtime

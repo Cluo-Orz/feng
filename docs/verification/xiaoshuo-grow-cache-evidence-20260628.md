@@ -240,3 +240,59 @@ Do not keep extending prompt text blindly.
 The next investigation should inspect provider gateway behavior and whether explicit cache-control, provider-specific prompt-cache APIs, or a different request shape is required.
 Until then, feng can claim quality-ready xiaoshuo hatch evidence, but not cache-ready long-running growth evidence.
 ```
+
+## 2026-06-28 18:54 three-chapter cache validation
+
+After checking DeepSeek's official context cache guide, the cache test assumption was corrected. DeepSeek describes an automatic prefix-cache behavior where two requests such as `A+B` and `A+C` can be used to identify and persist a shared prefix, so a later `A+D` request is the better validation point. Source:
+
+```text
+https://api-docs.deepseek.com/guides/kv_cache
+```
+
+The previous two-chapter runs were therefore not sufficient to prove `chapter_generation` could not cache. A short validation run used:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --goal "..." --name xiaoshuo --rounds 1 --sample-chapters 3
+```
+
+Final checkpoint:
+
+```text
+latestRound=1
+quality gates 10/10 passed
+blocking=0
+coverage_uncovered=0
+overall cache=32.88% (15104/45935 input tokens, calls=17, zero=2)
+```
+
+Message-list prefix evidence:
+
+```text
+chapter-01 cachePrefixChars=2721 messages=2 stablePrefixMessageCount=1 boundaryOffset=2158 hash=c4a3511a8885738b
+chapter-02 cachePrefixChars=2721 messages=2 stablePrefixMessageCount=1 boundaryOffset=2158 hash=c4a3511a8885738b
+chapter-03 cachePrefixChars=2721 messages=2 stablePrefixMessageCount=1 boundaryOffset=2158 hash=c4a3511a8885738b
+```
+
+Generation cache evidence:
+
+```text
+authoring-ch1-0: input=1447 cacheRead=0 hit=0.00%
+authoring-ch2-0: input=1665 cacheRead=0 hit=0.00%
+authoring-ch3-0: input=1693 cacheRead=1280 hit=75.61%
+chapter_generation phase total: 26.64%
+```
+
+Judgment correction:
+
+```text
+The prior conclusion "chapter_generation cannot cache" was too strong.
+The correct conclusion is: two sample chapters are insufficient for DeepSeek automatic prefix-cache validation.
+For cache acceptance, a grow sample must include at least three comparable generation calls under the same stable prefix, or the cache gate must explicitly account for provider warm-up behavior.
+```
+
+Remaining gap:
+
+```text
+The third generation call reaching 75.61% is a good sign, but it is still below the desired 80-90% long-running target.
+The next gate should measure warm calls separately from cold prefix-discovery calls.
+```
