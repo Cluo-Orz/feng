@@ -90,6 +90,22 @@ describe("quality evaluateChapter", () => {
     expect(r.issues.some((i) => i.kind === "geography_consistency")).toBe(false);
   });
 
+  it("does not warn when unrelated negation is merely near a monitored term", () => {
+    const r = evaluateChapter(base({
+      conflictTerms: ["流量"],
+      chapterText: `${"陈砚意识到他不是在开玩笑。".repeat(20)}这就是视频，可以传到网上，也就是我说的流量。${"正文".repeat(300)}`
+    }));
+    expect(r.issues.some((i) => i.kind === "geography_consistency")).toBe(false);
+  });
+
+  it("warns when a monitored term is directly negated as a setting fact", () => {
+    const r = evaluateChapter(base({
+      conflictTerms: ["长安"],
+      chapterText: `${"正文".repeat(300)}此处长安不是西安，前后设定发生冲突。`
+    }));
+    expect(r.issues.some((i) => i.kind === "geography_consistency")).toBe(true);
+  });
+
   it("flags outline count mismatch and missing outline", () => {
     const mismatch = evaluateChapter(base({ priorOutlines: [] }));
     expect(mismatch.issues.some((i) => i.kind === "outline_continuity")).toBe(true);

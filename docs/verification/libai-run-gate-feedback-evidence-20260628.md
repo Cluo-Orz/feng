@@ -506,3 +506,82 @@ Next valid step:
 Commit and push this feng correction, then rerun libai from a clean state before letting xiaoshuo grow again.
 The rerun should confirm that chapter 1 goal_coverage and semantic_plot are the only meaningful xiaoshuo capability signals, without stale chapter 2 feedback or gate-feedback-routing system noise.
 ```
+
+## 2026-06-29 clean rerun after routing cleanup
+
+Before cleaning and rerunning, cache analysis was written:
+
+```text
+F:\code\libai-chongshengle\.feng\cache-analysis\pre-backup-20260629-045054.md
+```
+
+The prior failed run was backed up:
+
+```text
+F:\code\libai-chongshengle-bak-20260629-045054
+```
+
+The rerun used the current xiaoshuo package:
+
+```text
+packageId=pkg-grow-18270bca-56f7-4d71-843d-45115f67aef6-1.0.0
+hash=ca2f25856e6007f6914ef70a724303db4cde1416111bb102b38dfa8813811a0e
+```
+
+Run result:
+
+```text
+chapter 1: quality=pass semantic=8.3/10 gates=8/9 blocking=2 coverage_uncovered=1 cache=43.92%
+chapter 2: quality=pass semantic=8.7/10 gates=8/9 blocking=2 coverage_uncovered=1 cache=36.09%
+chapter 3: quality=pass_with_warnings semantic=7.7/10 gates=8/10 blocking=2 coverage_uncovered=0 cache=37.61%
+overall cache=38.52%
+```
+
+Important positive evidence:
+
+```text
+gate-feedback-routing no longer produced system-layer noise.
+chapter_generation cache reached 88.81%, showing the stable-prefix direction is viable for at least the generation phase.
+```
+
+Remaining real xiaoshuo capability failures:
+
+```text
+chapter 1 goal_coverage failed:
+  missing=目标要求“最后被苏小满带到书店暂避”，正文只写到李白跟随苏小满，未出现书店场景，未完成暂避。
+
+chapter 2 goal_coverage failed:
+  missing=目标要求“自己的诗被印成……短视频素材”，正文未出现任何短视频素材相关描写。
+
+chapter 3 semantic_plot warning:
+  从进酒馆到离开，主要事件仅陈砚拍视频和提出合作，李白没有做出选择或付出代价，结尾停留于“种子”状态。
+```
+
+Feng false-positive found during review:
+
+```text
+chapter 3 geography_consistency flagged “流量” because the context window contained an unrelated “不是在开玩笑”.
+This was not a setting/location contradiction; it was a false positive in feng's geography conflict heuristic.
+```
+
+Correction:
+
+```text
+The geography heuristic still catches explicit contradiction language such as 以前叫、改名、误作、应为、矛盾、冲突.
+Negation terms such as 不是、并非、不在 now only count when they directly bind to the monitored term, instead of merely appearing somewhere in the same context window.
+```
+
+Verification:
+
+```text
+npm test -- tests/authoring-runtime/quality.test.ts tests/authoring-runtime/runtime.test.ts tests/host/feedback-router.test.ts tests/host/host-commands.test.ts
+npm run build
+```
+
+Next valid step:
+
+```text
+Commit and push the geography false-positive correction.
+Then route the clean run's real capability feedback to xiaoshuo: chapter 1 goal_coverage, chapter 2 goal_coverage, and chapter 3 semantic_plot.
+Do not treat the current libai chapters as accepted.
+```

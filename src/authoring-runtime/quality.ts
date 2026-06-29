@@ -74,13 +74,20 @@ function checkCharacterContinuation(input: QualityInput, issues: QualityIssue[])
   }
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function hasExplicitGeographyConflict(text: string, term: string): boolean {
+  const escapedTerm = escapeRegex(term);
+  const directNegation = new RegExp(`(${escapedTerm}.{0,8}(不是|并非|不在|非)|(?:不是|并非|不在|非).{0,4}${escapedTerm})`);
   let index = text.indexOf(term);
   while (index !== -1) {
     const start = Math.max(0, index - 16);
     const end = Math.min(text.length, index + term.length + 16);
     const context = text.slice(start, end);
-    if (/(以前叫|原名|改名|改作|误作|错写|应为|不是|并非|不在|矛盾|冲突)/.test(context)) return true;
+    if (/(以前叫|原名|改名|改作|误作|错写|应为|矛盾|冲突)/.test(context)) return true;
+    if (directNegation.test(context)) return true;
     index = text.indexOf(term, index + term.length);
   }
   return false;
