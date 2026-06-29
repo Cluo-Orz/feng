@@ -407,3 +407,101 @@ Before rerunning xiaoshuo grow, write a new cache/rerun analysis that records th
 Then rerun:
 node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
 ```
+
+## 2026-06-29 10:30 rerun after incomplete-redesign guard
+
+Before rerun, cache/rerun analysis was written:
+
+```text
+F:\code\xiaoshuo\.feng\cache-analysis\pre-rerun-20260629-102357.md
+```
+
+Grow command used the fixed command shape with no `--goal`:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
+```
+
+Result:
+
+```text
+[grow] .feng/hatch/xiaoshuo-runtime.json growUnit=grow-e358fe1c-5d57-4a26-8677-493f67f9ba16 lifecycle=ready_to_hatch readiness=ready
+  goal: 成长出一个可复制的中文连载小说写作 (source=.feng/quality-gates/xiaoshuo.json)
+  seeded 2 constraint(s) from downstream capability feedback
+  capability adoption: .feng/grow-inbox/capability-feedback-adoption.json
+  round 1 (v0.1.0): chapters=3 fail=0 capabilityIssues=[] added=0 cache=30.82% (5888/19103 input tokens, calls=9, zero=2)
+  improved=true finalCapabilityIssues=0 cache=32.7% (7424/22704 input tokens, calls=10, zero=2)
+```
+
+Accepted package:
+
+```text
+packageId=pkg-grow-e358fe1c-5d57-4a26-8677-493f67f9ba16-1.0.0
+locked=true
+validation.readiness=ready
+quality gates 16/16 passed
+blocking=0
+coverage_uncovered=0
+```
+
+Critical gate evidence:
+
+```text
+gate-grown-coverage-policy passed
+authoredByGrow=true
+coveragePolicy.gateId=gate-goal-coverage
+promptOnlyAllowed=false
+designTrace=.feng/grow-agent/design-attempts/grow-e358fe1c-5d57-4a26-8677-493f67f9ba16/loop-design/trace.json
+```
+
+Design trace evidence:
+
+```text
+status=completed
+finishReason=stop
+parseOk=true
+missingGeneratedFields=[]
+generatedFields.targetWorld=true
+generatedFields.contextPolicy=true
+generatedFields.storyModel=true
+generatedFields.harness=true
+generatedFields.qualityRules=true
+generatedFields.feedbackRouting=true
+generatedFields.coveragePolicy=true
+```
+
+Feedback adoption:
+
+```text
+goal_coverage feedback adopted with mappedConstraint:
+每章正文必须正面回应【本章目标】：把目标转化为可见事件、行动或冲突写进正文；不能只在提示词、摘要或大纲中提到目标。
+
+semantic_plot feedback adopted with mappedConstraint:
+强化情节吸引力与推进：每章设置有效冲突、阻碍与悬念钩子，避免平铺直叙的过场。
+```
+
+Cache evidence:
+
+```text
+overall cache=32.70%
+grow_design=42.65%
+chapter_generation=28.27%
+semantic_judge=33.95%
+goal_coverage_judge=29.86%
+```
+
+Judgment:
+
+```text
+The incomplete-redesign fix worked: the package now proves no-missing-topic as a grow-authored runtime contract and passes all xiaoshuo hatch gates.
+This is a valid xiaoshuo package candidate for the next clean libai end-to-end rerun.
+Cache health regressed from the previous failed grow and remains far below the long-running target; do not describe this as cache-ready.
+```
+
+Next valid step:
+
+```text
+Before replacing or backing up libai-chongshengle, write cache analysis in that work project.
+Install package pkg-grow-e358fe1c-5d57-4a26-8677-493f67f9ba16-1.0.0 into libai-chongshengle.
+Run the clean libai end-to-end flow and require work-project gates to reach blocking=0.
+```
