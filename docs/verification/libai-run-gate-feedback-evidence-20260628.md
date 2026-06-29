@@ -585,3 +585,65 @@ Commit and push the geography false-positive correction.
 Then route the clean run's real capability feedback to xiaoshuo: chapter 1 goal_coverage, chapter 2 goal_coverage, and chapter 3 semantic_plot.
 Do not treat the current libai chapters as accepted.
 ```
+
+## 2026-06-29 feedback route after clean rerun
+
+Route command:
+
+```text
+node F:\code\feng\bin\feng.mjs route-feedback --agent-dir F:\code\xiaoshuo --feng-dir F:\code\feng
+```
+
+Result:
+
+```text
+[route-feedback] total=6 work(kept-local)=2 capability->agent=4 system->feng=0
+  capability digest: .feng/grow-inbox/capability-feedback.json
+  system digest: .feng/grow-inbox/system-feedback.json
+```
+
+Routed capability feedback added to xiaoshuo:
+
+```text
+chapter 1 goal_coverage: bookshop shelter goal was not actually completed.
+chapter 2 goal_coverage: short-video material was missing again.
+chapter 3 semantic_plot: episode lacked a clear choice, cost, or plot turn.
+chapter 3 routed semantic_plot gate evidence.
+```
+
+Local work feedback kept in libai:
+
+```text
+chapter 3 geography_consistency was work-layer feedback and was not absorbed by xiaoshuo.
+The underlying geography false positive has already been fixed in feng; this run's old artifact still records it because it was produced before the fix.
+```
+
+System feedback status:
+
+```text
+No new system feedback was absorbed from the clean run.
+The old runtime_capability digest entries for semantic-repair truncation remained in F:\code\feng\.feng\grow-inbox\system-feedback.json.
+They were explicitly resolved with:
+
+node F:\code\feng\bin\feng.mjs resolve-system-feedback --issue-kind runtime_capability --reason "semantic repair length truncation is fixed; truncated semantic repair candidates are discarded, tests/build passed, and the latest clean run added no runtime_capability candidates" --evidence docs/verification/libai-run-gate-feedback-evidence-20260628.md
+```
+
+Resolution record:
+
+```text
+F:\code\feng\.feng\grow-inbox\system-feedback-resolution.json
+issueKind=runtime_capability
+decision=resolved
+feedbackKeys=2
+evidence=docs/verification/libai-run-gate-feedback-evidence-20260628.md
+```
+
+Next valid step:
+
+```text
+Before xiaoshuo grow, write xiaoshuo cache analysis.
+Then run:
+node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
+
+The goal must be inferred from file state; do not pass --goal.
+```
