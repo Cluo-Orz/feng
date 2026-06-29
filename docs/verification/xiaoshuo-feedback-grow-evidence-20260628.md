@@ -314,3 +314,96 @@ The new package should not hard-code libai-specific "short video" facts into xia
 It must instead preserve a general no-missing-topic behavior and prove it by passing the next libai rerun.
 Cache improved from 28.56% to 35.94% but remains far below the long-running target.
 ```
+
+## 2026-06-29 10:22 grow after clean libai feedback exposed redesign replacement bug
+
+After the clean libai rerun was routed, xiaoshuo received active capability feedback:
+
+```text
+chapter 1 goal_coverage: bookshop shelter goal was not actually completed.
+chapter 2 goal_coverage: short-video material was missing again.
+chapter 3 semantic_plot: episode lacked a clear choice, cost, or plot turn.
+```
+
+Before rerun, cache analysis was written:
+
+```text
+F:\code\xiaoshuo\.feng\cache-analysis\pre-rerun-20260629-095214.md
+```
+
+Grow command used the fixed command shape with no `--goal`:
+
+```text
+node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
+```
+
+The shell wrapper timed out, but the node child completed and wrote:
+
+```text
+growUnit=grow-e8362e55-54b4-4dcb-82cf-2e9c0029d18b
+packageId=pkg-grow-e8362e55-54b4-4dcb-82cf-2e9c0029d18b-1.0.0
+locked=false
+validation.readiness=draft
+quality gates 13/14 passed
+blocking=3
+coverage_uncovered=2
+```
+
+Round progression:
+
+```text
+round 1: capability=[semantic_plot], added semantic plot constraint, cache=41.16%
+round 2: failChapters=1, capability=[], cache=42.67%
+round 3: failChapters=0, capability=[], sampleGateBlocking=0, goalCoverageIssueCount=0, cache=48.20%
+overall grow cache=43.92%
+round 3 chapter_generation cache=84.49%
+```
+
+Important judgment:
+
+```text
+The final sample round passed, so the xiaoshuo behavior improved.
+The hatch package was still correctly rejected because gate-grown-coverage-policy failed:
+coveragePolicyAuthoredByGrow=false.
+This matched the product requirement that "不能漏题" must be produced by grow as a real runtime contract, not supplied by a default fallback.
+```
+
+Root cause:
+
+```text
+loop-design produced a complete design with generated coveragePolicy=true.
+round-1-redesign was truncated with finishReason=length and parseOk=false.
+designStrategy correctly recorded that redesign attempt as designStatus=incomplete.
+grow-loop still replaced currentDesign with the incomplete redesign fallback.
+That fallback preserved runnable defaults but erased the generated coveragePolicy evidence.
+```
+
+Feng correction:
+
+```text
+designStrategy now returns finishReason, parseOk, designStatus, and missingGeneratedFields to callers.
+grow-loop only lets a completed sample redesign replace the current grown design.
+An incomplete redesign still writes message-list/model-output/trace artifacts and contributes usage evidence, but the loop keeps the previous complete design plus deterministic constraints derived from sample feedback.
+```
+
+Verification:
+
+```text
+npm test -- tests/host/grow-loop.test.ts tests/host/grow-agent.test.ts tests/authoring-runtime/quality-gates.test.ts
+npm run build
+```
+
+Regression test added:
+
+```text
+does not let an incomplete sample redesign replace a complete grown design
+```
+
+Next valid step:
+
+```text
+Commit and push the correction.
+Before rerunning xiaoshuo grow, write a new cache/rerun analysis that records the failed grow-e836 result and the fixed redesign acceptance rule.
+Then rerun:
+node F:\code\feng\bin\feng.mjs grow --name xiaoshuo --rounds 4 --sample-chapters 3
+```

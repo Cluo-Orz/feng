@@ -17,6 +17,26 @@ const STRATEGY = JSON.stringify({
   constraints: ["章节连续"],
   minChars: 800,
   maxChars: 4000,
+  targetWorld: {
+    description: "连载式中文小说创作",
+    inputKinds: ["premise", "chapter_goal", "prior_outline"],
+    outputKinds: ["chapter_text", "updated_outline", "feedback_candidates"],
+    actionBoundary: ["只写入作品目录和 .feng 运行记录"],
+    failureHandling: ["质量不达标时记录反馈并重试"],
+    dialogueAllowed: false
+  },
+  contextPolicy: [
+    { kind: "observation", title: "本轮目标", source: "chapter_goal", maxChars: 1000 },
+    { kind: "short_term", title: "前情", source: "chapter_outlines", maxChars: 1000 },
+    { kind: "long_term", title: "设定", source: "character_bible", maxChars: 1000 }
+  ],
+  storyModel: {
+    trackedFacts: ["premise", "character_bible", "chapter_outlines"],
+    continuityDimensions: ["人物承接", "大纲连续", "文风一致"]
+  },
+  harness: {
+    steps: ["run_chapter", "evaluate_chapter", "route_feedback"]
+  },
   coveragePolicy: {
     noMissingTopic: {
       enabled: true,
@@ -26,16 +46,32 @@ const STRATEGY = JSON.stringify({
       promptOnlyAllowed: true,
       blockingUntilReviewed: true
     }
-  }
+  },
+  qualityRules: [
+    { kind: "length", minChars: 800, maxChars: 4000, note: "每章中文字数区间" },
+    { kind: "chapter_continuity", note: "章节编号必须连续" },
+    { kind: "character_continuation", note: "人物承接必须连续" },
+    { kind: "artifact_presence", note: "每章须有 message-list / trace / quality eval" }
+  ],
+  feedbackRouting: [
+    { issueKind: "length", layer: "work", reason: "单章字数是作品级问题" },
+    { issueKind: "character_continuation", layer: "capability", reason: "反复忘前文是写作能力问题" },
+    { issueKind: "goal_coverage", layer: "capability", reason: "章节漏题是目标执行能力问题" },
+    { issueKind: "semantic_style", layer: "capability", reason: "文风不足是写作能力问题" },
+    { issueKind: "semantic_character", layer: "capability", reason: "人物可信度不足是写作能力问题" },
+    { issueKind: "semantic_plot", layer: "capability", reason: "情节推进不足是写作能力问题" },
+    { issueKind: "runtime_capability", layer: "system", reason: "运行 kernel 不能表达所需能力" },
+    { issueKind: "artifact_presence", layer: "system", reason: "运行记录缺失是系统问题" }
+  ]
 });
 
 const body = (chars: number) => "正文".repeat(chars);
 
-function llmResponse(content: string, id = "judge") {
+function llmResponse(content: string, id = "judge", finishReason = "stop") {
   return {
     ok: true,
     status: 200,
-    json: async () => ({ id, model: "m", choices: [{ message: { content }, finish_reason: "stop" }], usage: {} }),
+    json: async () => ({ id, model: "m", choices: [{ message: { content }, finish_reason: finishReason }], usage: {} }),
     text: async () => ""
   };
 }
@@ -104,6 +140,27 @@ function semanticRedesignFetch(): FetchLike {
     if (text.includes("严格的中文小说质量评审")) {
       return designCalls < 2
         ? llmResponse('{"style": 7, "character": 9, "plot": 9, "problems": [{"dimension":"style","evidence":"比喻堆叠","suggestion":"减少修辞堆叠"}], "notes": "文风需修"}')
+        : llmResponse('{"style": 9, "character": 9, "plot": 9, "problems": [], "notes": "样例达标"}');
+    }
+    if (text.includes("严格的章节目标覆盖评审")) {
+      return llmResponse('{"covered": true, "confidence": 0.92, "evidence": ["样例章节回应了本章目标"], "missing": [], "notes": "目标已覆盖"}');
+    }
+    return llmResponse(`林越登场并追查徽章。${body(500)}\n===OUTLINE===\n章`);
+  };
+}
+
+function truncatedSemanticRedesignFetch(): FetchLike {
+  let designCalls = 0;
+  return async (_url, init) => {
+    const text = requestText(init);
+    if (text.includes("feng 的通用 agent 设计内核")) {
+      designCalls += 1;
+      if (designCalls === 1) return llmResponse(STRATEGY, "design-1");
+      return llmResponse('{"systemPrompt":"truncated redesign"', "design-2", "length");
+    }
+    if (text.includes("严格的中文小说质量评审")) {
+      return designCalls < 2
+        ? llmResponse('{"style": 7, "character": 9, "plot": 9, "problems": [{"dimension":"style","evidence":"样例语句平直","suggestion":"增加场景压力"}], "notes": "文风需修"}')
         : llmResponse('{"style": 9, "character": 9, "plot": 9, "problems": [], "notes": "样例达标"}');
     }
     if (text.includes("严格的章节目标覆盖评审")) {
@@ -279,6 +336,34 @@ describe("growXiaoshuoAgentLoop", () => {
       expect(pkg.writingStrategy.systemPrompt).toBe("redesigned semantic strategy");
       expect(pkg.writingStrategy.constraints).toContain("语义反馈必须改变写作策略");
       expect(pkg.locked).toBe(true);
+    });
+  });
+
+  it("does not let an incomplete sample redesign replace a complete grown design", async () => {
+    await withRoot(async (root) => {
+      const host = await createFengHost({ config: { workspaceRoot: root, provider }, fetchImpl: truncatedSemanticRedesignFetch() });
+      const result = await growXiaoshuoAgentLoop(host, { goal: "成长出高质量小说 agent", maxRounds: 2, sampleChapters: 1 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.rounds).toHaveLength(2);
+      expect(result.value.rounds[0]?.capabilityIssueKinds).toContain("semantic_style");
+      expect(result.value.rounds[1]?.capabilityIssueKinds).toHaveLength(0);
+      expect(result.value.designMessageListPath).toContain(`.feng/grow-agent/design-attempts/${result.value.growUnitId}/loop-design/message-list.json`);
+
+      const redesignTrace = JSON.parse(await readFile(path.join(root, ".feng", "grow-agent", "design-attempts", result.value.growUnitId, "round-1-redesign", "trace.json"), "utf8"));
+      expect(redesignTrace.status).toBe("incomplete");
+      expect(redesignTrace.finishReason).toBe("length");
+      expect(redesignTrace.generatedFields.coveragePolicy).toBe(false);
+
+      const gates = JSON.parse(await readFile(path.join(root, XIAOSHUO_QUALITY_GATE_PATH), "utf8"));
+      expect(gates.gates.some((gate: { gateId: string; status: string }) => gate.gateId === "gate-grown-coverage-policy" && gate.status === "passed")).toBe(true);
+      const pkg = JSON.parse(await readFile(path.join(root, PACKAGE_PATH), "utf8"));
+      expect(pkg.locked).toBe(true);
+      expect(pkg.validation.readiness).toBe("ready");
+      expect(pkg.writingStrategy.systemPrompt).toBe("你是连载小说写作 agent，保持连贯。");
+      expect(pkg.writingStrategy.constraints.some((constraint: string) => constraint.includes("提升文风与可读性"))).toBe(true);
+      expect(pkg.coveragePolicy.noMissingTopic.gateId).toBe("gate-grown-loop-goal-coverage");
+      expect(pkg.validation.qualityGateSummary).toContain("blocking=0");
     });
   });
 

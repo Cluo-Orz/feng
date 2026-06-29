@@ -880,14 +880,19 @@ export async function growXiaoshuoAgentLoop(host: FengHost, input: GrowLoopInput
       });
       if (!redesigned.ok) return redesigned;
       llmUsageSummaries.push(redesigned.value.llmUsage);
-      currentDesign = mergeRedesignedStrategy(redesigned.value.designed, revisedStrategy);
-      strategy = currentDesign.strategy;
-      effectiveMax = effectiveMax === undefined
-        ? currentDesign.maxChars
-        : Math.max(effectiveMax, currentDesign.maxChars ?? effectiveMax);
-      latestDesignMessageListPath = redesigned.value.messageListPath;
-      latestDesignTracePath = redesigned.value.tracePath;
-      latestContextMessageListRef = redesigned.value.contextMessageListRef;
+      if (redesigned.value.designStatus === "completed") {
+        currentDesign = mergeRedesignedStrategy(redesigned.value.designed, revisedStrategy);
+        strategy = currentDesign.strategy;
+        effectiveMax = effectiveMax === undefined
+          ? currentDesign.maxChars
+          : Math.max(effectiveMax, currentDesign.maxChars ?? effectiveMax);
+        latestDesignMessageListPath = redesigned.value.messageListPath;
+        latestDesignTracePath = redesigned.value.tracePath;
+        latestContextMessageListRef = redesigned.value.contextMessageListRef;
+      } else {
+        strategy = revisedStrategy;
+        currentDesign = withStrategy(currentDesign, strategy);
+      }
     } else {
       strategy = revisedStrategy;
       currentDesign = withStrategy(currentDesign, strategy);

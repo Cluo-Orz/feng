@@ -145,6 +145,10 @@ export interface DesignStrategyInput {
 export interface DesignStrategyResult {
   readonly designed: DesignedStrategy;
   readonly raw: string;
+  readonly finishReason: string;
+  readonly parseOk: boolean;
+  readonly designStatus: "completed" | "incomplete";
+  readonly missingGeneratedFields: readonly string[];
   readonly contextMessageListRef?: MessageListRef;
   readonly messageListPath: string;
   readonly modelOutputPath: string;
@@ -743,6 +747,10 @@ export async function designStrategy(host: FengHost, input: DesignStrategyInput 
   return ok({
     designed,
     raw,
+    finishReason,
+    parseOk,
+    designStatus,
+    missingGeneratedFields: missingFields,
     ...(contextRef.value === undefined ? {} : { contextMessageListRef: contextRef.value }),
     messageListPath,
     modelOutputPath,
